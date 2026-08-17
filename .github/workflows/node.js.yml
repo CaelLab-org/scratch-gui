@@ -28,6 +28,9 @@ jobs:
     permissions:
       pages: write
       id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
     - uses: actions/checkout@v4
@@ -41,9 +44,15 @@ jobs:
       env:
         BUILD_MODE: dist
         STATIC_PATH: ''
+    - name: Debug - list dist contents
+      run: ls -la dist/ && echo "---" && ls -la dist/js/ 2>/dev/null && echo "---" && head -5 dist/index.html 2>/dev/null
+    - run: cp CNAME dist/CNAME
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
         path: ./dist
     - name: Deploy to GitHub Pages
+      id: deployment
       uses: actions/deploy-pages@v4
+      with:
+        cname: engine.xmuer.online
