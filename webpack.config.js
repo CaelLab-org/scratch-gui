@@ -270,7 +270,7 @@ module.exports = [
                         loader: 'url-loader',
                         options: {
                             limit: 2048,
-                            outputPath: 'static/assets/',
+                            outputPath: STATIC_PATH ? `${STATIC_PATH.replace(/^\//, '')}/assets/` : 'assets/',
                             publicPath: `${STATIC_PATH}/assets/`,
                             esModule: false
                         }

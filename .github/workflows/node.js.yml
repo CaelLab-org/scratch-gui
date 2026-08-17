@@ -39,7 +39,8 @@ jobs:
     - run: npm ci
     - run: npm run build
       env:
-        STATIC_PATH: /static
+        BUILD_MODE: dist
+        STATIC_PATH: ''
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
