@@ -32,7 +32,7 @@ import '../lib/tw-fix-history-api';
 import GUI from './render-gui.jsx';
 import MenuBar from '../components/menu-bar/menu-bar.jsx';
 import ProjectInput from '../components/tw-project-input/project-input.jsx';
-import FeaturedProjects from '../components/tw-featured-projects/featured-projects.jsx';
+
 import Description from '../components/tw-description/description.jsx';
 import BrowserModal from '../components/browser-modal/browser-modal.jsx';
 import CloudVariableBadge from '../containers/tw-cloud-variable-badge.jsx';
@@ -43,6 +43,7 @@ import {loadServiceWorker} from './load-service-worker';
 import runAddons from '../addons/entry';
 import InvalidEmbed from '../components/tw-invalid-embed/invalid-embed.jsx';
 import {APP_NAME} from '../lib/brand.js';
+import xceLogo from '../../static/xce-logo.png';
 
 import styles from './interface.css';
 
@@ -128,57 +129,13 @@ const Footer = () => (
                     </a>
                 </div>
                 <div className={styles.footerSection}>
-                    <a href="https://desktop.turbowarp.org/">
-                        {/* Do not translate */}
-                        {'TurboWarp Desktop'}
-                    </a>
-                    <a href="https://packager.turbowarp.org/">
-                        {/* Do not translate */}
-                        {'TurboWarp Packager'}
-                    </a>
-                    <a href="https://docs.turbowarp.org/embedding">
-                        <FormattedMessage
-                            defaultMessage="Embedding"
-                            description="Link in footer to embedding documentation for embedding link"
-                            id="tw.footer.embed"
-                        />
-                    </a>
-                    <a href="https://docs.turbowarp.org/url-parameters">
-                        <FormattedMessage
-                            defaultMessage="URL Parameters"
-                            description="Link in footer to URL parameters documentation"
-                            id="tw.footer.parameters"
-                        />
-                    </a>
-                    <a href="https://docs.turbowarp.org/">
-                        <FormattedMessage
-                            defaultMessage="Documentation"
-                            description="Link in footer to additional documentation"
-                            id="tw.footer.documentation"
-                        />
+                    <a href="https://coding.xmuer.online/">
+                        {'XMUER Coding Community'}
                     </a>
                 </div>
                 <div className={styles.footerSection}>
-                    <a href="https://scratch.mit.edu/users/GarboMuffin/#comments">
-                        <FormattedMessage
-                            defaultMessage="Feedback & Bugs"
-                            description="Link to feedback/bugs page"
-                            id="tw.feedback"
-                        />
-                    </a>
-                    <a href="https://github.com/TurboWarp/">
-                        <FormattedMessage
-                            defaultMessage="Source Code"
-                            description="Link to source code"
-                            id="tw.code"
-                        />
-                    </a>
-                    <a href="privacy.html">
-                        <FormattedMessage
-                            defaultMessage="Privacy Policy"
-                            description="Link to privacy policy"
-                            id="tw.privacy"
-                        />
+                    <a href="https://policy.caellab.com/public-policy/privacy-rights/">
+                        {'虚舟实验室 隐私权政策'}
                     </a>
                 </div>
             </div>
@@ -244,7 +201,9 @@ class Interface extends React.Component {
                     </div>
                 ) : null}
                 <div
-                    className={styles.center}
+                    className={classNames(styles.center, {
+                        [styles.guiHidden]: isHomepage
+                    })}
                     style={isPlayerOnly ? ({
                         // + 2 accounts for 1px border on each side of the stage
                         width: `${Math.max(480, props.customStageSize.width) + 2}px`
@@ -257,14 +216,11 @@ class Interface extends React.Component {
                         backpackHost="_local_"
                         {...props}
                     />
-                    {isHomepage ? (
+                    {isHomepage ? null : (
                         <React.Fragment>
                             {isBrowserSupported() ? null : (
                                 <BrowserModal isRtl={isRtl} />
                             )}
-                            <div className={styles.section}>
-                                <ProjectInput />
-                            </div>
                             {(
                                 // eslint-disable-next-line max-len
                                 description.instructions === 'unshared' || description.credits === 'unshared'
@@ -327,25 +283,169 @@ class Interface extends React.Component {
                                     />
                                 </div>
                             ) : null}
-                            <div className={styles.section}>
-                                <p>
+                        </React.Fragment>
+                    )}
+                </div>
+                {/* Homepage content: rendered OUTSIDE .center to avoid layout conflicts */}
+                {isHomepage ? (
+                    <div className={styles.homepageContainer}>
+                        <React.Fragment>
+                            {isBrowserSupported() ? null : (
+                                <BrowserModal isRtl={isRtl} />
+                            )}
+                            {/* Hero Section */}
+                            <div className={styles.heroSection}>
+                                <img
+                                    src={xceLogo}
+                                    alt="XMUER Coding Engine"
+                                    className={styles.heroLogo}
+                                />
+                                <h1 className={styles.heroTitle}>{APP_NAME}</h1>
+                                <p className={styles.heroSubtitle}>
                                     <FormattedMessage
-                                        // eslint-disable-next-line max-len
-                                        defaultMessage="{APP_NAME} is a Scratch mod that compiles projects to JavaScript to make them run really fast. Try it out by inputting a project ID or URL above or choosing a featured project below."
-                                        description="Description of TurboWarp on the homepage"
-                                        id="tw.home.description"
-                                        values={{
-                                            APP_NAME
-                                        }}
+                                        defaultMessage="A Scratch mod that compiles projects to JavaScript for blazing fast performance. Dark mode, addons, and more."
+                                        description="Hero subtitle on homepage"
+                                        id="tw.hero.subtitle"
                                     />
                                 </p>
                             </div>
-                            <div className={styles.section}>
-                                <FeaturedProjects studio="27205657" />
+
+                            {/* Input Section */}
+                            <div className={styles.inputSection}>
+                                <div className={styles.inputCard}>
+                                    <span className={styles.inputLabel}>
+                                        <FormattedMessage
+                                            defaultMessage="Enter a Scratch project ID or URL to get started"
+                                            description="Label above project input"
+                                            id="tw.input.label"
+                                        />
+                                    </span>
+                                    <div className={styles.inputWrapper}>
+                                        <ProjectInput />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {(
+                                // eslint-disable-next-line max-len
+                                description.instructions === 'unshared' || description.credits === 'unshared'
+                            ) && (
+                                <div className={classNames(styles.infobox, styles.unsharedUpdate)}>
+                                    <p>
+                                        <FormattedMessage
+                                            defaultMessage="Unshared projects are no longer visible."
+                                            description="Appears on unshared projects"
+                                            id="tw.unshared2.1"
+                                        />
+                                    </p>
+                                    <p>
+                                        <FormattedMessage
+                                            defaultMessage="For more information, visit: {link}"
+                                            description="Appears on unshared projects"
+                                            id="tw.unshared.2"
+                                            values={{
+                                                link: (
+                                                    <a
+                                                        href="https://docs.turbowarp.org/unshared-projects"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        {'https://docs.turbowarp.org/unshared-projects'}
+                                                    </a>
+                                                )
+                                            }}
+                                        />
+                                    </p>
+                                    <p>
+                                        <FormattedMessage
+                                            // eslint-disable-next-line max-len
+                                            defaultMessage="If the project was shared recently, this message may appear incorrectly for a few minutes."
+                                            description="Appears on unshared projects"
+                                            id="tw.unshared.cache"
+                                        />
+                                    </p>
+                                    <p>
+                                        <FormattedMessage
+                                            // eslint-disable-next-line max-len
+                                            defaultMessage="If this project is actually shared, please report a bug."
+                                            description="Appears on unshared projects"
+                                            id="tw.unshared.bug"
+                                        />
+                                    </p>
+                                </div>
+                            )}
+                            {hasCloudVariables && projectId !== '0' && (
+                                <div className={styles.section}>
+                                    <CloudVariableBadge />
+                                </div>
+                            )}
+                            {description.instructions || description.credits ? (
+                                <div className={styles.section}>
+                                    <Description
+                                        instructions={description.instructions}
+                                        credits={description.credits}
+                                        projectId={projectId}
+                                    />
+                                </div>
+                            ) : null}
+
+                            {/* Features Section */}
+                            <div className={styles.featuresSection}>
+                                <div className={styles.featureCard}>
+                                    <div className={styles.featureIcon}>{'\u26A1'}</div>
+                                    <div className={styles.featureTitle}>
+                                        <FormattedMessage
+                                            defaultMessage="Blazing Fast"
+                                            description="Feature card title"
+                                            id="tw.feature.fast"
+                                        />
+                                    </div>
+                                    <div className={styles.featureDesc}>
+                                        <FormattedMessage
+                                            defaultMessage="Compiles Scratch projects to JavaScript for 10-100x faster execution."
+                                            description="Feature card description"
+                                            id="tw.feature.fast.desc"
+                                        />
+                                    </div>
+                                </div>
+                                <div className={styles.featureCard}>
+                                    <div className={styles.featureIcon}>{'\uD83C\uDF19'}</div>
+                                    <div className={styles.featureTitle}>
+                                        <FormattedMessage
+                                            defaultMessage="Dark Mode"
+                                            description="Feature card title"
+                                            id="tw.feature.dark"
+                                        />
+                                    </div>
+                                    <div className={styles.featureDesc}>
+                                        <FormattedMessage
+                                            defaultMessage="Easy on your eyes with a built-in dark theme and customizable accents."
+                                            description="Feature card description"
+                                            id="tw.feature.dark.desc"
+                                        />
+                                    </div>
+                                </div>
+                                <div className={styles.featureCard}>
+                                    <div className={styles.featureIcon}>{'\uD83E\uDDE9'}</div>
+                                    <div className={styles.featureTitle}>
+                                        <FormattedMessage
+                                            defaultMessage="Addons"
+                                            description="Feature card title"
+                                            id="tw.feature.addons"
+                                        />
+                                    </div>
+                                    <div className={styles.featureDesc}>
+                                        <FormattedMessage
+                                            defaultMessage="Hundreds of community addons to customize your editor experience."
+                                            description="Feature card description"
+                                            id="tw.feature.addons.desc"
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </React.Fragment>
-                    ) : null}
-                </div>
+                    </div>
+                ) : null}
                 {isHomepage && <Footer />}
             </div>
         );

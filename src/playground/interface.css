@@ -1,6 +1,6 @@
 @import "../css/colors.css";
 
-/* Base styles used by Scratch https://github.com/LLK/scratch-www/blob/develop/src/main.scss */
+/* Base styles */
 h1,
 h2,
 h3,
@@ -20,10 +20,10 @@ h5 {
     line-height: 1.7em;
 }
 h1 {
-    font-weight: 2.5rem;
+    font-size: 2.5rem;
 }
 h2 {
-    font-weight: 2rem;
+    font-size: 2rem;
 }
 h3 {
     font-size: 1.4rem;
@@ -37,12 +37,13 @@ a {
     text-decoration: underline;
 }
 
+/* ===== Container ===== */
 .container {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
-    background-color: $page-background;
+    background-color: #f0eef5;
 }
 
 .editor {
@@ -55,39 +56,206 @@ a {
 .player-only .center {
     margin: auto;
 }
-.menu {
-    margin-bottom: 8px;
+
+/* Homepage center: full width, no stage constraint */
+.player-only.centerHomepage {
+    min-height: 100vh;
+    overflow-y: auto;
 }
-.section {
-    margin: 8px 0 8px 0;
+.centerHomepage {
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
+/* Hide GUI on homepage only */
+.guiHidden {
+    display: none;
+}
+
+/* Homepage container: outside .center, full width */
+.homepageContainer {
+    width: 100%;
+}
+
+/* ===== Menu ===== */
+.menu {
+    position: relative;
+    z-index: 10;
+}
+
+/* ===== Hero Section ===== */
+.heroSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px 50px;
+    text-align: center;
+    background: linear-gradient(135deg, #4c1d95 0%, #2d6a4f 100%);
+    color: white;
+}
+
+.heroLogo {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 20px;
+    animation: float 3s ease-in-out infinite;
+    filter: drop-shadow(0 4px 20px rgba(124, 58, 237, 0.5));
+    border-radius: 20px;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.heroTitle {
+    font-size: 3rem;
+    font-weight: 800;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.heroSubtitle {
+    font-size: 1.15rem;
+    opacity: 0.85;
+    max-width: 520px;
+    line-height: 1.6;
+    margin-bottom: 0;
+}
+
+/* ===== Input Section ===== */
+.inputSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 20px;
+    margin-top: -32px;
+    position: relative;
+    z-index: 5;
+}
+
+.inputCard {
+    background: white;
+    border-radius: 16px;
+    padding: 24px 32px;
+    box-shadow: 0 8px 32px rgba(76, 29, 149, 0.15);
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.inputLabel {
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.inputWrapper {
+    width: 100%;
+    position: relative;
+}
+
+/* ===== Section ===== */
+.section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* ===== Features Section ===== */
+.featuresSection {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.featureCard {
+    background: white;
+    border-radius: 12px;
+    padding: 28px 16px;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.featureCard:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(76, 29, 149, 0.12);
+}
+
+.featureIcon {
+    font-size: 2.2rem;
+    margin-bottom: 10px;
+}
+
+.featureTitle {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 6px;
+}
+
+.featureDesc {
+    font-size: 0.85rem;
+    color: #777;
+    line-height: 1.5;
+}
+
+/* ===== Description ===== */
+.descriptionSection {
+    max-width: 600px;
+    margin: 24px auto;
+    padding: 0 20px;
+    text-align: center;
+    color: #888;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+/* ===== Footer ===== */
 .footer {
-    padding: 10px 0;
-    margin-top: 10px;
-    border-top: 2px solid $ui-black-transparent;
+    padding: 24px 0;
+    margin-top: 40px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    background: #fafafa;
 }
 .footer a {
     font-weight: bold;
     text-decoration: none;
+    color: #4c1d95;
+}
+.footer a:hover {
+    text-decoration: underline;
 }
 .footer-content {
-    max-width: 600px;
+    max-width: 700px;
     margin: auto;
 }
 .footer-text {
     text-align: center;
     margin: 5px 0 10px 0;
+    color: #999;
+    font-size: 0.85rem;
 }
 .footer-columns {
     display: flex;
     justify-content: center;
     justify-items: center;
     flex-wrap: wrap;
+    gap: 8px;
 }
 .footer-section {
     display: flex;
     flex-direction: column;
+    align-items: center;
     width: 200px;
     margin-bottom: 10px;
 }
@@ -95,6 +263,7 @@ a {
     margin-bottom: 10px;
 }
 
+/* ===== Infobox ===== */
 .infobox {
     line-height: 1.5em;
     padding: 0.5rem;
@@ -114,4 +283,18 @@ a {
 .unshared-update {
     border-color: #ff52526e;
     background-color: #ff525240;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 640px) {
+    .heroTitle {
+        font-size: 2rem;
+    }
+    .featuresSection {
+        grid-template-columns: 1fr;
+    }
+    .heroLogo {
+        width: 80px;
+        height: 80px;
+    }
 }
