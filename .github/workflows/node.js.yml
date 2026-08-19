@@ -26,11 +26,7 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -44,15 +40,10 @@ jobs:
       env:
         BUILD_MODE: dist
         STATIC_PATH: ''
-    - name: Debug - list dist contents
-      run: ls -la dist/ && echo "---" && ls -la dist/js/ 2>/dev/null && echo "---" && head -5 dist/index.html 2>/dev/null
     - run: cp CNAME dist/CNAME
-    - name: Upload artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: ./dist
     - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v4
+      uses: peaceiris/actions-gh-pages@v4
       with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./dist
         cname: engine.xmuer.online
