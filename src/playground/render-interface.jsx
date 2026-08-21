@@ -144,20 +144,32 @@ const Footer = () => (
                 </div>
                 <div className={styles.footerSection}>
                     <a href="https://forum.xmuer.online/t/problem" target="_blank" rel="noreferrer">
-                        {'反馈与漏洞提交'}
+                        <FormattedMessage
+                            defaultMessage="Feedback & Bugs"
+                            description="Footer link to feedback/bug report"
+                            id="tw.footer.feedback"
+                        />
                     </a>
                     <a href="https://github.com/yunyun-3782/scratch-gui" target="_blank" rel="noreferrer">
-                        {'源代码'}
+                        <FormattedMessage
+                            defaultMessage="Source Code"
+                            description="Footer link to source code"
+                            id="tw.footer.sourceCode"
+                        />
                     </a>
                     <a href="privacy.html">
-                        {'隐私政策'}
+                        <FormattedMessage
+                            defaultMessage="Privacy Policy"
+                            description="Footer link to privacy policy"
+                            id="tw.footer.privacy"
+                        />
                     </a>
                 </div>
             </div>
             <div className={styles.footerText}>
                 <FormattedMessage
                     // eslint-disable-next-line max-len
-                    defaultMessage="XCE 的诞生离不开 {turbowarp} 开源项目。"
+                    defaultMessage="XCE would not be possible without the {turbowarp} open source project."
                     description="TurboWarp credit in footer"
                     id="tw.footer.turbowarpCredit"
                     values={{
