@@ -8,9 +8,10 @@
             body {
                 font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
                 margin: 0; padding: 0;
+                line-height: 1.6;
             }
             header {
-                background-color: #4c1d95;
+                background: linear-gradient(135deg, #4c1d95 0%, #2d6a4f 100%);
                 color: white;
                 text-align: center;
                 padding: 20px 0;
@@ -18,10 +19,20 @@
             main {
                 max-width: 600px;
                 margin: auto;
+                padding: 20px;
             }
+            .notice {
+                background: #f0f0f0;
+                border-left: 4px solid #4c1d95;
+                padding: 12px 16px;
+                margin: 16px 0;
+                font-size: 0.95em;
+            }
+            a { color: #4c1d95; }
             @media (prefers-color-scheme: dark) {
                 body { background: #111; color: #eee; }
-                a { color: #4af; }
+                a { color: #a78bfa; }
+                .notice { background: #222; border-left-color: #a78bfa; }
             }
         </style>
     </head>
@@ -32,15 +43,19 @@
         </header>
 
         <main>
-            <!-- UPDATE THIS WHEN MAKING CONTENT CHANGES -->
-            <p><i>Updated September 27, 2025</i></p>
+            <p><i>Updated August 21, 2026</i></p>
+
+            <div class="notice">
+                This policy is an inseparable part of the
+                <a href="https://policy.caellab.com/public-policy/privacy-rights/" target="_blank" rel="noreferrer">Caellab Privacy Policy</a>.
+            </div>
 
             <p>The XMUER Coding Engine project (based on <a href="https://turbowarp.org/">TurboWarp</a>) respects your privacy. We're an open source project. For transparency, this page lists all the places in XMUER Coding Engine where we or a third-party receive your data and how your data is handled.</p>
 
             <h2>Abuse</h2>
             <p>When a service is being abused, we may take measures to collect information to protect the service. For example, we could log IP addresses making excessive amounts of requests. We strive to do this carefully so that no one is caught in the crossfire. Data is kept only as long as needed to stop the abuse.</p>
 
-            <h2>turbowarp.org</h2>
+            <h2>engine.xmuer.online</h2>
             <p>A randomly generated username may be saved in your browser. You can replace this with a custom username. Randomly generated usernames are anonymized by removing the random numbers before being sent to any cloud variable server.</p>
             <p>When you start a project that is loaded from Scratch, this may be logged so that a view counter can be incremented over time. Views are anonymous and can not be tied back to any user. You can prevent your views from being counted by unchecking the box below. This checkbox will not affect your ability to see view counts.</p>
             <p>
@@ -60,9 +75,6 @@
                         } catch (e) {
                             // ignore
                         }
-                        // These headers are really intended to be about third-parties so we don't need to follow them,
-                        // but if someone has these set, it's good to assume that they would opt out if given the choice.
-                        // So we'll just respect that preemptively.
                         return navigator.globalPrivacyControl === 'true' || navigator.doNotTrack === '1';
                     };
                     const setOptedOut = optedOut => {
@@ -92,33 +104,26 @@
             <p>When loading a custom extension from a place other than the official gallery such as a URL or file on your computer, the editor will ask for permission to load the extension. If you approve this dialog, the extension can bypass the permission dialogs that official extensions show.</p>
 
             <h2>Settings</h2>
-            <p>Many TurboWarp websites will store settings such as <a href="https://turbowarp.org/addons">addon settings</a> or <a href="https://packager.turbowarp.org/">packager settings</a> in your browser.</p>
+            <p>XCE websites will store settings such as <a href="https://engine.xmuer.online/addons.html">addon settings</a> or <a href="https://packager.xmuer.online/">packager settings</a> in your browser.</p>
 
             <h2>Aggregated data</h2>
             <p>We may log anonymous aggregated data such as how many people use a certain site per day.</p>
 
-            <h2>TurboWarp Desktop</h2>
-            <p><a href="https://desktop.turbowarp.org/">TurboWarp Desktop</a> may make requests to check for updates. This can be disabled by pressing "Settings" then "Desktop Settings".</p>
-            <p><a href="https://desktop.turbowarp.org/">TurboWarp Desktop</a> has a disabled-by-default option to enable "Rich Presence" which shares the name of the project you have open and how long it has been open with chat apps running on your computer, which may be displayed on your public profile. This can be disabled by pressing "Settings" then "Desktop Settings".</p>
+            <h2>XCE Desktop</h2>
+            <p><a href="/desktop/">XCE Desktop</a> may make requests to check for updates. This can be disabled by pressing "Settings" then "Desktop Settings".</p>
 
-            <h2>docs.turbowarp.org</h2>
-            <p>The search bar is provided by Algolia. See the <a href="https://www.algolia.com/policies/privacy/">Algolia privacy policy</a>.</p>
-
-            <h2>TurboWarp Packager</h2>
-            <p>The <a href="https://packager.turbowarp.org/">TurboWarp Packager</a> may store settings and cache large downloads such as Electron in your browser for convenience and performance.</p>
+            <h2>XMUER Coding Packager</h2>
+            <p>The <a href="https://packager.xmuer.online/">XMUER Coding Packager</a> may store settings and cache large downloads such as Electron in your browser for convenience and performance.</p>
             <p>When packaging a project using custom extensions, the packager may access those websites to download the extensions.</p>
 
-            <h2>Projects generated by the TurboWarp Packager</h2>
+            <h2>Projects generated by the XMUER Coding Packager</h2>
             <p>Packaged projects include all scripts, costumes, and sounds to run the project. The packager tries to include all custom extensions too, but in some cases, the packaged project may need to download certain extensions each time it runs.</p>
             <p>Advanced features such as third-party custom extensions, custom cloud host, custom JS, and custom CSS are outside of our control.</p>
-            <p>Note that, unlike the TurboWarp editor, custom extensions in packaged projects will not ask for permission before contacting websites.</p>
+            <p>Note that, unlike the XCE editor, custom extensions in packaged projects will not ask for permission before contacting websites.</p>
             <p>You are responsible for informing end users about the privacy practices of the files you distribute. Do not link to this document as your project's privacy policy as it may change in the future. You must write your own.</p>
 
-            <h2>TurboWarp Packager Extras</h2>
-            <p><a href="https://github.com/TurboWarp/packager-extras/releases">TurboWarp Packager Extras</a> may make requests to check for updates.</p>
-
             <h2>Contact</h2>
-            <p>Any concerns related to privacy or any other matter should be sent to: <a href="mailto:contact@turbowarp.org">contact@turbowarp.org</a></p>
+            <p>Any concerns related to privacy or any other matter should be sent to: <a href="mailto:rights@caellab.com">rights@caellab.com</a> or via <a href="https://forum.xmuer.online/t/problem" target="_blank" rel="noreferrer">our forum</a>.</p>
         </main>
     </body>
 </html>
