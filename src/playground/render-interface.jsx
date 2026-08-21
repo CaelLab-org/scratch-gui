@@ -129,18 +129,19 @@ const Footer = () => (
                     </a>
                 </div>
                 <div className={styles.footerSection}>
+                    <a href="/desktop/">{'XCE Desktop'}</a>
+                    <a href="https://packager.xmuer.online/">{'XMUER Coding Packager'}</a>
+                    <a href="https://coding.xmuer.online/">{'XMUER Coding Community'}</a>
+                </div>
+                <div className={styles.footerSection}>
+                    <a href="https://forum.xmuer.online/t/problem" target="_blank" rel="noreferrer">
+                        {'反馈与漏洞提交'}
+                    </a>
                     <a href="https://github.com/yunyun-3782/scratch-gui" target="_blank" rel="noreferrer">
-                        {'GitHub'}
+                        {'源代码'}
                     </a>
-                </div>
-                <div className={styles.footerSection}>
-                    <a href="https://coding.xmuer.online/">
-                        {'XMUER Coding Community'}
-                    </a>
-                </div>
-                <div className={styles.footerSection}>
-                    <a href="https://policy.caellab.com/public-policy/privacy-rights/">
-                        {'虚舟实验室 隐私权政策'}
+                    <a href="privacy.html">
+                        {'隐私政策'}
                     </a>
                 </div>
             </div>
