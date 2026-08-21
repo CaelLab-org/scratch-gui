@@ -39,49 +39,91 @@ const translateGalleryItem = (extension, locale) => ({
     description: extension.descriptionTranslations[locale] || extension.description
 });
 
+const safeFetch = async (url, processor, defaultData = []) => {
+    try {
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`HTTP status ${res.status}`);
+        }
+        const data = await res.json();
+        return processor(data);
+    } catch (error) {
+        log.error(error);
+        return defaultData;
+    }
+};
+
+const fetchPenguinModLibrary = async () => safeFetch(
+    'https://extensions.penguinmod.com/extensions.json',
+    data => (Array.isArray(data) ? data : []).map(extension => ({
+        name: extension.name || 'Unknown',
+        nameTranslations: {},
+        description: extension.description || '',
+        descriptionTranslations: {},
+        extensionId: `pm_${extension.id || extension.code || extension.name}`,
+        extensionURL: extension.url ||
+            `https://extensions.penguinmod.com/extensions/${extension.code || extension.id}.js`,
+        iconURL: extension.banner ?
+            `https://extensions.penguinmod.com/images/${extension.banner}` :
+            'https://extensions.penguinmod.com/images/images/unknown.svg',
+        tags: ['pm'],
+        credits: [extension.creator || 'PenguinMod'].filter(Boolean),
+        docsURI: null,
+        samples: null,
+        incompatibleWithScratch: false,
+        featured: true
+    }))
+);
+
 let cachedGallery = null;
 
 const fetchLibrary = async () => {
-    const res = await fetch('https://extensions.turbowarp.org/generated-metadata/extensions-v0.json');
-    if (!res.ok) {
-        throw new Error(`HTTP status ${res.status}`);
-    }
-    const data = await res.json();
-    return data.extensions.map(extension => ({
-        name: extension.name,
-        nameTranslations: extension.nameTranslations || {},
-        description: extension.description,
-        descriptionTranslations: extension.descriptionTranslations || {},
-        extensionId: extension.id,
-        extensionURL: `https://extensions.turbowarp.org/${extension.slug}.js`,
-        iconURL: `https://extensions.turbowarp.org/${extension.image || 'images/unknown.svg'}`,
-        tags: ['tw'],
-        credits: [
-            ...(extension.original || []),
-            ...(extension.by || [])
-        ].map(credit => {
-            if (credit.link) {
-                return (
-                    <a
-                        href={credit.link}
-                        target="_blank"
-                        rel="noreferrer"
-                        key={credit.name}
-                    >
-                        {credit.name}
-                    </a>
-                );
-            }
-            return credit.name;
-        }),
-        docsURI: extension.docs ? `https://extensions.turbowarp.org/${extension.slug}` : null,
-        samples: extension.samples ? extension.samples.map(sample => ({
-            href: `${process.env.ROOT}editor?project_url=https://extensions.turbowarp.org/samples/${encodeURIComponent(sample)}.sb3`,
-            text: sample
-        })) : null,
-        incompatibleWithScratch: !extension.scratchCompatible,
-        featured: true
-    }));
+    const [twData, pmData] = await Promise.all([
+        safeFetch(
+            'https://extensions.turbowarp.org/generated-metadata/extensions-v0.json',
+            data => data.extensions.map(extension => ({
+                name: extension.name,
+                nameTranslations: extension.nameTranslations || {},
+                description: extension.description,
+                descriptionTranslations: extension.descriptionTranslations || {},
+                extensionId: extension.id,
+                extensionURL: `https://extensions.turbowarp.org/${extension.slug}.js`,
+                iconURL: `https://extensions.turbowarp.org/${extension.image || 'images/unknown.svg'}`,
+                tags: ['tw'],
+                credits: [
+                    ...(extension.original || []),
+                    ...(extension.by || [])
+                ].map(credit => {
+                    if (credit.link) {
+                        return (
+                            <a
+                                href={credit.link}
+                                target="_blank"
+                                rel="noreferrer"
+                                key={credit.name}
+                            >
+                                {credit.name}
+                            </a>
+                        );
+                    }
+                    return credit.name;
+                }),
+                docsURI: extension.docs ? `https://extensions.turbowarp.org/${extension.slug}` : null,
+                samples: extension.samples ? extension.samples.map(sample => ({
+                    href: `${process.env.ROOT}editor?project_url=https://extensions.turbowarp.org/samples/${encodeURIComponent(sample)}.sb3`,
+                    text: sample
+                })) : null,
+                incompatibleWithScratch: !extension.scratchCompatible,
+                featured: true
+            }))
+        ),
+        fetchPenguinModLibrary()
+    ]);
+
+    return [
+        ...twData.filter(i => i.extensionId !== 'faceSensing'),
+        ...pmData
+    ];
 };
 
 class ExtensionLibrary extends React.PureComponent {
@@ -166,7 +208,6 @@ class ExtensionLibrary extends React.PureComponent {
                 const locale = this.props.intl.locale;
                 library.push(
                     ...this.state.gallery
-                        .filter(i => i.extensionId !== 'faceSensing')
                         .map(i => translateGalleryItem(i, locale))
                         .map(toLibraryItem)
                 );
