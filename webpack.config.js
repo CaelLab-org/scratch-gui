@@ -13,6 +13,7 @@ const postcssImport = require('postcss-import');
 
 const STATIC_PATH = process.env.STATIC_PATH || '/static';
 const {APP_NAME} = require('./src/lib/brand');
+const {getSupportedLocales} = require('./src/lib/locales-config');
 
 const root = process.env.ROOT || '';
 if (root.length > 0 && !root.endsWith('/')) {
@@ -40,6 +41,31 @@ const base = {
         // allows ROUTING_STYLE=wildcard to work properly
         historyApiFallback: {
             rewrites: [
+                // 语言路由: /{locale}/xxx -> /{locale}/xxx.html (支持 BCP47 大小写)
+                {from: /^\/[a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?\/?$/, to: function(context) {
+                    return '/' + context.match[0].replace(/^\//, '').replace(/\/$/, '') + '/index.html';
+                }},
+                {from: /^\/[a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?\/editor\/?$/, to: function(context) {
+                    const locale = context.match[0].match(/^\/([a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?)\//)[1];
+                    return '/' + locale + '/editor.html';
+                }},
+                {from: /^\/[a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?\/fullscreen\/?$/, to: function(context) {
+                    const locale = context.match[0].match(/^\/([a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?)\//)[1];
+                    return '/' + locale + '/fullscreen.html';
+                }},
+                {from: /^\/[a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?\/embed\/?$/, to: function(context) {
+                    const locale = context.match[0].match(/^\/([a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?)\//)[1];
+                    return '/' + locale + '/embed.html';
+                }},
+                {from: /^\/[a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?\/addons\/?$/, to: function(context) {
+                    const locale = context.match[0].match(/^\/([a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?)\//)[1];
+                    return '/' + locale + '/addons.html';
+                }},
+                {from: /^\/[a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?\/credits\/?$/, to: function(context) {
+                    const locale = context.match[0].match(/^\/([a-zA-Z]{2}(?:-[a-zA-Z0-9]{2,8})?)\//)[1];
+                    return '/' + locale + '/credits.html';
+                }},
+                // 旧路由兼容: /数字/xxx -> /index.html
                 {from: /^\/\d+\/?$/, to: '/index.html'},
                 {from: /^\/\d+\/fullscreen\/?$/, to: '/fullscreen.html'},
                 {from: /^\/\d+\/editor\/?$/, to: '/editor.html'},
@@ -180,16 +206,10 @@ module.exports = [
                 'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(process.env.ENABLE_SERVICE_WORKER || ''),
                 'process.env.ROOT': JSON.stringify(root),
                 'process.env.ROUTING_STYLE': JSON.stringify(process.env.ROUTING_STYLE || 'filehash'),
-                'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || '')
+                'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || ''),
+                'process.env.SUPPORTED_LOCALES': JSON.stringify(getSupportedLocales())
             }),
-            new HtmlWebpackPlugin({
-                chunks: ['editor'],
-                template: 'src/playground/index.ejs',
-                filename: 'editor.html',
-                title: `${APP_NAME} - Run Scratch projects faster`,
-                isEditor: true,
-                ...htmlWebpackPluginCommon
-            }),
+            // 根目录默认 index.html（重定向到 en-US）
             new HtmlWebpackPlugin({
                 chunks: ['player'],
                 template: 'src/playground/index.ejs',
@@ -197,34 +217,58 @@ module.exports = [
                 title: `${APP_NAME} - Run Scratch projects faster`,
                 ...htmlWebpackPluginCommon
             }),
-            new HtmlWebpackPlugin({
-                chunks: ['fullscreen'],
-                template: 'src/playground/index.ejs',
-                filename: 'fullscreen.html',
-                title: `${APP_NAME} - Run Scratch projects faster`,
-                ...htmlWebpackPluginCommon
-            }),
-            new HtmlWebpackPlugin({
-                chunks: ['embed'],
-                template: 'src/playground/embed.ejs',
-                filename: 'embed.html',
-                title: `Embedded Project - ${APP_NAME}`,
-                ...htmlWebpackPluginCommon
-            }),
-            new HtmlWebpackPlugin({
-                chunks: ['addon-settings'],
-                template: 'src/playground/simple.ejs',
-                filename: 'addons.html',
-                title: `Addon Settings - ${APP_NAME}`,
-                ...htmlWebpackPluginCommon
-            }),
-            new HtmlWebpackPlugin({
-                chunks: ['credits'],
-                template: 'src/playground/simple.ejs',
-                filename: 'credits.html',
-                title: `${APP_NAME} Credits`,
-                ...htmlWebpackPluginCommon
-            }),
+            // 为每种语言生成 HTML 文件
+            ...getSupportedLocales().flatMap(locale => [
+                new HtmlWebpackPlugin({
+                    chunks: ['player'],
+                    template: 'src/playground/index.ejs',
+                    filename: `${locale}/index.html`,
+                    title: `${APP_NAME} - Run Scratch projects faster`,
+                    currentLocale: locale,
+                    ...htmlWebpackPluginCommon
+                }),
+                new HtmlWebpackPlugin({
+                    chunks: ['editor'],
+                    template: 'src/playground/index.ejs',
+                    filename: `${locale}/editor.html`,
+                    title: `${APP_NAME} - Run Scratch projects faster`,
+                    isEditor: true,
+                    currentLocale: locale,
+                    ...htmlWebpackPluginCommon
+                }),
+                new HtmlWebpackPlugin({
+                    chunks: ['fullscreen'],
+                    template: 'src/playground/index.ejs',
+                    filename: `${locale}/fullscreen.html`,
+                    title: `${APP_NAME} - Run Scratch projects faster`,
+                    currentLocale: locale,
+                    ...htmlWebpackPluginCommon
+                }),
+                new HtmlWebpackPlugin({
+                    chunks: ['embed'],
+                    template: 'src/playground/embed.ejs',
+                    filename: `${locale}/embed.html`,
+                    title: `Embedded Project - ${APP_NAME}`,
+                    currentLocale: locale,
+                    ...htmlWebpackPluginCommon
+                }),
+                new HtmlWebpackPlugin({
+                    chunks: ['addon-settings'],
+                    template: 'src/playground/simple.ejs',
+                    filename: `${locale}/addons.html`,
+                    title: `Addon Settings - ${APP_NAME}`,
+                    currentLocale: locale,
+                    ...htmlWebpackPluginCommon
+                }),
+                new HtmlWebpackPlugin({
+                    chunks: ['credits'],
+                    template: 'src/playground/simple.ejs',
+                    filename: `${locale}/credits.html`,
+                    title: `${APP_NAME} Credits`,
+                    currentLocale: locale,
+                    ...htmlWebpackPluginCommon
+                })
+            ]),
             new CopyWebpackPlugin({
                 patterns: [
                     {

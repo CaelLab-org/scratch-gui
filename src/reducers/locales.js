@@ -5,6 +5,7 @@ import editorMessages from '@turbowarp/scratch-l10n/locales/editor-msgs';
 import addAdditionalTranslations from '../lib/tw-translations/index.js';
 
 import {LANGUAGE_KEY} from '../lib/detect-locale.js';
+import {getBCP47Code, getLocaleFromPath} from '../lib/locales-config.js';
 
 addAdditionalTranslations(editorMessages);
 addLocaleData(localeData);
@@ -46,6 +47,25 @@ const selectLocale = function (locale) {
     try {
         localStorage.setItem(LANGUAGE_KEY, locale);
     } catch (e) { /* ignore */ }
+
+    // 跳转到新的语言URL
+    const currentPath = window.location.pathname;
+    const currentLocale = getLocaleFromPath(currentPath);
+    const bcp47Code = getBCP47Code(locale);
+
+    // 构建新的URL路径
+    let newPath;
+    if (currentLocale) {
+        // 替换当前语言代码
+        newPath = currentPath.replace(new RegExp(`^/[a-zA-Z]{2}(?:-[a-zA-Z]{2,8})?/`), `/${bcp47Code}/`);
+    } else {
+        // 在根路径前添加语言代码
+        newPath = `/${bcp47Code}${currentPath === '/' ? '/' : currentPath}`;
+    }
+
+    // 跳转到新URL
+    window.location.href = newPath;
+
     return {
         type: SELECT_LOCALE,
         locale: locale

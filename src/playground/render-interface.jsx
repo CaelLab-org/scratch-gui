@@ -43,16 +43,25 @@ import {loadServiceWorker} from './load-service-worker';
 import runAddons from '../addons/entry';
 import InvalidEmbed from '../components/tw-invalid-embed/invalid-embed.jsx';
 import {APP_NAME} from '../lib/brand.js';
+import {getLocaleFromPath, getBCP47Code} from '../lib/locales-config.js';
 import xceLogo from '../../static/xce-logo.png';
 
 import styles from './interface.css';
 
 const isInvalidEmbed = window.parent !== window;
 
+// 获取当前语言前缀（BCP47格式），如 /zh-CN
+const getCurrentLocalePrefix = () => {
+    const locale = getLocaleFromPath(window.location.pathname);
+    if (!locale) return '';
+    return `/${getBCP47Code(locale)}`;
+};
+
 const handleClickAddonSettings = addonId => {
     // addonId might be a string of the addon to focus on, undefined, or an event (treat like undefined)
+    const localePrefix = getCurrentLocalePrefix();
     const path = process.env.ROUTING_STYLE === 'wildcard' ? 'addons' : 'addons.html';
-    const url = `${process.env.ROOT}${path}${typeof addonId === 'string' ? `#${addonId}` : ''}`;
+    const url = `${process.env.ROOT}${localePrefix}/${path}${typeof addonId === 'string' ? `#${addonId}` : ''}`;
     window.open(url);
 };
 
@@ -120,7 +129,7 @@ const Footer = () => (
 
             <div className={styles.footerColumns}>
                 <div className={styles.footerSection}>
-                    <a href="credits.html">
+                    <a href={`${getCurrentLocalePrefix()}/credits`}>
                         <FormattedMessage
                             defaultMessage="Credits"
                             description="Credits link in footer"

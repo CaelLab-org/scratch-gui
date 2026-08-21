@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html>
+<html lang="<%= htmlWebpackPlugin.options.currentLocale || 'en-US' %>">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="google" value="notranslate">
+    <% if (htmlWebpackPlugin.options.currentLocale) { %>
+    <base href="/">
+    <% } %>
     <meta name="description" content="<%= htmlWebpackPlugin.options.APP_NAME %> is a Scratch mod with a compiler to run projects faster, dark mode for your eyes, a bunch of addons to improve the editor, and more." />
     <title><%= htmlWebpackPlugin.options.title %></title>
     <link rel="apple-touch-icon" href="<%= htmlWebpackPlugin.options.root %>images/apple-touch-icon.png">
@@ -11,6 +14,14 @@
     <% if (htmlWebpackPlugin.options.root === "/" || htmlWebpackPlugin.options.root === "") { %>
       <link rel="manifest" href="<%= htmlWebpackPlugin.options.root %>manifest.webmanifest">
       
+    <% } %>
+    <% if (htmlWebpackPlugin.options.currentLocale) { %>
+    <link rel="canonical" href="https://engine.xmuer.online/<%= htmlWebpackPlugin.options.currentLocale %>/" />
+    <% var supportedLocales = ["ab","af-ZA","am-ET","an-ES","ar-SA","ast-ES","az-AZ","be-BY","bg-BG","bn-BD","ca-ES","ckb","cs-CZ","cy-GB","da-DK","de-DE","el-GR","en-US","eo","es-ES","es-419","et-EE","eu-ES","fa-IR","fi-FI","fil-PH","fr-FR","fy-NL","ga-IE","gd-GB","gl-ES","ha-NG","he-IL","hi-IN","hr-HR","ht-HT","hu-HU","hy-AM","id-ID","is-IS","it-IT","ja-JP","ja-Hira","ka-GE","kk-KZ","km-KH","ko-KR","ku","lt-LT","lv-LV","mi-NZ","mn-MN","ms-MY","my-MM","nb-NO","nl-NL","nn-NO","nso-ZA","oc-FR","or-IN","pl-PL","pt-PT","pt-BR","qu-PE","rap-CL","ro-RO","ru-RU","sk-SK","sl-SI","sr-RS","sv-SE","sw-KE","th-TH","tn-ZA","tr-TR","uk-UA","uz-UZ","vi-VN","xh-ZA","zh-CN","zh-TW","zu-ZA"];
+    supportedLocales.forEach(function(loc) { %>
+    <link rel="alternate" hreflang="<%= loc %>" href="https://engine.xmuer.online/<%= loc %>/" />
+    <% }); %>
+    <link rel="alternate" hreflang="x-default" href="https://engine.xmuer.online/en-US/" />
     <% } %>
     <style>
       .splash-screen {
@@ -78,6 +89,20 @@
     </style>
   </head>
   <body>
+    <% if (!htmlWebpackPlugin.options.currentLocale) { %>
+    <script>
+      // 根目录自动跳转到用户浏览器语言对应的子目录
+      (function() {
+        var langMap = {"en":"en-US","zh-cn":"zh-CN","zh-tw":"zh-TW","ja":"ja-JP","ko":"ko-KR","de":"de-DE","fr":"fr-FR","es":"es-ES","pt-br":"pt-BR","ru":"ru-RU","zh":"zh-CN"};
+        var path = window.location.pathname;
+        if (path === '/' || path === '/index.html') {
+          var userLang = navigator.language || navigator.userLanguage || 'en-US';
+          var bcp47 = langMap[userLang.toLowerCase()] || langMap[userLang.split('-')[0]] || 'en-US';
+          window.location.replace('/' + bcp47 + '/');
+        }
+      })();
+    </script>
+    <% } %>
     <noscript>
       <div class="splash-screen">
         <div>
