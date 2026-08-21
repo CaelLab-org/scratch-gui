@@ -129,6 +129,11 @@ const Footer = () => (
                     </a>
                 </div>
                 <div className={styles.footerSection}>
+                    <a href="https://github.com/yunyun-3782/scratch-gui" target="_blank" rel="noreferrer">
+                        {'GitHub'}
+                    </a>
+                </div>
+                <div className={styles.footerSection}>
                     <a href="https://coding.xmuer.online/">
                         {'XMUER Coding Community'}
                     </a>
@@ -138,6 +143,21 @@ const Footer = () => (
                         {'虚舟实验室 隐私权政策'}
                     </a>
                 </div>
+            </div>
+            <div className={styles.footerText}>
+                <FormattedMessage
+                    // eslint-disable-next-line max-len
+                    defaultMessage="XCE 的诞生离不开 {turbowarp} 开源项目。"
+                    description="TurboWarp credit in footer"
+                    id="tw.footer.turbowarpCredit"
+                    values={{
+                        turbowarp: (
+                            <a href="https://turbowarp.org/" target="_blank" rel="noreferrer">
+                                {'TurboWarp'}
+                            </a>
+                        )
+                    }}
+                />
             </div>
         </div>
     </footer>
