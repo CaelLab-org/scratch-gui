@@ -8,9 +8,68 @@ const shuffle = list => {
     return list;
 };
 
+// Self-hosted avatars (downloaded from trampoline.turbowarp.org)
+const images = {
+    '0': require('./avatars/0.png'),
+    '1882674': require('./avatars/1882674.png'),
+    '2561680': require('./avatars/2561680.png'),
+    '3318598': require('./avatars/3318598.png'),
+    '4648559': require('./avatars/4648559.png'),
+    '5354974': require('./avatars/5354974.png'),
+    '9636514': require('./avatars/9636514.png'),
+    '9981676': require('./avatars/9981676.png'),
+    '10817178': require('./avatars/10817178.png'),
+    '11677378': require('./avatars/11677378.gif'),
+    '12498592': require('./avatars/12498592.jpg'),
+    '14792872': require('./avatars/14792872.png'),
+    '14880401': require('./avatars/14880401.png'),
+    '16426047': require('./avatars/16426047.png'),
+    '16947341': require('./avatars/16947341.gif'),
+    '17235330': require('./avatars/17235330.png'),
+    '17340565': require('./avatars/17340565.png'),
+    '19133274': require('./avatars/19133274.webp'),
+    '20632822': require('./avatars/20632822.png'),
+    '22529928': require('./avatars/22529928.png'),
+    '26959223': require('./avatars/26959223.png'),
+    '29118689': require('./avatars/29118689.png'),
+    '29571977': require('./avatars/29571977.png'),
+    '30323614': require('./avatars/30323614.png'),
+    '33988895': require('./avatars/33988895.png'),
+    '34018398': require('./avatars/34018398.png'),
+    '34455896': require('./avatars/34455896.png'),
+    '34824813': require('./avatars/34824813.png'),
+    '37070511': require('./avatars/37070511.jpg'),
+    '41219524': require('./avatars/41219524.jpg'),
+    '41616512': require('./avatars/41616512.png'),
+    '41876695': require('./avatars/41876695.png'),
+    '45777723': require('./avatars/45777723.gif'),
+    '52066199': require('./avatars/52066199.png'),
+    '54392956': require('./avatars/54392956.png'),
+    '55742784': require('./avatars/55742784.png'),
+    '60000111': require('./avatars/60000111.jpg'),
+    '61409215': require('./avatars/61409215.png'),
+    '62325737': require('./avatars/62325737.png'),
+    '62950341': require('./avatars/62950341.png'),
+    '64184234': require('./avatars/64184234.png'),
+    '64691048': require('./avatars/64691048.gif'),
+    '72467731': require('./avatars/72467731.png'),
+    '74246431': require('./avatars/74246431.jpg'),
+    '80038021': require('./avatars/80038021.png'),
+    '82486672': require('./avatars/82486672.png'),
+    '103496265': require('./avatars/103496265.jpg'),
+    '105362329': require('./avatars/105362329.gif'),
+    '126715567': require('./avatars/126715567.png'),
+    '128778351': require('./avatars/128778351.png'),
+    '128887584': require('./avatars/128887584.png'),
+    '129742989': require('./avatars/129742989.png'),
+    '139929771': require('./avatars/139929771.png'),
+    '141930175': require('./avatars/141930175.png'),
+    '166646203': require('./avatars/166646203.png')
+};
+
 const fromHardcoded = ({userID = '0', username}) => {
     const result = {
-        image: `https://trampoline.turbowarp.org/avatars/${userID}`,
+        image: images[userID],
         text: username
     };
     if (username && userID !== '0') {
