@@ -150,7 +150,7 @@ const Footer = () => (
                             id="tw.footer.feedback"
                         />
                     </a>
-                    <a href="https://github.com/yunyun-3782/scratch-gui" target="_blank" rel="noreferrer">
+                    <a href="https://github.com/caellab-com/scratch-gui" target="_blank" rel="noreferrer">
                         <FormattedMessage
                             defaultMessage="Source Code"
                             description="Footer link to source code"
