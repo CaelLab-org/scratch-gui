@@ -15,7 +15,7 @@ const guiColors = {
 
     'drop-highlight': '#7c3aed',
     'menu-bar-background': '#4c1d95',
-    'menu-bar-background-image': 'linear-gradient(135deg, #4c1d95 0%, #2d6a4f 100%)',
+    'menu-bar-background-image': 'none',
     
     /* 平衡红 - 用于警告、错误、停止等 */
     'red-primary': 'hsla(350, 65%, 50%, 1)',
