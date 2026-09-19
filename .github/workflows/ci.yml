@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    # 纯文档改动不触发（PR 不设过滤，避免 docs-only PR 的必需检查一直 pending）
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+  pull_request:
+  workflow_dispatch:
+
+# 同一 ref 上新的推送会取消上一次未跑完的任务，避免排队烧 runner 时间
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-build:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # 单元测试先跑，失败就不进入构建，更不会部署
+      - run: npm run test:unit
+      - run: npm run build
+        env:
+          NODE_ENV: production
+      - run: cp CNAME build/CNAME
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/develop'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build
+
+  deploy:
+    name: Deploy
+    needs: test-build
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
