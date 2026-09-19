@@ -1,5 +1,51 @@
 @import "../css/colors.css";
 
+/* ==================== XCE 首页配色变量 ====================
+   规范（参考 codingcommunity）：
+   - 渐变只保留同色系，禁止跨色相
+   - 背景中性冷白，不留灰紫
+   - 文字中性近黑，不用藏青
+   - 阴影中性，不带色
+   ========================================================= */
+:root {
+    /* 主色 - 品牌蓝（Scratch 蓝去甜版） */
+    --xce-primary: #2b6fec;
+    --xce-primary-hover: #1d5bd6;
+    --xce-primary-light: #6e9df5;
+    --xce-primary-bg: #eaf1fe;
+    /* 强调色 - 品牌橙（只做点缀，不铺面积） */
+    --xce-accent: #f08c00;
+    --xce-accent-light: #ffb020;
+    /* 深色区用色 */
+    --xce-deep: #1b3d82;
+    --xce-deepest: #08122a;
+
+    --xce-gradient-primary: linear-gradient(135deg, #2b6fec 0%, #57a8ff 100%);
+
+    /* 背景 - 中性冷白 */
+    --xce-bg: #f5f6f8;
+    --xce-surface: #ffffff;
+
+    /* 文字 - 中性近黑 */
+    --xce-text: #101828;
+    --xce-text-secondary: #5a6472;
+    --xce-text-muted: #98a2b3;
+
+    /* 边框 */
+    --xce-border: #e4e7ec;
+    --xce-border-light: #f0f2f5;
+
+    /* 阴影 - 中性 */
+    --xce-shadow-md: 0 10px 25px -5px rgba(16, 24, 40, 0.08), 0 8px 10px -6px rgba(16, 24, 40, 0.04);
+    --xce-shadow-lg: 0 20px 40px -12px rgba(16, 24, 40, 0.12), 0 8px 16px -8px rgba(16, 24, 40, 0.06);
+
+    /* 圆角 */
+    --xce-radius: 0.5rem;
+    --xce-radius-lg: 0.75rem;
+    --xce-radius-xl: 1rem;
+    --xce-radius-2xl: 1.25rem;
+}
+
 /* Base styles */
 h1,
 h2,
@@ -43,7 +89,7 @@ a {
     top: 0;
     left: 0;
     width: 100%;
-    background-color: #f5f5f8;
+    background-color: var(--xce-bg);
 }
 
 .editor {
@@ -85,22 +131,55 @@ a {
 
 /* ===== Hero Section ===== */
 .heroSection {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 60px 20px 50px;
+    max-width: 1120px;
+    margin: 24px auto 0;
+    padding: 3.5rem 2rem 4rem;
     text-align: center;
-    background: linear-gradient(180deg, #4c1d95 0%, #2e1065 100%);
-    color: white;
+    border-radius: var(--xce-radius-2xl);
+    overflow: hidden;
+    background: linear-gradient(135deg, #08122a 0%, #1b3d82 50%, #0c1b36 100%);
+    box-shadow: 0 20px 60px -15px rgba(8, 18, 42, 0.5);
+    color: #ffffff;
+}
+
+/* 光晕层 */
+.heroSection::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(circle at 20% 50%, rgba(43, 111, 236, 0.35) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255, 176, 32, 0.16) 0%, transparent 50%),
+        radial-gradient(circle at 60% 80%, rgba(87, 168, 255, 0.18) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+/* 点阵网格 */
+.heroSection::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.06) 1px, transparent 0);
+    background-size: 28px 28px;
+    pointer-events: none;
+}
+
+.heroSection > * {
+    position: relative;
+    z-index: 1;
 }
 
 .heroLogo {
-    width: 120px;
-    height: 120px;
+    width: 112px;
+    height: 112px;
     margin-bottom: 20px;
     animation: float 3s ease-in-out infinite;
-    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.28));
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
     border-radius: 20px;
 }
 
@@ -112,15 +191,20 @@ a {
 .heroTitle {
     font-size: 3rem;
     font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
     margin-bottom: 12px;
-    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #ffffff 0%, #cfe2ff 55%, #a8ccff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .heroSubtitle {
-    font-size: 1.15rem;
-    color: #cfc4ec;
+    font-size: 1.0625rem;
+    color: rgba(255, 255, 255, 0.65);
     max-width: 520px;
-    line-height: 1.6;
+    line-height: 1.7;
     margin-bottom: 0;
 }
 
@@ -136,11 +220,11 @@ a {
 }
 
 .inputCard {
-    background: #ffffff;
-    border: 1px solid #ececf1;
-    border-radius: 14px;
+    background: var(--xce-surface);
+    border: 1px solid var(--xce-border);
+    border-radius: var(--xce-radius-xl);
     padding: 24px 32px;
-    box-shadow: 0 12px 32px rgba(16, 24, 40, 0.1), 0 2px 6px rgba(16, 24, 40, 0.04);
+    box-shadow: var(--xce-shadow-lg);
     width: 100%;
     max-width: 560px;
     display: flex;
@@ -151,7 +235,7 @@ a {
 
 .inputLabel {
     font-size: 0.9rem;
-    color: #5a6072;
+    color: var(--xce-text-secondary);
     font-weight: 500;
 }
 
@@ -178,19 +262,38 @@ a {
 }
 
 .featureCard {
-    background: #ffffff;
-    border: 1px solid #ebebf0;
-    border-radius: 12px;
+    position: relative;
+    background: var(--xce-surface);
+    border: 1px solid var(--xce-border);
+    border-radius: var(--xce-radius-xl);
     padding: 28px 16px;
     text-align: center;
-    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* hover 渐变描边 */
+.featureCard::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--xce-gradient-primary);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
 }
 
 .featureCard:hover {
-    transform: translateY(-3px);
-    border-color: #dcd6ec;
-    box-shadow: 0 10px 24px rgba(16, 24, 40, 0.09);
+    transform: translateY(-4px);
+    box-shadow: var(--xce-shadow-lg);
+}
+
+.featureCard:hover::after {
+    opacity: 1;
 }
 
 .featureIcon {
@@ -201,13 +304,13 @@ a {
 .featureTitle {
     font-size: 1.05rem;
     font-weight: 700;
-    color: #1f2233;
+    color: var(--xce-text);
     margin-bottom: 6px;
 }
 
 .featureDesc {
     font-size: 0.85rem;
-    color: #6b7280;
+    color: var(--xce-text-secondary);
     line-height: 1.5;
 }
 
@@ -217,7 +320,7 @@ a {
     margin: 24px auto;
     padding: 0 20px;
     text-align: center;
-    color: #6b7280;
+    color: var(--xce-text-secondary);
     font-size: 0.9rem;
     line-height: 1.6;
 }
@@ -226,16 +329,17 @@ a {
 .footer {
     padding: 24px 0;
     margin-top: 40px;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-    background: #fafafa;
+    border-top: 1px solid var(--xce-border);
+    background: var(--xce-surface);
 }
 .footer a {
     font-weight: bold;
     text-decoration: none;
-    color: #4c1d95;
+    color: var(--xce-primary);
 }
 .footer a:hover {
     text-decoration: underline;
+    color: var(--xce-primary-hover);
 }
 .footer-content {
     max-width: 700px;
@@ -244,7 +348,7 @@ a {
 .footer-text {
     text-align: center;
     margin: 5px 0 10px 0;
-    color: #999;
+    color: var(--xce-text-muted);
     font-size: 0.85rem;
 }
 .footer-columns {
@@ -286,6 +390,11 @@ a {
 
 /* ===== Responsive ===== */
 @media (max-width: 640px) {
+    .heroSection {
+        margin: 16px 12px 0;
+        padding: 2.5rem 1.25rem 3rem;
+        border-radius: var(--xce-radius-xl);
+    }
     .heroTitle {
         font-size: 2rem;
     }
