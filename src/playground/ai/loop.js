@@ -78,6 +78,10 @@ export const runTurn = async ({session, model, tools, signal, onEvent = () => {}
     const schemas = tools.map(toolToSchema);
     let steps = 0;
     let finalText = '';
+    // 循环为什么结束：正常收尾=null；'steps'=到步数上限；'length'=输出被 max_tokens 掐断；
+    // 'empty'=模型没返回内容（连接中途断掉之类）。UI 据此给用户明确的提示，而不是「跑着跑着就没了」。
+    let reason = null;
+    let finished = false;
 
     while (steps++ < maxSteps) {
         if (signal && signal.aborted) break;
@@ -88,7 +92,10 @@ export const runTurn = async ({session, model, tools, signal, onEvent = () => {}
             signal,
             onChunk: chunk => onEvent({type: 'chunk', ...chunk})
         });
-        if (!reply) break;
+        if (!reply) {
+            reason = 'empty';
+            break;
+        }
 
         // 真实用量：prompt_tokens 就是这一轮发出去的前缀长度，上下文计量以它为准
         // 会话是本次对话独占的，不存在并发写；这条规则在这里是误报
@@ -101,14 +108,21 @@ export const runTurn = async ({session, model, tools, signal, onEvent = () => {}
 
         const assistantMessage = {role: 'assistant', content: reply.text || ''};
         if (reply.toolCalls && reply.toolCalls.length) assistantMessage.toolCalls = reply.toolCalls;
-        // 开思考时，带工具调用的 assistant 消息必须带上思考原文，下一轮要原样回传（否则接口 400）
+        // 思考原文只在会话里留一轮：toWireMessages 只回传最后一条（更早的剥掉，用户要求别堆进历史）
         if (reply.reasoning) assistantMessage.reasoning = reply.reasoning;
         session.messages.push(assistantMessage);
         onEvent({type: 'assistant', message: assistantMessage, usage: reply.usage});
 
         const calls = assistantMessage.toolCalls || [];
         if (!calls.length) {
+            if (!assistantMessage.content) {
+                // 既没有正文也没有工具调用 —— 输出到上限被掐断，或连接中途断了。
+                // 原来这里会静默结束（表现为「跑着跑着突然停了」），必须说清楚。
+                reason = reply.finishReason === 'length' ? 'length' : 'empty';
+                break;
+            }
             finalText = assistantMessage.content;
+            finished = true;
             break;
         }
 
@@ -134,5 +148,9 @@ export const runTurn = async ({session, model, tools, signal, onEvent = () => {}
         if (signal && signal.aborted) break;
     }
 
-    return {text: finalText, steps, aborted: !!(signal && signal.aborted)};
+    if (!finished && !reason && !(signal && signal.aborted)) {
+        reason = 'steps';
+    }
+
+    return {text: finalText, steps, reason, aborted: !!(signal && signal.aborted)};
 };

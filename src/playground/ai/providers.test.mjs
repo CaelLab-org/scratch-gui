@@ -162,6 +162,18 @@ const withReasoning = toWireMessages([
 check('带工具调用的 assistant 回传 reasoning_content', withReasoning[0].reasoning_content === '先读项目');
 check('普通回复不回传思考内容（省上下文）', withReasoning[1].reasoning_content === void 0);
 
+// 多轮之后只回传**最后一条**工具调用的思考，更早的剥掉（实测接口 200 接受；堆着会越滚越大）
+const twoTurns = toWireMessages([
+    {role: 'user', content: '一'},
+    {role: 'assistant', content: '', reasoning: '老思考', toolCalls: [{id: 'c1', name: 'a', input: {}}]},
+    {role: 'tool', toolCallId: 'c1', content: 'r1'},
+    {role: 'assistant', content: '', reasoning: '新思考', toolCalls: [{id: 'c2', name: 'a', input: {}}]},
+    {role: 'tool', toolCallId: 'c2', content: 'r2'},
+    {role: 'user', content: '二'}
+]);
+check('思考只随最后一条工具调用回传',
+    twoTurns[1].reasoning_content === void 0 && twoTurns[3].reasoning_content === '新思考');
+
 // ---------- 7. 图片走 tool 消息的 content 数组 ----------
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const withImage = toWireMessages([

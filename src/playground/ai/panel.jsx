@@ -1034,7 +1034,18 @@ const AIPanel = ({vm}) => {
             const outcome = await runTurn({
                 session, model, tools, system, signal: controller.signal, onEvent
             });
-            setStatus(useCloud ? `完成（${outcome.steps} 步）` : `本地演示完成（${outcome.steps} 步）`);
+            // 「跑着跑着突然停了」的几种原因，都得让用户看得懂、知道下一步怎么办
+            const REASONS = {
+                steps: '这轮跑到了步数上限（12 次模型往返），我先停在这里。任务没做完的话，发一句「继续」我接着干。',
+                length: '模型这轮的输出到达了单次上限，被接口掐断了。可以在设置里调大「单次最大输出」，或发「继续」让我接着说。',
+                empty: '模型没有返回内容（连接可能中途断了）。重发一次试试。'
+            };
+            if (outcome.reason && REASONS[outcome.reason]) {
+                setItemsState(prev => prev.concat([{kind: 'notice', text: REASONS[outcome.reason]}]));
+                setStatus(outcome.reason === 'steps' ? '已到步数上限' : outcome.reason === 'length' ? '输出被掐断' : '空响应');
+            } else {
+                setStatus(useCloud ? `完成（${outcome.steps} 步）` : `本地演示完成（${outcome.steps} 步）`);
+            }
             if (useCloud) {
                 setContext(measure({
                     messages: session.messages,

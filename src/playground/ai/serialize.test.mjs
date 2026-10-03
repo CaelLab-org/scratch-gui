@@ -78,11 +78,40 @@ console.log(`第二轮警告: ${b2.warnings.length ? '\n  ' + b2.warnings.join('
 
 const f1 = fingerprint(b1.blocks);
 const f2 = fingerprint(b2.blocks);
-if (f1 === f2) {
-  console.log(`\n✅ 往返幂等：两轮结构一致（积木数 ${Object.keys(b1.blocks).length}）`);
+
+// ---------- 与扩展积木撞名的核心积木（回归：曾经被翻成 makeymakey 的块）----------
+// 有些扩展的积木文本跟核心积木一模一样（Makey Makey 的「当按下按键」= 事件类的同名块），
+// 表里按归一化文本对齐时被扩展抢走了 id → 核心块被翻成扩展块，再因为没加载扩展而被拒。
+const keyPressed = textToBlocks('when [space v] key pressed\nmove (10) steps', {variables: {}, lists: {}});
+const keyOpcodes = Object.values(keyPressed.blocks)
+  .map(b => b.opcode);
+console.log(`\n按键帽子块: ${keyOpcodes.join(', ')}`);
+const keyOk = keyOpcodes.includes('event_whenkeypressed') &&
+  !keyOpcodes.some(o => /makeymakey/.test(o));
+if (!keyOk) console.log('❌ 按键帽子块被扩展积木抢走了');
+
+// ---------- 菜单影子必须按槽位对齐（回归：效果字段曾被错配成 math_number 坏块）----------
+// looks_changeeffectby 只有 CHANGE 槽带 math_number 影子，EFFECT 是**字段**。
+// 曾经按「第一个影子」取，于是 EFFECT 被挂上 math_number，写进项目是坏的，读回来还变成 (GHOST)。
+const effector = textToBlocks('when green flag clicked\nchange [ghost v] effect by (-4)', {variables: {}, lists: {}});
+const effectBlocks = Object.values(effector.blocks);
+const effectOpcodes = effectBlocks.map(b => b.opcode);
+const effectBlock = effectBlocks.find(b => b.opcode === 'looks_changeeffectby');
+console.log(`透明度效果块: ${effectOpcodes.join(', ')}`);
+const shadowOk = !!effectBlock && !!effectBlock.fields.EFFECT &&
+  effectBlock.fields.EFFECT[0] === 'GHOST' && !effectBlock.inputs.EFFECT;
+if (!shadowOk) console.log('❌ 效果字段没落成字段:', JSON.stringify(effectBlock && {fields: effectBlock.fields, inputs: effectBlock.inputs}));
+
+const echo = targetBlocksToText({blocks: effector.blocks});
+console.log(`读回成文本: ${JSON.stringify(echo.text)}`);
+const echoOk = /\[ghost v\]/i.test(echo.text) && !echo.text.includes('(GHOST)');
+if (!echoOk) console.log('❌ 效果字段读回来没写成下拉形状');
+
+if (f1 === f2 && keyOk && shadowOk && echoOk) {
+  console.log(`\n✅ 往返幂等：两轮结构一致（积木数 ${Object.keys(b1.blocks).length}），按键帽子块与菜单影子也正常`);
   process.exit(0);
 }
-console.log('\n❌ 结构不一致');
+if (f1 !== f2) console.log('\n❌ 结构不一致');
 const a = f1.split('\n');
 const b = f2.split('\n');
 for (let i = 0; i < Math.max(a.length, b.length); i++) {
