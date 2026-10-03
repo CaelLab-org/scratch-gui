@@ -4,10 +4,7 @@ import PropTypes from 'prop-types';
 import {connect} from 'react-redux';
 import {intlShape, injectIntl} from 'react-intl';
 
-import {
-    openSpriteLibrary,
-    closeSpriteLibrary
-} from '../reducers/modals';
+import {closeSpriteLibrary} from '../reducers/modals';
 import {activateTab, COSTUMES_TAB_INDEX, BLOCKS_TAB_INDEX} from '../reducers/editor-tab';
 import {setReceivedBlocks} from '../reducers/hovered-target';
 import {showStandardAlert, closeAlertWithId} from '../reducers/alerts';
@@ -276,10 +273,6 @@ const mapStateToProps = state => ({
 });
 
 const mapDispatchToProps = dispatch => ({
-    onNewSpriteClick: e => {
-        e.preventDefault();
-        dispatch(openSpriteLibrary());
-    },
     onRequestCloseSpriteLibrary: () => {
         dispatch(closeSpriteLibrary());
     },

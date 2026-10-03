@@ -5,7 +5,6 @@ import React from 'react';
 import {intlShape, injectIntl} from 'react-intl';
 
 import {connect} from 'react-redux';
-import {openBackdropLibrary} from '../reducers/modals';
 import {activateTab, COSTUMES_TAB_INDEX} from '../reducers/editor-tab';
 import {showStandardAlert, closeAlertWithId} from '../reducers/alerts';
 import {setHoveredSprite} from '../reducers/hovered-target';
@@ -210,10 +209,6 @@ const mapStateToProps = (state, {asset, id}) => ({
 });
 
 const mapDispatchToProps = dispatch => ({
-    onNewBackdropClick: e => {
-        e.stopPropagation();
-        dispatch(openBackdropLibrary());
-    },
     onActivateTab: tabIndex => {
         dispatch(activateTab(tabIndex));
     },

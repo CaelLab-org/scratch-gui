@@ -7,11 +7,9 @@ import VM from 'scratch-vm';
 import AssetPanel from '../components/asset-panel/asset-panel.jsx';
 import soundIcon from '../components/asset-panel/icon--sound.svg';
 import soundIconRtl from '../components/asset-panel/icon--sound-rtl.svg';
-import addSoundFromLibraryIcon from '../components/asset-panel/icon--add-sound-lib.svg';
 import addSoundFromRecordingIcon from '../components/asset-panel/icon--add-sound-record.svg';
 import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
 import surpriseIcon from '../components/action-menu/icon--surprise.svg';
-import searchIcon from '../components/action-menu/icon--search.svg';
 
 import RecordModal from './record-modal.jsx';
 import SoundEditor from './sound-editor.jsx';
@@ -29,7 +27,6 @@ import {connect} from 'react-redux';
 
 import {
     closeSoundLibrary,
-    openSoundLibrary,
     openSoundRecorder
 } from '../reducers/modals';
 
@@ -180,7 +177,6 @@ class SoundTab extends React.Component {
             intl,
             isRtl,
             vm,
-            onNewSoundFromLibraryClick,
             onNewSoundFromRecordingClick
         } = this.props;
 
@@ -216,21 +212,12 @@ class SoundTab extends React.Component {
                 defaultMessage: 'Record',
                 description: 'Button to record a sound in the editor tab',
                 id: 'gui.soundTab.recordSound'
-            },
-            addSound: {
-                defaultMessage: 'Choose a Sound',
-                description: 'Button to add a sound in the editor tab',
-                id: 'gui.soundTab.addSoundFromLibrary'
             }
         });
 
         return (
             <AssetPanel
                 buttons={isSupported ? [{
-                    title: intl.formatMessage(messages.addSound),
-                    img: addSoundFromLibraryIcon,
-                    onClick: onNewSoundFromLibraryClick
-                }, {
                     title: intl.formatMessage(messages.fileUploadSound),
                     img: fileUploadIcon,
                     onClick: this.handleFileUploadClick,
@@ -246,10 +233,6 @@ class SoundTab extends React.Component {
                     title: intl.formatMessage(messages.recordSound),
                     img: addSoundFromRecordingIcon,
                     onClick: onNewSoundFromRecordingClick
-                }, {
-                    title: intl.formatMessage(messages.addSound),
-                    img: searchIcon,
-                    onClick: onNewSoundFromLibraryClick
                 }] : []}
                 dragType={DragConstants.SOUND}
                 isRtl={isRtl}
@@ -292,7 +275,6 @@ SoundTab.propTypes = {
     isRtl: PropTypes.bool,
     onActivateCostumesTab: PropTypes.func.isRequired,
     onCloseImporting: PropTypes.func.isRequired,
-    onNewSoundFromLibraryClick: PropTypes.func.isRequired,
     onNewSoundFromRecordingClick: PropTypes.func.isRequired,
     onRequestCloseSoundLibrary: PropTypes.func.isRequired,
     onShowImporting: PropTypes.func.isRequired,
@@ -324,10 +306,6 @@ const mapStateToProps = state => ({
 
 const mapDispatchToProps = dispatch => ({
     onActivateCostumesTab: () => dispatch(activateTab(COSTUMES_TAB_INDEX)),
-    onNewSoundFromLibraryClick: e => {
-        e.preventDefault();
-        dispatch(openSoundLibrary());
-    },
     onNewSoundFromRecordingClick: () => {
         dispatch(openSoundRecorder());
     },
