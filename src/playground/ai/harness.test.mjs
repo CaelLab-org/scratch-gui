@@ -155,8 +155,21 @@ check('报错清单用的是真名（不带「（舞台）」装饰）',
 check('名字匹配容忍「Stage（舞台）」这种抄法',
   fakePort.readTarget('Stage（舞台）') !== null && fakePort.readTarget(' Stage ') !== null);
 
-// === 影子积木不算扩展；按键帽子块必须是核心块 ===
+// === 连续写入必须各留一段（回归：块 id 每次从 c0 重编，后写的整段覆盖先写的）===
+// 用户实际踩到过：连写两段，工具都回「写入成功」，但读回来只剩一段。
 const cloneTool = tools.find(t => t.name === 'xce_write_script');
+const spriteTarget = () => vm.runtime.targets.find(t => !t.isStage);
+const scriptsBefore = spriteTarget().blocks.getScripts().length;
+await cloneTool.handler({sprite: 'Sprite1', text: 'when green flag clicked\nmove (1) steps'}, {});
+await cloneTool.handler({sprite: 'Sprite1', text: 'when green flag clicked\nmove (2) steps'}, {});
+const scriptsAfter = spriteTarget().blocks.getScripts().length;
+check('连续两次写入各留一段脚本（块 id 不撞车）',
+  scriptsAfter === scriptsBefore + 2, `前 ${scriptsBefore} 段，后 ${scriptsAfter} 段`);
+check('两段都在（读回文本里两段都在）',
+  (port.readTarget('Sprite1').text.match(/@greenFlag/g) || []).length >= 2,
+  port.readTarget('Sprite1').text.split('\n').filter(l => l.includes('@greenFlag')).length + ' 段 hat');
+
+// === 影子积木不算扩展；按键帽子块必须是核心块 ===
 // 回归：`when [space v] key pressed` 曾被翻成 makeymakey 的块，于是「没加载扩展」被拒；
 // `change [ghost v] effect by (-4)` 的 math_number 影子曾让错误里写着「缺少扩展 math」。
 const ghostScript = 'when [space v] key pressed\nchange [ghost v] effect by (-4)';
