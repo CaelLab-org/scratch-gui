@@ -41,9 +41,9 @@ const ls = await listSpritesTool.handler({}, {});
 check('ls 列出角色且不给代码', ls.content.includes('Sprite1') && !ls.content.includes('@greenFlag'),
     String(ls.content).split('\n')[0]);
 
-const whole = await readProjectTool.handler({sprite: 'Sprite1'}, {});
+const wholeEmpty = await readProjectTool.handler({sprite: 'Sprite1'}, {});
 check('按角色读代码（此时项目还是空的，表头也要对）',
-    whole.content.includes('# Sprite1（第 1–1 行，共 1 行）'), String(whole.content).split('\n')[0]);
+    wholeEmpty.content.includes('# Sprite1（第 1–1 行，共 1 行）'), String(wholeEmpty.content).split('\n')[0]);
 
 const noSprite = await readProjectTool.handler({}, {});
 check('不带角色名只给清单不给代码',
@@ -87,7 +87,6 @@ check('积木已注入', after.blockIds.length > 0, `${after.blockIds.length} �
 check('能读回文本', after.text.includes('@greenFlag') && after.text.includes('change'), JSON.stringify(after.text.slice(0, 40)));
 
 // 现在有真代码了：验证按角色读 + 行分页
-const readProjectTool = tools.find(t => t.name === 'xce_read_project');
 const whole = await readProjectTool.handler({sprite: 'Sprite1'}, {});
 check('按角色读代码带行数表头',
     whole.content.includes('# Sprite1（第 1–') && whole.content.includes('共 '),
@@ -160,6 +159,17 @@ const small = await executeTool(
   {}
 );
 check('没超限的结果原样通过', small.content === '短结果', small.content);
+
+// 缺参数的错误要给模型自我纠正的信息（第一次调用常见参数名编错，比如 text 写成 script）
+const badParams = await executeTool(
+  {name: 'xce_write_script', input: {script: 'when green flag clicked'}},
+  tools,
+  {}
+);
+check('缺参数时报出正确的参数名单',
+  badParams.isError === true && badParams.content.includes('sprite, text') &&
+  badParams.content.includes('参数是：sprite, text'),
+  String(badParams.content).slice(0, 120));
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

@@ -53,3 +53,26 @@ export const parseSkillFile = (raw, path = '') => {
         path
     };
 };
+
+/**
+ * 把详细文档（docs/skills/<skill>/docs/<主题>.md）挂到对应的 skill 上。
+ * 抽成纯函数：加载器（webpack require.context）和无头测试（fs）都喂同一份 entries，
+ * 这样详细文档的挂载逻辑在两边走的是同一条路。
+ * @param {Array<object>} skills parseSkillFile 的结果数组
+ * @param {Array<{path: string, raw: string}>} entries 详细文档（路径 + 原文）
+ * @returns {Array<object>} 原数组（每个 skill 多了 docs: [{name, body}]）
+ */
+export const attachDocs = (skills, entries) => {
+    skills.forEach(skill => {
+        skill.docs = skill.docs || [];
+    });
+    for (const entry of entries) {
+        const match = String(entry.path).replace(/^\.\//, '')
+            .match(/^(.+?)\/docs\/([^/]+)\.md$/);
+        if (!match) continue;
+        const skill = skills.find(candidate => candidate.name === match[1]);
+        if (!skill) continue;
+        skill.docs.push({name: match[2], body: String(entry.raw).trim()});
+    }
+    return skills;
+};

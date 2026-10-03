@@ -20,6 +20,16 @@ const listSprites = port =>
     port.listSprites().map(s => `${s.name}${s.isStage ? '（舞台）' : ''}`)
         .join('、');
 
+// 一行一个角色的清单（ls）。只给名字/数量/变量名，绝不带代码 —— 代码必须按角色单独读
+const listSpritesDetailed = port => port.listSpritesDetailed()
+    .map(t => {
+        const head = `- ${t.name}${t.isStage ? '（舞台）' : ''}：${t.scriptCount} 段脚本`;
+        const vars = t.variables.length ? `，变量：${t.variables.join('、')}` : '';
+        const lists = t.lists.length ? `，列表：${t.lists.join('、')}` : '';
+        return `${head}${vars}${lists}`;
+    })
+    .join('\n');
+
 // 图片太大的话压一下再发：舞台在高分屏上可能被渲染成 960x720 甚至更大，
 // PNG 原图能到几百 KB，白烧 token。只缩尺寸，仍存 PNG（舞台可能是透明底，JPEG 会变黑）。
 const MAX_IMAGE_CHARS = 300 * 1024;
@@ -53,36 +63,68 @@ const shrinkImage = dataUrl => new Promise(resolve => {
 export const createTools = ({port, skills = []}) => {
     const tools = [
         {
+            name: 'xce_list_sprites',
+            description:
+                'List every sprite in the project — the "ls" of this editor: name, script count, variable and ' +
+                'list names, one line each. Names only, never code.\n' +
+                'Call this first whenever you need to know what exists; then read one sprite\'s code with ' +
+                'xce_read_project. The project contents are NOT given to you up front — always discover them.',
+            readOnly: true,
+            inputSchema: {type: 'object', properties: {}},
+            handler: () => ok(listSpritesDetailed(port) || '（项目里还没有角色）')
+        },
+
+        {
             name: 'xce_read_project',
             description:
-                'Read the blocks of the open Scratch project as block text (scratchblocks notation).\n' +
-                'Returns one section per sprite, each headed by the sprite name and its variables/lists.\n' +
-                'Call this before writing whenever you are unsure what already exists.\n' +
+                'Read ONE sprite\'s blocks as block text (scratchblocks notation). One sprite per call — ' +
+                'this is deliberate, so a big project cannot blow up your context.\n' +
                 'In the returned text, `[name v]` stands for a variable or list dropdown; copy it ' +
-                'verbatim when writing back.',
+                'verbatim when writing back.\n' +
+                'Long code is truncated at 20KB; to see a specific part, call again with lineStart/lineEnd ' +
+                '(1-based, inclusive — the first call\'s header tells you the total line count). ' +
+                'A paged result is still capped at 20KB.',
             readOnly: true,
+            paged: true,
             inputSchema: {
                 type: 'object',
                 properties: {
-                    sprite: {type: 'string', description: 'Sprite name. Omit to read every sprite including the stage.'}
-                }
+                    sprite: {type: 'string', description: 'Sprite name (get names from xce_list_sprites).'},
+                    lineStart: {type: 'number', description: 'First line to show (1-based). Omit to start at 1.'},
+                    lineEnd: {type: 'number', description: 'Last line to show (inclusive). Omit to read to the end.'}
+                },
+                required: ['sprite']
             },
-            handler: ({sprite}) => {
-                const names = sprite ? [sprite] : port.listSprites().map(s => s.name);
-                const chunks = [];
-                for (const name of names) {
-                    const target = port.readTarget(name);
-                    if (!target) return fail(`找不到精灵「${name}」。现有：${listSprites(port)}`);
-                    const header = [`# ${name}`];
-                    if (Object.keys(target.variables).length) {
-                        header.push(`变量：${Object.keys(target.variables).join('、')}`);
-                    }
-                    if (Object.keys(target.lists).length) {
-                        header.push(`列表：${Object.keys(target.lists).join('、')}`);
-                    }
-                    chunks.push(`${header.join('\n')}\n${target.text || '（这个精灵还没有积木）'}`);
+            handler: ({sprite, lineStart, lineEnd}) => {
+                if (!sprite) {
+                    // 没带角色名：只给清单，绝不一口气倒出全部代码
+                    return ok(`${listSpritesDetailed(port)}\n\n要读某个角色的积木代码，带 sprite 参数再调一次（一次只读一个角色）。`);
                 }
-                return ok(chunks.join('\n\n---\n\n'));
+                const target = port.readTarget(sprite);
+                if (!target) return fail(`找不到角色「${sprite}」。现有：${listSprites(port)}`);
+
+                const allLines = String(target.text || '').split('\n');
+                const total = allLines.length;
+                let lines = allLines;
+                let shown = `第 1–${total} 行`;
+                const start = Number(lineStart);
+                const end = Number(lineEnd);
+                if (start > 0 || end > 0) {
+                    const s = Math.max(1, Math.floor(start || 1));
+                    const e = Math.min(total, Math.floor(end || total));
+                    if (s > e) return fail(`行范围不对：${s}–${e}。行号从 1 开始，lineEnd 要 ≥ lineStart。`);
+                    lines = allLines.slice(s - 1, e);
+                    shown = `第 ${s}–${e} 行`;
+                }
+
+                const header = [`# ${sprite}（${shown}，共 ${total} 行）`];
+                if (Object.keys(target.variables).length) {
+                    header.push(`变量：${Object.keys(target.variables).join('、')}`);
+                }
+                if (Object.keys(target.lists).length) {
+                    header.push(`列表：${Object.keys(target.lists).join('、')}`);
+                }
+                return ok(`${header.join('\n')}\n${lines.join('\n') || '（这个角色还没有积木）'}`);
             }
         },
 
@@ -105,7 +147,7 @@ export const createTools = ({port, skills = []}) => {
             },
             handler: async ({sprite, text}) => {
                 const target = port.readTarget(sprite);
-                if (!target) return fail(`找不到精灵「${sprite}」。现有：${listSprites(port)}`);
+                if (!target) return fail(`找不到角色「${sprite}」。现有：${listSprites(port)}`);
                 const result = await port.writeScript(sprite, text);
                 const lines = [`已在「${sprite}」写入 ${result.blockIds.length} 段脚本。`];
                 if (result.createdVariables.length) lines.push(`新建变量：${result.createdVariables.join('、')}`);
@@ -252,22 +294,41 @@ export const createTools = ({port, skills = []}) => {
             name: 'xce_read_fast_docs',
             description:
                 'Read one reference document in full, by name (get the names from xce_read_skill).\n' +
-                'Returns the whole document text. One call per document; do not fetch documents you do ' +
-                'not need, and never answer a question the documents cover without reading them first.',
+                'Each skill is a SHORT overview; when it is not enough, pass "<skill>/<doc>" to read one ' +
+                'of its detailed documents (a skill lists the detailed docs it has).\n' +
+                'One call per document; do not fetch documents you do not need, and never answer a ' +
+                'question the documents cover without reading them first.',
             readOnly: true,
             inputSchema: {
                 type: 'object',
                 properties: {
                     name: {
                         type: 'string',
-                        description: 'Document name. ' +
-                            `One of: ${skills.map(skill => skill.name).join(', ') || '(none loaded)'}`
+                        description: 'Document name: a skill ("xce_engine"), or one of its detailed ' +
+                            'docs ("xce_engine/write-scripts"). Skills available: ' +
+                            `${skills.map(skill => skill.name).join(', ') || '(none loaded)'}`
                     }
                 },
                 required: ['name']
             },
             handler: ({name}) => {
                 const wanted = String(name || '').trim();
+                const slashAt = wanted.indexOf('/');
+                if (slashAt !== -1) {
+                    // 读某篇详细文档
+                    const skillName = wanted.slice(0, slashAt);
+                    const docName = wanted.slice(slashAt + 1);
+                    const skill = skills.find(entry => entry.name === skillName);
+                    const doc = skill && (skill.docs || []).find(entry => entry.name === docName);
+                    if (!doc) {
+                        const own = skill ?
+                            `「${skillName}」的详细文档有：` +
+                            `${(skill.docs || []).map(entry => entry.name).join('、') || '（无）'}` :
+                            `没有叫「${skillName}」的资料，先调 xce_read_skill。`;
+                        return fail(`没有这篇详细文档：${wanted}。${own}`);
+                    }
+                    return ok(doc.body);
+                }
                 const skill = skills.find(entry => entry.name === wanted);
                 if (!skill) {
                     return fail(
@@ -277,7 +338,43 @@ export const createTools = ({port, skills = []}) => {
                             '当前没有可用的资料。'
                     );
                 }
-                return ok(skill.body);
+                // 简略版 + 它有哪些详细文档（详细文档必须主动来读，不喂提示词）
+                const docs = skill.docs || [];
+                const docLines = docs.map(entry => `- ${skill.name}/${entry.name}`).join('\n');
+                const docList = docs.length ?
+                    `\n\n详细文档（用 xce_read_fast_docs 读，名字形如 "${skill.name}/<文档名>"）：\n${docLines}` :
+                    '';
+                return ok(`${skill.body}${docList}`);
+            }
+        },
+
+        {
+            name: 'xce_get_time',
+            description:
+                'Get the current time. Returns UTC (ISO 8601) plus the user device\'s local timezone and ' +
+                'local time. Your internal sense of "now" drifts during a long conversation — call this ' +
+                'again whenever a fresh timestamp matters, and mind the time difference when you speak ' +
+                'about the user\'s local time.',
+            readOnly: true,
+            inputSchema: {type: 'object', properties: {}},
+            handler: () => {
+                const now = new Date();
+                let zone = '';
+                try {
+                    const offsetMin = -now.getTimezoneOffset();
+                    const sign = offsetMin >= 0 ? '+' : '-';
+                    const abs = Math.abs(offsetMin);
+                    const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+                    const mm = String(abs % 60).padStart(2, '0');
+                    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+                    zone = `${tz}（UTC${sign}${hh}:${mm}），本地时间：${now.toLocaleString('zh-CN', {hour12: false})}`;
+                } catch (e) {
+                    // 拿不到时区就只给 UTC
+                }
+                const lines = [`当前 UTC 时间：${now.toISOString()}`];
+                if (zone) lines.push(`用户设备时区：${zone}`);
+                lines.push('[提醒] 你与用户可能有时差：对用户说时间时用上面的本地时间（或先换算），别把 UTC 直接当成用户的时间。');
+                return ok(lines.join('\n'));
             }
         },
 

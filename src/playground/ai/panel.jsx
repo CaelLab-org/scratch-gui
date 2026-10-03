@@ -47,12 +47,14 @@ const DOCK_FALLBACK = {left: 0, top: 96, width: 316, height: 520};
 
 // 工具名 -> 界面上给人看的中文
 const TOOL_LABELS = {
+    xce_list_sprites: '列出角色',
     xce_read_project: '读取积木',
     xce_write_script: '写入积木',
     xce_delete_script: '删除脚本',
     xce_run_project: '运行项目',
     xce_read_state: '读取状态',
     xce_read_stage: '截取舞台',
+    xce_get_time: '获取时间',
     xce_read_skill: '查阅资料',
     xce_read_fast_docs: '读取文档',
     xce_read_online: '打开网页'
@@ -234,15 +236,13 @@ Thinking.propTypes = {
 
 const ToolCard = ({item, onUndo}) => {
     const failed = item.status === 'failed';
-    // 默认收起，免得面板被工具输出塞满。注意**不能**只用 useState 的初始值来判断：
-    // 卡片是在 tool-start 那一刻挂载的（那时还没有结果），结果回来只是原地更新同一个组件，
-    // useState 的初始值不会再算一次 —— 所以「有截图就自动摊开」必须放在 effect 里。
-    const [open, setOpen] = useState(false);
+    // 执行中摊开（让人看见在跑什么），**调用完成就自动收起**（用户定的）；
+    // 只有失败保持摊开 —— 出错需要被看见。
+    const [open, setOpen] = useState(true);
     const [showRequest, setShowRequest] = useState(false);
-    const hasImages = !!(item.images && item.images.length);
     useEffect(() => {
-        if (hasImages || failed || item.undo) setOpen(true);
-    }, [hasImages, failed, item.undo]);
+        if (item.status !== 'running' && !failed) setOpen(false);
+    }, [item.status, failed]);
     // 旧对话（改名前存的）里工具名没有 xce_ 前缀，补一次映射，别让界面露出裸英文名
     const label = TOOL_LABELS[item.name] || TOOL_LABELS[`xce_${item.name}`] || item.name;
     const running = item.status === 'running';
@@ -297,14 +297,14 @@ const ToolCard = ({item, onUndo}) => {
                     {showRequest && requestText ? (
                         <div className={styles.toolReq}>{requestText}</div>
                     ) : null}
+                    {item.undo ? (
+                        <button
+                            className={styles.undo}
+                            onClick={() => onUndo(item)}
+                            type="button"
+                        >撤销这次改动</button>
+                    ) : null}
                 </div>
-            ) : null}
-            {item.undo ? (
-                <button
-                    className={styles.undo}
-                    onClick={() => onUndo(item)}
-                    type="button"
-                >撤销这次改动</button>
             ) : null}
         </div>
     );
@@ -983,12 +983,8 @@ const AIPanel = ({vm}) => {
             maxOutputTokens: maxOutput
         };
 
-        // 环境快照：每轮现拼（角色可能刚被加/删），但不进会话历史
-        const summary = port.describeProject()
-            .map(t => `  - ${t.name}${t.isStage ? '（舞台）' : ''}：${t.scriptCount} 段脚本`)
-            .join('\n');
+        // 环境快照：不含项目内容（角色清单/代码都由 AI 用工具自己查，用户要求「不要一下子全扔进去」）
         const system = buildSystemPrompt({
-            projectSummary: summary,
             currentSprite,
             extensions: port.loadedExtensions(),
             date: new Date().toISOString()
