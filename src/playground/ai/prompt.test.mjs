@@ -19,7 +19,7 @@ const base = {
 // ---------- 1. 身份注入 ----------
 const plain = buildSystemPrompt(base);
 check('认领 XMUER Coding Engine', plain.includes('XMUER Coding Engine'));
-check('写明不是 Scratch 官方', /not affiliated with Scratch/.test(plain), plain.split('\n')[2].slice(0, 70));
+check('写明基于 Scratch（TurboWarp fork）', /based on Scratch/.test(plain) && /TurboWarp/.test(plain));
 check('环境快照在提示词里', plain.includes('<current-sprite>角色1</current-sprite>') && plain.includes('<date>2026-10-04</date>'));
 check('工具面说死（六个工具都点到）',
     ['xce_read_project', 'xce_write_script', 'xce_delete_script', 'xce_run_project', 'xce_read_state', 'xce_read_stage']

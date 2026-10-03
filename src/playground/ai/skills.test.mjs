@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {parseSkillFile} from './skills-parse.js';
+import {parseSkillFile, attachDocs} from './skills-parse.js';
 import {createTools} from './tools.js';
 import {buildSystemPrompt} from './prompt.js';
 
@@ -50,6 +50,21 @@ const files = fs.existsSync(SKILLS_DIR) ?
 check('docs/skills 下有 skill 文件', files.length > 0, `${files.length} 个`);
 
 const skills = files.map(p => parseSkillFile(fs.readFileSync(p, 'utf8'), p));
+
+// 详细文档走和加载器同一条 attachDocs 路（entries = 路径 + 原文）
+const docEntries = fs.existsSync(SKILLS_DIR) ?
+    fs.readdirSync(SKILLS_DIR)
+        .flatMap(name => {
+            const dir = path.join(SKILLS_DIR, name, 'docs');
+            return fs.existsSync(dir) ?
+                fs.readdirSync(dir).map(f => ({
+                    path: `${name}/docs/${f}`,
+                    raw: fs.readFileSync(path.join(dir, f), 'utf8')
+                })) :
+                [];
+        }) :
+    [];
+attachDocs(skills, docEntries);
 check('每一个都能解析出 name', skills.every(s => s && s.name), JSON.stringify(skills.map(s => s && s.name)));
 check('每一个都有 description', skills.every(s => s && s.description.length > 10),
     JSON.stringify(skills.map(s => s && s.description.slice(0, 20))));
@@ -100,9 +115,30 @@ check('一个文档都没有时清单也不炸', !emptyIndex.isError, String(emp
 const emptyDoc = await noSkills.find(t => t.name === 'xce_read_fast_docs').handler({name: 'x'}, {});
 check('空库时读文档不炸', emptyDoc.isError === true, String(emptyDoc.content));
 
+// 详细文档：SKILL.md 是简略版，详细文档要 "<skill>/<doc>" 主动来读（不喂提示词）
+check('加载器把详细文档挂到 skill 上',
+    skills.some(s => (s.docs || []).length > 0),
+    JSON.stringify(skills.map(s => `${s.name}:${(s.docs || []).length}`)));
+const engine = skills.find(s => s.name === 'xce_engine');
+check('xce_engine 有 write-scripts 详细文档',
+    !!engine && (engine.docs || []).some(d => d.name === 'write-scripts'),
+    JSON.stringify(engine && (engine.docs || []).map(d => d.name)));
+const brief = await readFastDocs.handler({name: 'xce_engine'}, {});
+check('读 skill 得到简略版并列出详细文档名',
+    !brief.isError && brief.content.includes('详细文档') && brief.content.includes('xce_engine/write-scripts'),
+    String(brief.content).slice(-140));
+const deep = await readFastDocs.handler({name: 'xce_engine/write-scripts'}, {});
+check('"skill/doc" 读到详细文档',
+    !deep.isError && deep.content.includes('`script` parameter') &&
+    deep.content.includes('Parameters — exactly two'),
+    String(deep.content).slice(0, 60));
+const missingDoc = await readFastDocs.handler({name: 'xce_engine/nope'}, {});
+check('详细文档不存在时报出可选项',
+    missingDoc.isError === true && missingDoc.content.includes('write-scripts'),
+    String(missingDoc.content).slice(0, 90));
+
 // ---------- 4. 提示词：清单不进提示词，工具表点名两个工具 ----------
 const prompt = buildSystemPrompt({
-    projectSummary: '',
     currentSprite: '角色1',
     extensions: [],
     date: '2026-10-04',

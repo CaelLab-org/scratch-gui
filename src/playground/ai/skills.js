@@ -9,9 +9,12 @@
  * 所以 tools.js 不直接 import 它，而是**按参数注入** skill 数组（跟 port 一个套路）。
  * 纯解析逻辑在 skills-parse.js 里，那个是能直接测的。
  */
-import {parseSkillFile} from './skills-parse.js';
+import {parseSkillFile, attachDocs} from './skills-parse.js';
 
 const context = require.context('../../../docs/skills', true, /\/SKILL\.md$/);
+// 每个一级 skill 还可以带详细文档：docs/skills/<name>/docs/<主题>.md。
+// SKILL.md 是简略版；详细文档**必须模型主动读**（xce_read_fast_docs "<skill>/<文档名>"），绝不喂进提示词。
+const docsContext = require.context('../../../docs/skills', true, /\/docs\/[^/]+\.md$/);
 
 export const SKILLS = context.keys()
     .sort()
@@ -27,5 +30,14 @@ export const SKILLS = context.keys()
         return skill;
     })
     .filter(Boolean);
+
+// 把详细文档挂到各自的 skill 上（纯文本，不需要 frontmatter）
+attachDocs(SKILLS, docsContext.keys()
+    .sort()
+    .map(key => {
+        const loaded = docsContext(key);
+        const raw = loaded && loaded.__esModule ? loaded.default : loaded;
+        return {path: key, raw};
+    }));
 
 export const skillNames = () => SKILLS.map(skill => skill.name);

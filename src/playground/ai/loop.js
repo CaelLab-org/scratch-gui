@@ -16,6 +16,17 @@ export const toolToSchema = tool => ({
     input_schema: tool.inputSchema
 });
 
+// 工具结果的硬限制（用户定的）：超过就截断，并在底部注明。
+// 支持分页的工具（paged: true，如 xce_read_project）在截断提示里教模型怎么翻页。
+export const MAX_TOOL_CHARS = 20 * 1024;
+
+const truncateContent = (content, tool) => {
+    if (typeof content !== 'string' || content.length <= MAX_TOOL_CHARS) return content;
+    const hint = tool && tool.paged ?
+        '可带 lineStart / lineEnd 参数再调一次获取指定行范围（行范围结果同样最多 20KB）。' : '';
+    return `${content.slice(0, MAX_TOOL_CHARS)}\n\n[已被截断，由于过长（超过 20KB）。${hint}]`;
+};
+
 // 执行一次工具调用。抛出的异常一律包成 isError 结果，不要让循环炸掉
 export const executeTool = async (call, tools, ctx) => {
     const tool = tools.find(t => t.name === call.name);
@@ -27,16 +38,24 @@ export const executeTool = async (call, tools, ctx) => {
         const required = (tool.inputSchema && tool.inputSchema.required) || [];
         const missing = required.filter(key => input[key] === void 0);
         if (missing.length) {
-            return {content: `错误：缺少参数 ${missing.join(', ')}`, isError: true};
+            // 把参数名单列出来 —— 模型第一次调用常见「参数名编错」（比如把 text 写成 script），
+            // 给它正确的名单就能自己纠正，不用用户插手
+            const propNames = Object.keys((tool.inputSchema && tool.inputSchema.properties) || {});
+            return {
+                content: `错误：缺少参数 ${missing.join(', ')}。` +
+                    `${tool.name} 的参数是：${propNames.join(', ')}。` +
+                    `对照上面的名单检查参数名再调一次。`,
+                isError: true
+            };
         }
         if (tool.validate) {
             const problem = tool.validate(input);
             if (problem) return {content: `错误：${problem}`, isError: true};
         }
         const result = await tool.handler(input, ctx);
-        if (typeof result === 'string') return {content: result};
+        if (typeof result === 'string') return {content: truncateContent(result, tool)};
         return {
-            content: result.content,
+            content: truncateContent(result.content, tool),
             isError: !!result.isError,
             undo: result.undo,
             images: result.images
