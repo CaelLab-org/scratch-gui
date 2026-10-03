@@ -15,11 +15,6 @@ import sharedMessages from '../lib/shared-messages';
 import downloadBlob from '../lib/download-blob';
 
 import {
-    openCostumeLibrary,
-    openBackdropLibrary
-} from '../reducers/modals';
-
-import {
     activateTab,
     SOUNDS_TAB_INDEX
 } from '../reducers/editor-tab';
@@ -27,26 +22,13 @@ import {
 import {setRestore} from '../reducers/restore-deletion';
 import {showStandardAlert, closeAlertWithId} from '../reducers/alerts';
 
-import addLibraryBackdropIcon from '../components/asset-panel/icon--add-backdrop-lib.svg';
-import addLibraryCostumeIcon from '../components/asset-panel/icon--add-costume-lib.svg';
 import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
 import paintIcon from '../components/action-menu/icon--paint.svg';
 import surpriseIcon from '../components/action-menu/icon--surprise.svg';
-import searchIcon from '../components/action-menu/icon--search.svg';
 
 import {getCostumeLibrary, getBackdropLibrary} from '../lib/libraries/tw-async-libraries';
 
 let messages = defineMessages({
-    addLibraryBackdropMsg: {
-        defaultMessage: 'Choose a Backdrop',
-        description: 'Button to add a backdrop in the editor tab',
-        id: 'gui.costumeTab.addBackdropFromLibrary'
-    },
-    addLibraryCostumeMsg: {
-        defaultMessage: 'Choose a Costume',
-        description: 'Button to add a costume in the editor tab',
-        id: 'gui.costumeTab.addCostumeFromLibrary'
-    },
     addBlankCostumeMsg: {
         defaultMessage: 'Paint',
         description: 'Button to add a blank costume in the editor tab',
@@ -249,8 +231,6 @@ class CostumeTab extends React.Component {
             dispatchUpdateRestore, // eslint-disable-line no-unused-vars
             intl,
             isRtl,
-            onNewLibraryBackdropClick,
-            onNewLibraryCostumeClick,
             vm
         } = this.props;
 
@@ -261,11 +241,8 @@ class CostumeTab extends React.Component {
         const isStage = vm.editingTarget.isStage;
         const target = vm.editingTarget.sprite;
 
-        const addLibraryMessage = isStage ? messages.addLibraryBackdropMsg : messages.addLibraryCostumeMsg;
         const addFileMessage = isStage ? messages.addFileBackdropMsg : messages.addFileCostumeMsg;
         const addSurpriseFunc = isStage ? this.handleSurpriseBackdrop : this.handleSurpriseCostume;
-        const addLibraryFunc = isStage ? onNewLibraryBackdropClick : onNewLibraryCostumeClick;
-        const addLibraryIcon = isStage ? addLibraryBackdropIcon : addLibraryCostumeIcon;
 
         const costumeData = target.costumes ? target.costumes.map(costume => ({
             name: costume.name,
@@ -276,11 +253,6 @@ class CostumeTab extends React.Component {
         return (
             <AssetPanel
                 buttons={[
-                    {
-                        title: intl.formatMessage(addLibraryMessage),
-                        img: addLibraryIcon,
-                        onClick: addLibraryFunc
-                    },
                     {
                         title: intl.formatMessage(addFileMessage),
                         img: fileUploadIcon,
@@ -299,11 +271,6 @@ class CostumeTab extends React.Component {
                         title: intl.formatMessage(messages.addBlankCostumeMsg),
                         img: paintIcon,
                         onClick: this.handleNewBlankCostume
-                    },
-                    {
-                        title: intl.formatMessage(addLibraryMessage),
-                        img: searchIcon,
-                        onClick: addLibraryFunc
                     }
                 ]}
                 dragType={DragConstants.COSTUME}
@@ -335,8 +302,6 @@ CostumeTab.propTypes = {
     isRtl: PropTypes.bool,
     onActivateSoundsTab: PropTypes.func.isRequired,
     onCloseImporting: PropTypes.func.isRequired,
-    onNewLibraryBackdropClick: PropTypes.func.isRequired,
-    onNewLibraryCostumeClick: PropTypes.func.isRequired,
     onShowImporting: PropTypes.func.isRequired,
     sprites: PropTypes.shape({
         id: PropTypes.shape({
@@ -365,14 +330,6 @@ const mapStateToProps = state => ({
 
 const mapDispatchToProps = dispatch => ({
     onActivateSoundsTab: () => dispatch(activateTab(SOUNDS_TAB_INDEX)),
-    onNewLibraryBackdropClick: e => {
-        e.preventDefault();
-        dispatch(openBackdropLibrary());
-    },
-    onNewLibraryCostumeClick: e => {
-        e.preventDefault();
-        dispatch(openCostumeLibrary());
-    },
     dispatchUpdateRestore: restoreState => {
         dispatch(setRestore(restoreState));
     },

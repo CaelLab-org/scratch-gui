@@ -12,14 +12,8 @@ import backdropIcon from '../action-menu/icon--backdrop.svg';
 import fileUploadIcon from '../action-menu/icon--file-upload.svg';
 import paintIcon from '../action-menu/icon--paint.svg';
 import surpriseIcon from '../action-menu/icon--surprise.svg';
-import searchIcon from '../action-menu/icon--search.svg';
 
 const messages = defineMessages({
-    addBackdropFromLibrary: {
-        id: 'gui.spriteSelector.addBackdropFromLibrary',
-        description: 'Button to add a stage in the target pane from library',
-        defaultMessage: 'Choose a Backdrop'
-    },
     addBackdropFromPaint: {
         id: 'gui.stageSelector.addBackdropFromPaint',
         description: 'Button to add a stage in the target pane from paint',
@@ -53,7 +47,6 @@ const StageSelector = props => {
         onClick,
         onMouseEnter,
         onMouseLeave,
-        onNewBackdropClick,
         onSurpriseBackdropClick,
         onEmptyBackdropClick,
         ...componentProps
@@ -116,15 +109,11 @@ const StageSelector = props => {
                         title: intl.formatMessage(messages.addBackdropFromPaint),
                         img: paintIcon,
                         onClick: onEmptyBackdropClick
-                    }, {
-                        title: intl.formatMessage(messages.addBackdropFromLibrary),
-                        img: searchIcon,
-                        onClick: onNewBackdropClick
                     }
                 ]}
-                title={intl.formatMessage(messages.addBackdropFromLibrary)}
+                title={intl.formatMessage(messages.addBackdropFromFile)}
                 tooltipPlace={isRtl(intl.locale) ? 'right' : 'left'}
-                onClick={onNewBackdropClick}
+                onClick={onBackdropFileUploadClick}
             />
         </Box>
     );
@@ -142,7 +131,6 @@ StageSelector.propTypes = {
     onEmptyBackdropClick: PropTypes.func,
     onMouseEnter: PropTypes.func,
     onMouseLeave: PropTypes.func,
-    onNewBackdropClick: PropTypes.func,
     onSurpriseBackdropClick: PropTypes.func,
     raised: PropTypes.bool.isRequired,
     receivedBlocks: PropTypes.bool.isRequired,

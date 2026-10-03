@@ -15,14 +15,8 @@ import fileUploadIcon from '../action-menu/icon--file-upload.svg';
 import paintIcon from '../action-menu/icon--paint.svg';
 import spriteIcon from '../action-menu/icon--sprite.svg';
 import surpriseIcon from '../action-menu/icon--surprise.svg';
-import searchIcon from '../action-menu/icon--search.svg';
 
 const messages = defineMessages({
-    addSpriteFromLibrary: {
-        id: 'gui.spriteSelector.addSpriteFromLibrary',
-        description: 'Button to add a sprite in the target pane from library',
-        defaultMessage: 'Choose a Sprite'
-    },
     addSpriteFromPaint: {
         id: 'gui.spriteSelector.addSpriteFromPaint',
         description: 'Button to add a sprite in the target pane from paint',
@@ -57,7 +51,6 @@ const SpriteSelectorComponent = function (props) {
         onDuplicateSprite,
         onExportSprite,
         onFileUploadClick,
-        onNewSpriteClick,
         onPaintSpriteClick,
         onSelectSprite,
         onSpriteUpload,
@@ -132,15 +125,11 @@ const SpriteSelectorComponent = function (props) {
                         title: intl.formatMessage(messages.addSpriteFromPaint),
                         img: paintIcon,
                         onClick: onPaintSpriteClick // TODO need real function for this
-                    }, {
-                        title: intl.formatMessage(messages.addSpriteFromLibrary),
-                        img: searchIcon,
-                        onClick: onNewSpriteClick
                     }
                 ]}
-                title={intl.formatMessage(messages.addSpriteFromLibrary)}
+                title={intl.formatMessage(messages.addSpriteFromFile)}
                 tooltipPlace={isRtl(intl.locale) ? 'right' : 'left'}
-                onClick={onNewSpriteClick}
+                onClick={onFileUploadClick}
             />
         </Box>
     );
@@ -165,7 +154,6 @@ SpriteSelectorComponent.propTypes = {
     onDuplicateSprite: PropTypes.func,
     onExportSprite: PropTypes.func,
     onFileUploadClick: PropTypes.func,
-    onNewSpriteClick: PropTypes.func,
     onPaintSpriteClick: PropTypes.func,
     onSelectSprite: PropTypes.func,
     onSpriteUpload: PropTypes.func,
