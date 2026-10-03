@@ -15,11 +15,11 @@ const check = (label, condition, detail) => {
 // ---------- 1. 线上消息构造 ----------
 const wire = toWireMessages([
     {role: 'user', content: '写一段积木'},
-    {role: 'assistant', content: '', toolCalls: [{id: 'c1', name: 'write_script', input: {sprite: '角色1', text: 'move'}}]},
-    {role: 'tool', toolCallId: 'c1', name: 'write_script', content: '已写入'}
+    {role: 'assistant', content: '', toolCalls: [{id: 'c1', name: 'xce_write_script', input: {sprite: '角色1', text: 'move'}}]},
+    {role: 'tool', toolCallId: 'c1', name: 'xce_write_script', content: '已写入'}
 ]);
 check('assistant 的工具调用序列化成 tool_calls',
-    wire[1].tool_calls && wire[1].tool_calls[0].function.name === 'write_script' &&
+    wire[1].tool_calls && wire[1].tool_calls[0].function.name === 'xce_write_script' &&
     JSON.parse(wire[1].tool_calls[0].function.arguments).sprite === '角色1',
     JSON.stringify(wire[1].tool_calls && wire[1].tool_calls[0].function.arguments));
 check('工具结果用 tool_call_id 配对',
@@ -29,10 +29,10 @@ check('assistant 空文本传 null 而不是空串', wire[1].content === null);
 const body = buildRequestBody({
     model: 'deepseek-flash',
     messages: [{role: 'user', content: 'hi'}],
-    tools: [{name: 'read_project', description: '读', input_schema: {type: 'object'}}]
+    tools: [{name: 'xce_read_project', description: '读', input_schema: {type: 'object'}}]
 });
 check('请求体带 stream 与工具声明',
-    body.stream === true && body.tools[0].type === 'function' && body.tools[0].function.name === 'read_project');
+    body.stream === true && body.tools[0].type === 'function' && body.tools[0].function.name === 'xce_read_project');
 check('请求体开了 usage 回报', body.stream_options && body.stream_options.include_usage === true);
 
 // ---------- 2. SSE 分帧：半截尾巴不能当事件 ----------
@@ -65,7 +65,7 @@ check('SSE 分帧：没有结束标记的尾巴不当事件', tailFrames.length 
 // ---------- 3. 工具参数分片累积（最容易出错的地方）----------
 const sseChunks = [
     'data: {"choices":[{"delta":{"content":"我来写"}}]}\n\n',
-    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"write_script"}}]}}]}\n\n',
+    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"xce_write_script"}}]}}]}\n\n',
     'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"sprite\\":"}}]}}]}\n\n',
     'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"角色1\\",\\"text\\":\\"move (10) steps\\"}"}}]}}]}\n\n',
     'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"total_tokens":42}}\n\n',
@@ -95,7 +95,7 @@ try {
     check('流式文本累加正确', result.text === '我来写', result.text);
     check('工具调用收尾才 parse 成对象',
         result.toolCalls.length === 1 &&
-        result.toolCalls[0].name === 'write_script' &&
+        result.toolCalls[0].name === 'xce_write_script' &&
         result.toolCalls[0].input.sprite === '角色1' &&
         result.toolCalls[0].input.text === 'move (10) steps',
         JSON.stringify(result.toolCalls));
@@ -110,7 +110,7 @@ globalThis.fetch = async () => ({
     ok: true,
     status: 200,
     body: mkBody([
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c","function":{"name":"write_script","arguments":"{oops"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c","function":{"name":"xce_write_script","arguments":"{oops"}}]}}]}\n\n',
         'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
         'data: [DONE]\n\n'
     ])
@@ -155,7 +155,7 @@ const withReasoning = toWireMessages([
         role: 'assistant',
         content: '',
         reasoning: '先读项目',
-        toolCalls: [{id: 'c1', name: 'read_project', input: {}}]
+        toolCalls: [{id: 'c1', name: 'xce_read_project', input: {}}]
     },
     {role: 'assistant', content: '读完了'}
 ]);
@@ -165,8 +165,8 @@ check('普通回复不回传思考内容（省上下文）', withReasoning[1].re
 // ---------- 7. 图片走 tool 消息的 content 数组 ----------
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const withImage = toWireMessages([
-    {role: 'tool', toolCallId: 'c1', name: 'read_stage', content: '舞台截图', images: [{url: PNG}]},
-    {role: 'tool', toolCallId: 'c2', name: 'read_state', content: 'n=5'}
+    {role: 'tool', toolCallId: 'c1', name: 'xce_read_stage', content: '舞台截图', images: [{url: PNG}]},
+    {role: 'tool', toolCallId: 'c2', name: 'xce_read_state', content: 'n=5'}
 ]);
 check('工具结果带图时 content 变成数组',
     Array.isArray(withImage[0].content) && withImage[0].content[0].type === 'text' &&

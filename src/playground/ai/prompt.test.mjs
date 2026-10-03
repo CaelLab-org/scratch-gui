@@ -22,7 +22,7 @@ check('认领 XMUER Coding Engine', plain.includes('XMUER Coding Engine'));
 check('写明不是 Scratch 官方', /not affiliated with Scratch/.test(plain), plain.split('\n')[2].slice(0, 70));
 check('环境快照在提示词里', plain.includes('<current-sprite>角色1</current-sprite>') && plain.includes('<date>2026-10-04</date>'));
 check('工具面说死（六个工具都点到）',
-    ['read_project', 'write_script', 'delete_script', 'run_project', 'read_state', 'read_stage']
+    ['xce_read_project', 'xce_write_script', 'xce_delete_script', 'xce_run_project', 'xce_read_state', 'xce_read_stage']
         .every(name => plain.includes(name)));
 
 // 没写自定义提示词就不许出现分隔标记

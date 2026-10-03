@@ -1,4 +1,4 @@
-// read_online 的无头自测：HTML 提取、head 摘要规则、抓取链路（用假 fetch）
+// xce_read_online 的无头自测：HTML 提取、head 摘要规则、抓取链路（用假 fetch）
 // 用法：node src/playground/ai/online.test.mjs
 /* eslint-disable no-console */
 import {htmlToText, extractHead, fetchOnline, HEAD_CAP, BODY_CAP} from './online.js';
@@ -124,8 +124,8 @@ try {
 
 // ---------- 8. 工具接好了 ----------
 const tools = createTools({port: {}, skills: []});
-const tool = tools.find(t => t.name === 'read_online');
-check('工具表里有 read_online', !!tool);
+const tool = tools.find(t => t.name === 'xce_read_online');
+check('工具表里有 xce_read_online', !!tool);
 check('工具 description 提到 20KB / 5 秒 / CORS（能力边界说死）',
     /20KB/.test(tool.description) && /5 second/.test(tool.description) && /CORS/.test(tool.description));
 const bad = await (async () => {
