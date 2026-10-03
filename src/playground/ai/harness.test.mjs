@@ -74,13 +74,13 @@ console.log(JSON.stringify(state, null, 1));
 check('x = 10', state.variables.x === 10, `实际 ${JSON.stringify(state.variables.x)}`);
 check('log = [10]', JSON.stringify(state.lists.log) === '[10]', `实际 ${JSON.stringify(state.lists.log)}`);
 
-// === read_stage：视觉模型给图，非视觉模型给一句能转述的话 ===
+// === xce_read_stage：视觉模型给图，非视觉模型给一句能转述的话 ===
 // 无头环境没有 renderer，用一个桩顶上（真实浏览器里走 renderer.requestSnapshot）
-const readStage = tools.find(t => t.name === 'read_stage');
+const readStage = tools.find(t => t.name === 'xce_read_stage');
 const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 const missing = await readStage.handler({}, {supportsImage: true});
-check('没有渲染器时 read_stage 明确报失败', missing.isError === true, String(missing.content).slice(0, 60));
+check('没有渲染器时 xce_read_stage 明确报失败', missing.isError === true, String(missing.content).slice(0, 60));
 
 vm.runtime.renderer = {requestSnapshot: callback => callback(PNG_1PX)};
 const withVision = await readStage.handler({}, {supportsImage: true});

@@ -1,4 +1,4 @@
-// skill 的无头自测：解析器 + docs/skills 下的真实文件 + read_skill 工具
+// skill 的无头自测：解析器 + docs/skills 下的真实文件 + xce_read_skill 工具
 // 用法：node src/playground/ai/skills.test.mjs
 /* eslint-disable no-console */
 import fs from 'node:fs';
@@ -67,37 +67,37 @@ check('caellab / engine / xcc / xf 都在',
 // 正文不带 frontmatter，也不该残留 --- 头
 check('正文里没有残留的 frontmatter', skills.every(s => !s.body.startsWith('---')));
 
-// ---------- 3. read_skill（列清单）与 read_fast_docs（读正文）----------
+// ---------- 3. xce_read_skill（列清单）与 xce_read_fast_docs（读正文）----------
 const fakePort = {};
 const tools = createTools({port: fakePort, skills});
-const readSkill = tools.find(t => t.name === 'read_skill');
-const readFastDocs = tools.find(t => t.name === 'read_fast_docs');
-check('工具表里有 read_skill 和 read_fast_docs', !!readSkill && !!readFastDocs);
+const readSkill = tools.find(t => t.name === 'xce_read_skill');
+const readFastDocs = tools.find(t => t.name === 'xce_read_fast_docs');
+check('工具表里有 xce_read_skill 和 xce_read_fast_docs', !!readSkill && !!readFastDocs);
 
 const index = await readSkill.handler({}, {});
-check('read_skill 不带参数，返回全部一级能力清单',
+check('xce_read_skill 不带参数，返回全部一级能力清单',
     !index.isError && skills.every(s => index.content.includes(s.name) && index.content.includes(s.description)),
     String(index.content).slice(0, 80));
 check('清单里不带正文（正文要按需取）',
     !skills.some(s => index.content.includes(s.body.slice(0, 40))));
-check('清单里指路 read_fast_docs', index.content.includes('read_fast_docs'));
+check('清单里指路 xce_read_fast_docs', index.content.includes('xce_read_fast_docs'));
 
 const loaded = await readFastDocs.handler({name: 'xce_engine'}, {});
-check('read_fast_docs 读得到指定文档的正文',
+check('xce_read_fast_docs 读得到指定文档的正文',
     !loaded.isError && loaded.content.includes('engine.xmuer.online'),
     String(loaded.content).slice(0, 60));
 
 const unknown = await readFastDocs.handler({name: 'nope'}, {});
-check('读不存在的文档是失败并指回 read_skill',
-    unknown.isError === true && /read_skill/.test(unknown.content), String(unknown.content).slice(0, 80));
+check('读不存在的文档是失败并指回 xce_read_skill',
+    unknown.isError === true && /xce_read_skill/.test(unknown.content), String(unknown.content).slice(0, 80));
 
-check('read_fast_docs 的参数说明里带全部文档名',
+check('xce_read_fast_docs 的参数说明里带全部文档名',
     skills.every(s => readFastDocs.inputSchema.properties.name.description.includes(s.name)));
 
 const noSkills = createTools({port: fakePort, skills: []});
-const emptyIndex = await noSkills.find(t => t.name === 'read_skill').handler({}, {});
+const emptyIndex = await noSkills.find(t => t.name === 'xce_read_skill').handler({}, {});
 check('一个文档都没有时清单也不炸', !emptyIndex.isError, String(emptyIndex.content));
-const emptyDoc = await noSkills.find(t => t.name === 'read_fast_docs').handler({name: 'x'}, {});
+const emptyDoc = await noSkills.find(t => t.name === 'xce_read_fast_docs').handler({name: 'x'}, {});
 check('空库时读文档不炸', emptyDoc.isError === true, String(emptyDoc.content));
 
 // ---------- 4. 提示词：清单不进提示词，工具表点名两个工具 ----------
@@ -112,13 +112,13 @@ const prompt = buildSystemPrompt({
 const markerIndex = prompt.indexOf('[End of system prompt]');
 check('skill 清单不进提示词（不要一下子全扔进去）',
     !prompt.includes('<available-skills>') && !skills.some(s => prompt.includes(s.body.slice(0, 40))));
-check('提示词点名 read_skill 与 read_fast_docs',
-    prompt.includes('read_skill') && prompt.includes('read_fast_docs'));
+check('提示词点名 xce_read_skill 与 xce_read_fast_docs',
+    prompt.includes('xce_read_skill') && prompt.includes('xce_read_fast_docs'));
 check('用户提示词的分隔块仍在用户段之后', markerIndex > prompt.indexOf('</environment>'));
 // 工具表是常驻文本：无论有没有 skill 都点名这两个工具，但不会出现清单内容
 check('工具表常驻点名两个工具',
-    buildSystemPrompt({date: '2026-10-04'}).includes('read_skill') &&
-    buildSystemPrompt({date: '2026-10-04'}).includes('read_fast_docs'));
+    buildSystemPrompt({date: '2026-10-04'}).includes('xce_read_skill') &&
+    buildSystemPrompt({date: '2026-10-04'}).includes('xce_read_fast_docs'));
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

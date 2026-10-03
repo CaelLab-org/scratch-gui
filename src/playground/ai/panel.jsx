@@ -47,15 +47,15 @@ const DOCK_FALLBACK = {left: 0, top: 96, width: 316, height: 520};
 
 // 工具名 -> 界面上给人看的中文
 const TOOL_LABELS = {
-    read_project: '读取积木',
-    write_script: '写入积木',
-    delete_script: '删除脚本',
-    run_project: '运行项目',
-    read_state: '读取状态',
-    read_stage: '截取舞台',
-    read_skill: '查阅资料',
-    read_fast_docs: '读取文档',
-    read_online: '打开网页'
+    xce_read_project: '读取积木',
+    xce_write_script: '写入积木',
+    xce_delete_script: '删除脚本',
+    xce_run_project: '运行项目',
+    xce_read_state: '读取状态',
+    xce_read_stage: '截取舞台',
+    xce_read_skill: '查阅资料',
+    xce_read_fast_docs: '读取文档',
+    xce_read_online: '打开网页'
 };
 
 const EMPTY_HINTS = [
@@ -243,12 +243,13 @@ const ToolCard = ({item, onUndo}) => {
     useEffect(() => {
         if (hasImages || failed || item.undo) setOpen(true);
     }, [hasImages, failed, item.undo]);
-    const label = TOOL_LABELS[item.name] || item.name;
+    // 旧对话（改名前存的）里工具名没有 xce_ 前缀，补一次映射，别让界面露出裸英文名
+    const label = TOOL_LABELS[item.name] || TOOL_LABELS[`xce_${item.name}`] || item.name;
     const running = item.status === 'running';
     const kindClass = item.status === 'done' ? styles.toolOk :
         failed ? styles.toolBad : styles.toolRunning;
     // 「查看 Agent 的请求」：用户展开卡片后可以点开看这次调用真正发出去的参数。
-    // 截断到 2KB —— write_script 的 text 参数可能很长，全量展开会把面板撑爆。
+    // 截断到 2KB —— xce_write_script 的 text 参数可能很长，全量展开会把面板撑爆。
     const requestText = item.input ?
         (() => {
             const json = JSON.stringify(item.input, null, 2);

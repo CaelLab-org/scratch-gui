@@ -43,7 +43,7 @@ export const demoSteps = sprite => [
     {
         text: `我先在「${sprite}」里写一段：绿旗按下后把 x 从 0 数到 10，念出来，再记进列表。`,
         toolCalls: [{
-            name: 'write_script',
+            name: 'xce_write_script',
             input: {
                 sprite,
                 text: `when green flag clicked
@@ -58,11 +58,11 @@ add (x) to [log v]`
     },
     {
         text: '写好了，跑一下看看结果对不对。',
-        toolCalls: [{name: 'run_project', input: {seconds: 2}}]
+        toolCalls: [{name: 'xce_run_project', input: {seconds: 2}}]
     },
     {
         text: '再读一下状态确认。',
-        toolCalls: [{name: 'read_state', input: {}}]
+        toolCalls: [{name: 'xce_read_state', input: {}}]
     },
     {
         text: '完成：x 跑到了 10，log 里也记下来了。积木已经落在编辑器里，可以直接拖动或修改。'

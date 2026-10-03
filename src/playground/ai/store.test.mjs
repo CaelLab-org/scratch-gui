@@ -68,7 +68,7 @@ check('空会话没进列表', loadConversationIndex().conversations.length === 
 const idB = newConversationId();
 const itemsWithImage = [
     {kind: 'user', text: '截图看看'},
-    {kind: 'tool', id: 't1', name: 'read_stage', status: 'done', content: 'ok', images: ['data:image/png;base64,AAAA']}
+    {kind: 'tool', id: 't1', name: 'xce_read_stage', status: 'done', content: 'ok', images: ['data:image/png;base64,AAAA']}
 ];
 saveConversation(idB, {messages: [{role: 'user', content: '截图看看'}], toolCalls: []}, itemsWithImage);
 const loadedB = loadConversation(idB);

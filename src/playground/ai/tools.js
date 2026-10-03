@@ -8,7 +8,7 @@
  *      但返回给模型看的 content 用中文 —— 那些字还要原样显示在界面的工具卡上给用户看。
  *
  * 结果形状：{content, isError?, undo?, images?}。images 是 [{url, mimeType}]，
- * 只有当前模型收图片时才会被填上（见 read_stage）。
+ * 只有当前模型收图片时才会被填上（见 xce_read_stage）。
  */
 
 import {fetchOnline} from './online.js';
@@ -53,7 +53,7 @@ const shrinkImage = dataUrl => new Promise(resolve => {
 export const createTools = ({port, skills = []}) => {
     const tools = [
         {
-            name: 'read_project',
+            name: 'xce_read_project',
             description:
                 'Read the blocks of the open Scratch project as block text (scratchblocks notation).\n' +
                 'Returns one section per sprite, each headed by the sprite name and its variables/lists.\n' +
@@ -87,7 +87,7 @@ export const createTools = ({port, skills = []}) => {
         },
 
         {
-            name: 'write_script',
+            name: 'xce_write_script',
             description:
                 'Turn block text into real blocks and append them to a sprite. The blocks land in the ' +
                 'workspace as ordinary blocks the user can drag, and the layout is tidied afterwards.\n' +
@@ -129,11 +129,12 @@ export const createTools = ({port, skills = []}) => {
         },
 
         {
-            name: 'delete_script',
+            name: 'xce_delete_script',
             description:
                 'Delete one whole script (its top block and everything stacked or nested under it) from a sprite.\n' +
-                'Get the top block id from a previous read_project or write_script result; read_project never ' +
-                'prints ids, so ask for the script text first and identify it from the user\'s description.',
+                'Get the top block id from a previous xce_read_project or xce_write_script result; ' +
+                'xce_read_project never prints ids, so ask for the script text first and identify it ' +
+                'from the user\'s description.',
             destructive: true,
             inputSchema: {
                 type: 'object',
@@ -150,11 +151,11 @@ export const createTools = ({port, skills = []}) => {
         },
 
         {
-            name: 'run_project',
+            name: 'xce_run_project',
             description:
                 'Click the green flag and wait. Use it to check that blocks you just wrote actually do what you ' +
-                'intended. It does not return results by itself — follow it with read_state (and read_stage if ' +
-                'the output is visual).',
+                'intended. It does not return results by itself — follow it with xce_read_state ' +
+                '(and xce_read_stage if the output is visual).',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -170,10 +171,10 @@ export const createTools = ({port, skills = []}) => {
         },
 
         {
-            name: 'read_state',
+            name: 'xce_read_state',
             description:
                 'Read numbers only: each sprite\'s x/y/direction/size/visibility/costume, plus the current value ' +
-                'of every variable and list. This is text, not a picture — use read_stage when you need to see ' +
+                'of every variable and list. This is text, not a picture — use xce_read_stage when you need to see ' +
                 'the actual stage.',
             readOnly: true,
             inputSchema: {type: 'object', properties: {}},
@@ -195,10 +196,10 @@ export const createTools = ({port, skills = []}) => {
         },
 
         {
-            name: 'read_stage',
+            name: 'xce_read_stage',
             description:
                 'Take a screenshot of the stage right now and return it as an image you can look at.\n' +
-                'Use it after run_project when the result is something the user can see (drawing, movement, ' +
+                'Use it after xce_run_project when the result is something the user can see (drawing, movement, ' +
                 'a game over screen) rather than a number.\n' +
                 'Whether you actually receive the picture depends on the model: text-only models get a note ' +
                 'instead, in which case tell the user to switch to a vision model rather than guessing.',
@@ -207,7 +208,7 @@ export const createTools = ({port, skills = []}) => {
             handler: async (input, ctx = {}) => {
                 const dataUrl = await port.snapshotStage();
                 if (!dataUrl) {
-                    return fail('截屏失败：渲染器没有在超时前给出画面。项目可能还没渲染过哪怕一帧，先 run_project 再试。');
+                    return fail('截屏失败：渲染器没有在超时前给出画面。项目可能还没渲染过哪怕一帧，先 xce_run_project 再试。');
                 }
                 const size = port.stageSize();
                 const caption = `舞台截图（${size.width}x${size.height}，当前画面）。`;
@@ -216,7 +217,7 @@ export const createTools = ({port, skills = []}) => {
                     return ok(
                         `${caption}但当前模型不支持图片输入，这张图没法给你看。\n` +
                         `请转告用户：要让 AI 看舞台画面，得在面板的「设置 → 模型」里换一个支持看图的模型` +
-                        `（列表里标了「看图」的那些）。在那之前，你只能靠 read_state 的数字判断。`
+                        `（列表里标了「看图」的那些）。在那之前，你只能靠 xce_read_state 的数字判断。`
                     );
                 }
                 return {
@@ -230,27 +231,27 @@ export const createTools = ({port, skills = []}) => {
         },
 
         {
-            name: 'read_skill',
+            name: 'xce_read_skill',
             description:
                 'List the reference documents ("skills") that exist for this editor and the team and sites ' +
                 'around it — one line each. Takes no arguments.\n' +
                 'Call this FIRST, before answering anything about the editor itself, CaelLab, or those ' +
                 'sites: the documents are deliberately kept out of the prompt, so this is the only way to ' +
                 'know what is available. Do not answer such questions from memory. To actually read one, ' +
-                'pass its name to read_fast_docs.',
+                'pass its name to xce_read_fast_docs.',
             readOnly: true,
             inputSchema: {type: 'object', properties: {}},
             handler: () => {
                 if (!skills.length) return ok('当前没有可用的资料。');
                 const lines = skills.map(skill => `- \`${skill.name}\` — ${skill.description}`);
-                return ok(`可用的一级能力（用 read_fast_docs 加名字读全文）：\n${lines.join('\n')}`);
+                return ok(`可用的一级能力（用 xce_read_fast_docs 加名字读全文）：\n${lines.join('\n')}`);
             }
         },
 
         {
-            name: 'read_fast_docs',
+            name: 'xce_read_fast_docs',
             description:
-                'Read one reference document in full, by name (get the names from read_skill).\n' +
+                'Read one reference document in full, by name (get the names from xce_read_skill).\n' +
                 'Returns the whole document text. One call per document; do not fetch documents you do ' +
                 'not need, and never answer a question the documents cover without reading them first.',
             readOnly: true,
@@ -271,7 +272,8 @@ export const createTools = ({port, skills = []}) => {
                 if (!skill) {
                     return fail(
                         skills.length ?
-                            `没有叫「${wanted}」的资料。先调 read_skill 看有什么；可用的有：${skills.map(entry => entry.name).join('、')}` :
+                            `没有叫「${wanted}」的资料。先调 xce_read_skill 看有什么；` +
+                            `可用的有：${skills.map(entry => entry.name).join('、')}` :
                             '当前没有可用的资料。'
                     );
                 }
@@ -280,7 +282,7 @@ export const createTools = ({port, skills = []}) => {
         },
 
         {
-            name: 'read_online',
+            name: 'xce_read_online',
             description:
                 'Fetch one public web page by URL and return it as readable text (not HTML): page title ' +
                 'first, then the body text, hidden content stripped.\n' +
