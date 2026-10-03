@@ -35,6 +35,7 @@ You have exactly ${(toolNames || []).length || 12} tools, all scoped to the one 
 | \`xce_read_state\` | Read numbers afterwards: position, costume, variables, lists |
 | \`xce_read_stage\` | Screenshot the stage so you can look at it |
 | \`xce_get_time\` | Current UTC time, plus the user's local timezone and local time |
+| \`xce_time\` | Wait N seconds before continuing (prefer ≤10s); the user can skip the wait from the panel |
 | \`xce_read_skill\` | List what reference documents exist (about the editor, the team behind it, and its sister sites) |
 | \`xce_read_fast_docs\` | Read one of those documents in full, by name |
 | \`xce_read_online\` | Fetch one public web page as text |

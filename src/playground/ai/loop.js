@@ -27,6 +27,32 @@ const truncateContent = (content, tool) => {
     return `${content.slice(0, MAX_TOOL_CHARS)}\n\n[已被截断，由于过长（超过 20KB）。${hint}]`;
 };
 
+/**
+ * 「跳过」令牌：给等待类工具（tool.skippable，如 xce_time）用。
+ * 同一份令牌发给两边 —— 工具拿着它 race（见 tools.js 的 waitSeconds），界面上点「跳过」调 skip()。
+ * 于是用户不必等自然到点：工具立刻拿到结果继续，模型也从结果里看出这段等待被砍短了。
+ * @returns {object} 令牌：promise（工具 race 的对象）、skipped、skip()
+ */
+export const createSkipToken = () => {
+    let skipped = false;
+    let fire = null;
+    const promise = new Promise(resolve => {
+        fire = resolve;
+    });
+    return {
+        promise,
+        get skipped () {
+            return skipped;
+        },
+        skip () {
+            if (skipped) return false;
+            skipped = true;
+            fire();
+            return true;
+        }
+    };
+};
+
 // 执行一次工具调用。抛出的异常一律包成 isError 结果，不要让循环炸掉
 export const executeTool = async (call, tools, ctx) => {
     const tool = tools.find(t => t.name === call.name);
@@ -129,8 +155,13 @@ export const runTurn = async ({session, model, tools, signal, onEvent = () => {}
         for (const call of calls) {
             if (signal && signal.aborted) break;
             const startedAt = Date.now();
-            onEvent({type: 'tool-start', call});
-            const result = await executeTool(call, tools, {signal, session, supportsImage: !!model.supportsImage});
+            // 只有声明了 skippable 的工具（等待类）才发令牌：界面据此决定要不要画「跳过」
+            const tool = tools.find(t => t.name === call.name);
+            const skip = tool && tool.skippable ? createSkipToken() : null;
+            onEvent({type: 'tool-start', call, skip});
+            const result = await executeTool(call, tools, {
+                signal, session, supportsImage: !!model.supportsImage, skip
+            });
             const record = {call, result, duration: Date.now() - startedAt};
             session.toolCalls.push(record);
             onEvent({type: 'tool-end', ...record});

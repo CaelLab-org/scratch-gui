@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import {createScratchPort} from './port.js';
 import {createTools} from './tools.js';
 import {createSession, toModelMessages} from './session.js';
-import {runTurn, executeTool} from './loop.js';
+import {runTurn, executeTool, createSkipToken} from './loop.js';
 import {createScriptedModel, demoSteps} from './model.js';
 import {emptyProject} from './test-project.mjs';
 
@@ -54,6 +54,38 @@ const time = await getTimeTool.handler({}, {});
 check('时间工具给 UTC + 时区 + 时差提醒',
     /UTC 时间：\d{4}-/.test(time.content) && /时区/.test(time.content) && /时差/.test(time.content),
     String(time.content).split('\n')[0]);
+
+// === xce_time：按需等待，用户可以在界面上跳过 ===
+const waitTool = tools.find(t => t.name === 'xce_time');
+check('工具表里有等待工具，且标了可跳过', !!waitTool && waitTool.skippable === true);
+
+const waited = await waitTool.handler({seconds: 0.2}, {});
+check('正常等待报出等了多久', /已等待/.test(waited.content) && !waited.isError, String(waited.content));
+
+const skipToken = createSkipToken();
+const pendingWait = waitTool.handler({seconds: 30}, {skip: skipToken});
+skipToken.skip();
+const skippedWait = await pendingWait;
+check('点跳过立刻返回，并说清只等了多久（不等满 30 秒）',
+    /用户跳过了这次等待/.test(skippedWait.content) && /实际只等了/.test(skippedWait.content),
+    String(skippedWait.content).slice(0, 70));
+
+// 上限：请求 9999 秒会被夹到 60；靠跳过立刻收工，测试不会真等一分钟
+const clampToken = createSkipToken();
+const pendingClamp = waitTool.handler({seconds: 9999}, {skip: clampToken});
+clampToken.skip();
+const clampedWait = await pendingClamp;
+check('超过上限被夹到 60 秒（并在结果里说明）', clampedWait.content.includes('60'), String(clampedWait.content).slice(0, 90));
+
+const badWait = await waitTool.handler({seconds: 0}, {});
+check('seconds 不是正数就报错', badWait.isError === true, String(badWait.content).slice(0, 60));
+
+// 中断（用户按停止）也要立刻收工，不能挂在那儿等满
+const abortController = new AbortController();
+const pendingAbort = waitTool.handler({seconds: 30}, {signal: abortController.signal});
+abortController.abort();
+const abortedWait = await pendingAbort;
+check('用户按停止时等待立刻结束', /打断/.test(abortedWait.content), String(abortedWait.content).slice(0, 60));
 
 const session = createSession();
 session.messages.push({role: 'user', content: '帮我写一段数到 10 的脚本'});
@@ -265,6 +297,48 @@ check('缺参数时报出正确的参数名单',
   badParams.isError === true && badParams.content.includes('sprite, text') &&
   badParams.content.includes('参数是：sprite, text'),
   String(badParams.content).slice(0, 120));
+
+// === 「跳过等待」的整条链路：loop 在 tool-start 上发令牌 → 界面调用它 → 工具立刻返回 ===
+const waitSession = createSession();
+let sawSkip = null;
+await runTurn({
+  session: waitSession,
+  model: {
+    complete: async () => ({
+      text: '', finishReason: 'tool_calls',
+      toolCalls: [{id: 'wait1', name: 'xce_time', input: {seconds: 5}}]
+    })
+  },
+  tools,
+  maxSteps: 1,
+  onEvent: e => {
+    if (e.type === 'tool-start' && e.skip) {
+      sawSkip = e.skip;
+      e.skip.skip();
+    }
+  }
+});
+check('等待工具在 tool-start 上带出跳过令牌（界面据此画按钮）', !!sawSkip);
+check('循环里跳过立刻收工，结果如实说被跳过',
+  waitSession.toolCalls.length === 1 && /用户跳过了这次等待/.test(waitSession.toolCalls[0].result.content),
+  String((waitSession.toolCalls[0] || {}).result && waitSession.toolCalls[0].result.content).slice(0, 60));
+
+let plainSkip = 'unset';
+await runTurn({
+  session: createSession(),
+  model: {
+    complete: async () => ({
+      text: '', finishReason: 'tool_calls',
+      toolCalls: [{id: 'ls1', name: 'xce_list_sprites', input: {}}]
+    })
+  },
+  tools,
+  maxSteps: 1,
+  onEvent: e => {
+    if (e.type === 'tool-start') plainSkip = e.skip;
+  }
+});
+check('普通工具不带跳过令牌（没有东西可跳过）', plainSkip === null, String(plainSkip));
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

@@ -38,6 +38,35 @@ const listSpritesDetailed = port => port.listSpritesDetailed()
 const MAX_IMAGE_CHARS = 300 * 1024;
 const MAX_EDGE = 720;
 
+// xce_time 的等待上限：等待烧的是用户真实的墙钟时间，不许模型拿它当「等一等就好了」的挡箭牌
+const MAX_WAIT_SECONDS = 60;
+
+/**
+ * 等到点 / 用户点了「跳过」/ 用户按了停止 —— 三个来源谁先来听谁的。
+ * skip 令牌与 signal 都由 loop 注入（见 loop.js 的 createSkipToken）。
+ * @param {number} seconds 要等的秒数（≤0 直接返回）
+ * @param {object} ctx 工具上下文，用到 ctx.skip（跳过令牌）与 ctx.signal（停止信号）
+ * @returns {Promise<number>} 实际等了多久（秒）
+ */
+const waitSeconds = (seconds, ctx = {}) => new Promise(resolve => {
+    const startedAt = Date.now();
+    const finish = () => resolve((Date.now() - startedAt) / 1000);
+    if (!(seconds > 0)) {
+        resolve(0);
+        return;
+    }
+    const timer = setTimeout(finish, seconds * 1000);
+    const cancel = () => {
+        clearTimeout(timer);
+        finish();
+    };
+    if (ctx.skip && ctx.skip.promise) ctx.skip.promise.then(cancel);
+    if (ctx.signal) {
+        if (ctx.signal.aborted) cancel();
+        else ctx.signal.addEventListener('abort', cancel, {once: true});
+    }
+});
+
 const shrinkImage = dataUrl => new Promise(resolve => {
     if (dataUrl.length <= MAX_IMAGE_CHARS) {
         resolve(dataUrl);
@@ -387,6 +416,53 @@ export const createTools = ({port, skills = []}) => {
                 if (zone) lines.push(`用户设备时区：${zone}`);
                 lines.push('[提醒] 你与用户可能有时差：对用户说时间时用上面的本地时间（或先换算），别把 UTC 直接当成用户的时间。');
                 return ok(lines.join('\n'));
+            }
+        },
+
+        {
+            name: 'xce_time',
+            description:
+                'Wait a number of seconds, then continue — for the cases where something really does need ' +
+                'wall-clock time to pass (a project still running, an animation that has to finish) instead ' +
+                'of hammering xce_read_state in a tight loop.\n' +
+                'Keep it short: this spends the user\'s real time. Prefer 10 seconds or less, and never ' +
+                `exceed ${MAX_WAIT_SECONDS} seconds — the wait is clamped to that ceiling. Do not chain long ` +
+                'waits to "wait out" a problem; if 10 seconds would not settle it, the approach is wrong.\n' +
+                'While you wait, the user sees a 跳过 (skip) button and may end the wait at any moment. The ' +
+                'result states how long actually elapsed and whether it was cut short — read it before ' +
+                'acting as if the whole wait happened.',
+            skippable: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    seconds: {
+                        type: 'number',
+                        description: `Seconds to wait (must be > 0; capped at ${MAX_WAIT_SECONDS}). ` +
+                            'Keep it at 10 or below unless the task truly needs more.'
+                    }
+                },
+                required: ['seconds']
+            },
+            handler: async ({seconds}, ctx = {}) => {
+                const wanted = Number(seconds);
+                if (!Number.isFinite(wanted) || wanted <= 0) {
+                    return fail('seconds 必须是大于 0 的数字（单位：秒）。想接着往下做就别调这个工具。');
+                }
+                const total = Math.min(wanted, MAX_WAIT_SECONDS);
+                const elapsed = (await waitSeconds(total, ctx)).toFixed(1);
+                const clamped = wanted > MAX_WAIT_SECONDS ?
+                    `（你要求等 ${wanted} 秒，超过 ${MAX_WAIT_SECONDS} 秒上限，按上限等。）` : '';
+                if (ctx.signal && ctx.signal.aborted) {
+                    return ok(`等待被打断了（用户按了停止）：实际等了 ${elapsed} 秒。${clamped}`);
+                }
+                if (ctx.skip && ctx.skip.skipped) {
+                    return ok(
+                        `用户跳过了这次等待：实际只等了 ${elapsed} 秒（原本要等 ${total} 秒）。` +
+                        `别把那段时间当成已经过去。确实还需要时间的话，说清为什么，再等一次短的；` +
+                        `能边跑边等的（比如 xce_run_project）就别干等。${clamped}`
+                    );
+                }
+                return ok(`已等待约 ${total} 秒。${clamped}`);
             }
         },
 

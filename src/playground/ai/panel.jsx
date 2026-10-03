@@ -55,6 +55,7 @@ const TOOL_LABELS = {
     xce_read_state: '读取状态',
     xce_read_stage: '截取舞台',
     xce_get_time: '获取时间',
+    xce_time: '等待',
     xce_read_skill: '查阅资料',
     xce_read_fast_docs: '读取文档',
     xce_read_online: '打开网页',
@@ -72,6 +73,8 @@ const EMPTY_HINTS = [
 const ARG_KEYS = ['sprite', 'query', 'name', 'url'];
 const argOf = input => {
     if (!input) return null;
+    // 等待类工具的那个「参数」就是秒数：行上直接写「等待 5 秒」
+    if (typeof input.seconds === 'number') return `${input.seconds} 秒`;
     for (const key of ARG_KEYS) {
         if (input[key]) {
             const value = String(input[key]);
@@ -259,7 +262,7 @@ Thinking.propTypes = {
 //   - 成功不画对勾、不写「完成」，行本身安静下来就是成功（只有失败要留颜色）；
 //   - 默认收起，**失败自动摊开**（错误必须被看见）；跑的时候行首转一个小圈 + 「执行中」。
 // 撤消按钮**放在行上**而不是藏在展开区里 —— 藏起来等于没有。
-const ToolCard = ({item, onUndo}) => {
+const ToolCard = ({item, onUndo, onSkip}) => {
     const failed = item.status === 'failed';
     const running = item.status === 'running';
     const [open, setOpen] = useState(false);
@@ -302,6 +305,14 @@ const ToolCard = ({item, onUndo}) => {
                     ) : null}
                     {failed ? <span className={`${styles.toolStatus} ${styles.bad}`}>失败</span> : null}
                 </button>
+                {running && item.skippable ? (
+                    <button
+                        className={styles.toolSkip}
+                        onClick={() => onSkip(item)}
+                        title="不等了，让 AI 现在就往下走"
+                        type="button"
+                    >跳过</button>
+                ) : null}
                 {item.undo ? (
                     <button
                         className={styles.toolUndo}
@@ -338,7 +349,8 @@ const ToolCard = ({item, onUndo}) => {
 
 ToolCard.propTypes = {
     item: PropTypes.object,
-    onUndo: PropTypes.func
+    onUndo: PropTypes.func,
+    onSkip: PropTypes.func
 };
 
 // ---------------------------------------------------------------------------
@@ -802,6 +814,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     const [context, setContext] = useState(null);
     const [showJump, setShowJump] = useState(false);
     const abortRef = useRef(null);
+    // 正在执行的等待类工具 -> 它的「跳过」令牌（函数不能进 items：那些条目要序列化进 localStorage）
+    const skipRef = useRef({});
     const transcriptRef = useRef(null);
     const reasoningStartedAt = useRef(0);
     // 转录区是否「黏」在底部。往上翻过就置 false，用户自己发消息或点回底部时置回 true。
@@ -937,6 +951,7 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
             });
             break;
         case 'tool-start':
+            if (event.skip) skipRef.current[event.call.id] = event.skip;
             setItemsState(prev => prev.concat([{
                 kind: 'tool',
                 id: event.call.id,
@@ -944,11 +959,13 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                 input: event.call.input,
                 sprite: (event.call.input && event.call.input.sprite) || null,
                 arg: argOf(event.call.input),
+                skippable: !!event.skip,
                 status: 'running',
                 content: ''
             }]));
             break;
         case 'tool-end':
+            delete skipRef.current[event.call.id];
             setItemsState(prev => prev.map(item => (
                 item.kind === 'tool' && item.id === event.call.id ?
                     {
@@ -1116,6 +1133,12 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
             handleSend();
         }
     }, [mode, busy, handleSend, handleStop]);
+
+    // 等待类工具行上的「跳过」：令牌一响，等在那儿的工具立刻返回，模型拿到「被跳过」的结果继续
+    const handleSkip = useCallback(item => {
+        const token = skipRef.current[item.id];
+        if (token) token.skip();
+    }, []);
 
     const handleUndo = useCallback(async item => {
         if (!item.undo || !item.sprite || !portRef.current) return;
@@ -1383,6 +1406,7 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                                         <ToolCard
                                             item={item}
                                             key={index}
+                                            onSkip={handleSkip}
                                             onUndo={handleUndo}
                                         />
                                     );
