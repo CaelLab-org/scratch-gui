@@ -1,5 +1,5 @@
 ---
-name: xce
+name: xce_engine
 description: XMUER Coding Engine itself — what it is, where it lives, and how it is built and deployed. Load this when the user asks about the editor's own features, its relationship to Scratch or TurboWarp, or how a change gets published.
 ---
 

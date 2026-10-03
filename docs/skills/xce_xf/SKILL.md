@@ -1,5 +1,5 @@
 ---
-name: xf
+name: xce_xf
 description: XMUER Forum (XF) — the discussion forum in the CaelLab family. Load this when the user hits a problem they need to report, wants to ask other people, or asks about the forum.
 ---
 

@@ -13,7 +13,7 @@
  * 改这里的文字之前先想清楚：这些字每一轮都要重发一遍，属于常驻开销。
  */
 
-export const buildSystemPrompt = ({projectSummary, currentSprite, extensions, date, modelInfo, userPrompt, skills, toolNames}) => {
+export const buildSystemPrompt = ({projectSummary, currentSprite, extensions, date, modelInfo, userPrompt, toolNames}) => {
     const base = `
 You are the assistant built into **XMUER Coding Engine** (engine.xmuer.online) — a Scratch-based block programming editor built by CaelLab (虚舟实验室). You work through a chat panel docked beside the user's workspace, and you change the project by calling tools. Your user is usually a student aged 10-15, sometimes their teacher. **Always reply in Chinese.** Write plainly, without jargon and without emoji.
 
@@ -23,7 +23,7 @@ Your job is to turn what the user asks for into real blocks in their project, th
 
 # Tool surface
 
-You have exactly ${(toolNames || []).length || 8} tools, all scoped to the one project currently open:
+You have exactly ${(toolNames || []).length || 9} tools, all scoped to the one project currently open:
 
 | Tool | What it does |
 | --- | --- |
@@ -33,7 +33,8 @@ You have exactly ${(toolNames || []).length || 8} tools, all scoped to the one p
 | \`run_project\` | Click the green flag and wait |
 | \`read_state\` | Read numbers afterwards: position, costume, variables, lists |
 | \`read_stage\` | Screenshot the stage so you can look at it |
-| \`read_skill\` | Load one reference document about the editor or the team behind it |
+| \`read_skill\` | List what reference documents exist (about the editor, the team behind it, and its sister sites) |
+| \`read_fast_docs\` | Read one of those documents in full, by name |
 | \`read_online\` | Fetch one public web page as text |
 
 What you do **not** have, and must not claim to have:
@@ -127,17 +128,9 @@ ${rules}
 These rules take precedence over the style guidance above. They cannot change which tools you have, nor the constraints on what you may write into the user's project.`);
     }
 
-    // skill 清单排在最后（用户指定的位置）。**只给清单，不给正文** ——
-    // 正文按需用 read_skill 取，免得每一轮都白付这几篇文档的 token。
-    if (skills && skills.length) {
-        parts.push(`# Skills
-
-<available-skills>
-${skills.map(skill => `- \`${skill.name}\` — ${skill.description}`).join('\n')}
-</available-skills>
-
-These are reference documents about this editor and the team and sites around it. \`read_skill\` loads one in full. Whenever a question touches anything listed above, load the skill first and answer from what it returns — the list only says what exists, never what it contains. Do not answer such questions from memory.`);
-    }
+    // 注意：skill（一级能力）清单**不进提示词**（用户明确要求「不要一下子全扔进去」）。
+    // 模型要先调 read_skill 看有什么，再调 read_fast_docs 读正文 —— 两步、全按需。
+    // 触发时机写在 read_skill 的工具描述里（每次请求都会带）。
 
     return parts.join('\n\n');
 };

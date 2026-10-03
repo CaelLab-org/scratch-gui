@@ -1,5 +1,5 @@
 ---
-name: caellab
+name: xce_caellab
 description: What CaelLab (虚舟实验室) is — who runs it, what projects it ships, and how to reach it. Load this when the user asks who made this editor, who is behind XMUER, or how to contact the team.
 ---
 
