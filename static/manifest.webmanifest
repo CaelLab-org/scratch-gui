@@ -1,7 +1,7 @@
 {
   "short_name": "XMUER",
   "name": "XMUER Coding Engine",
-  "description": "A Scratch mod with a compiler, dark mode, and more features.",
+  "description": "虚舟实验室旗下的在线积木编程编辑器，基于 Scratch 构建，编译器让作品运行更快。",
   "icons": [
     {
       "src": "images/192.png",

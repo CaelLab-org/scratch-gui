@@ -388,6 +388,62 @@ a {
     background-color: #ff525240;
 }
 
+/* ===== 项目自动恢复提示条（project-persistence.jsx） ===== */
+.restoreBar {
+    position: fixed;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 950;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100vw - 32px);
+    padding: 7px 8px 7px 16px;
+    background: var(--xce-surface);
+    border: 1px solid var(--xce-border);
+    border-radius: var(--xce-radius-lg);
+    box-shadow: var(--xce-shadow-lg);
+    color: var(--xce-text-secondary);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+.restoreBarText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.restoreBarBtn {
+    flex-shrink: 0;
+    padding: 4px 12px;
+    border: 0;
+    border-radius: var(--xce-radius);
+    background: var(--xce-primary);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+.restoreBarBtn:hover {
+    background: var(--xce-primary-hover);
+}
+.restoreBarClose {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--xce-radius);
+    background: transparent;
+    color: var(--xce-text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.restoreBarClose:hover {
+    background: var(--xce-bg);
+    color: var(--xce-text);
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 640px) {
     .heroSection {
