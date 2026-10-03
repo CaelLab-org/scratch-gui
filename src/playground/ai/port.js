@@ -159,6 +159,18 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         listSprites: () =>
             runtime().targets.map(t => ({name: t.getName(), isStage: t.isStage, id: t.id})),
 
+        // ls 用的轻量清单：名字/脚本数/变量名/列表名，绝不渲染积木文本
+        listSpritesDetailed: () => runtime().targets.map(t => {
+            const {variables, lists} = splitVars(t);
+            return {
+                name: t.getName(),
+                isStage: !!t.isStage,
+                scriptCount: t.blocks && t.blocks.getScripts ? t.blocks.getScripts().length : 0,
+                variables: Object.keys(variables),
+                lists: Object.keys(lists)
+            };
+        }),
+
         describeProject,
 
         loadedExtensions: loadedExtensionIds,
@@ -178,7 +190,7 @@ export const createScratchPort = ({vm, getWorkspace}) => {
 
         writeScript: async (spriteName, text) => {
             const target = findTarget(spriteName);
-            if (!target) throw new Error(`找不到精灵「${spriteName}」`);
+            if (!target) throw new Error(`找不到角色「${spriteName}」`);
             const {variables, lists} = splitVars(target);
             const stageIds = allVariableIds();
 
@@ -187,7 +199,7 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 lists: {...stageIds.lists, ...lists}
             });
 
-            // 项目里还没有的变量/列表：建到舞台上（= 对所有精灵可见），跟编辑器默认行为一致
+            // 项目里还没有的变量/列表：建到舞台上（= 对所有角色可见），跟编辑器默认行为一致
             const createdVariables = [];
             const createdLists = [];
             for (const [name, id] of Object.entries(converted.variables)) {
@@ -299,7 +311,7 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                     visible: target.visible,
                     costume: costume.name || ''
                 });
-                // 精灵私有变量也带上，用「精灵.变量」区分
+                // 角色私有变量也带上，用「角色.变量」区分
                 for (const variable of Object.values(target.variables)) {
                     if (!variable) continue;
                     const key = `${target.getName()}.${variable.name}`;
@@ -338,7 +350,7 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             return {width: rt.stageWidth || 480, height: rt.stageHeight || 360};
         },
 
-        // 当前编辑的精灵名（UI 用它做默认值）
+        // 当前编辑的角色名（UI 用它做默认值）
         currentSpriteName: () => {
             const target = vm.editingTarget;
             return target ? target.getName() : null;
