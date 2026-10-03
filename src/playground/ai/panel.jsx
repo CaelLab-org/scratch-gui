@@ -67,6 +67,20 @@ const EMPTY_HINTS = [
     '被点击后画一个正方形，用画笔'
 ];
 
+// 工具行标题里带的那一个「最有用的参数」（学 ZCode：把关键信息从详情提到标题上）。
+// 角色名排第一；url 去掉协议头，312px 一行才放得下。
+const ARG_KEYS = ['sprite', 'query', 'name', 'url'];
+const argOf = input => {
+    if (!input) return null;
+    for (const key of ARG_KEYS) {
+        if (input[key]) {
+            const value = String(input[key]);
+            return key === 'url' ? value.replace(/^https?:\/\//, '') : value;
+        }
+    }
+    return null;
+};
+
 // ---------------------------------------------------------------------------
 // 图标
 //
@@ -208,17 +222,19 @@ const Thinking = ({text, streaming, ms}) => {
     // 一步只想了两个字的那种就别占地方了（多步往返时会冒出好几条「思考过程 · 0.1s」，很吵）
     if (!streaming && String(text).trim().length < 12) return null;
     return (
-        <div className={`${styles.think} ${open ? styles.thinkOpen : ''}`}>
+        <div className={styles.think}>
             <button
                 className={styles.thinkHead}
                 onClick={() => setOpen(v => !v)}
                 type="button"
             >
-                <span className={styles.thinkChevron}><Icon
-                    name="chevron"
-                    size={11}
-                /></span>
-                <span className={styles.thinkLabel}>{label}</span>
+                <span className={`${styles.thinkChevron} ${open ? styles.thinkChevronOpen : ''}`}>
+                    <Icon
+                        name="chevron"
+                        size={11}
+                    />
+                </span>
+                <span className={`${styles.thinkLabel} ${streaming ? styles.thinkLive : ''}`}>{label}</span>
             </button>
             {open ? <div className={styles.thinkBody}>{text}</div> : null}
         </div>
@@ -235,21 +251,25 @@ Thinking.propTypes = {
 // 工具卡
 // ---------------------------------------------------------------------------
 
+// 工具卡。
+//
+// 形状学 ZCode：**不做卡片**（无边框、无底色），就是一行灰字 —— 一行标题（带参数）+ 可展开的细节。
+// 几条硬规矩：
+//   - **不显示耗时**（用户明确要求去掉）；
+//   - 成功不画对勾、不写「完成」，行本身安静下来就是成功（只有失败要留颜色）；
+//   - 默认收起，**失败自动摊开**（错误必须被看见）；跑的时候行首转一个小圈 + 「执行中」。
+// 撤消按钮**放在行上**而不是藏在展开区里 —— 藏起来等于没有。
 const ToolCard = ({item, onUndo}) => {
     const failed = item.status === 'failed';
-    // 执行中摊开（让人看见在跑什么），**调用完成就自动收起**（用户定的）；
-    // 只有失败保持摊开 —— 出错需要被看见。
-    const [open, setOpen] = useState(true);
+    const running = item.status === 'running';
+    const [open, setOpen] = useState(false);
     const [showRequest, setShowRequest] = useState(false);
     useEffect(() => {
-        if (item.status !== 'running' && !failed) setOpen(false);
-    }, [item.status, failed]);
+        if (failed) setOpen(true);
+    }, [failed]);
     // 旧对话（改名前存的）里工具名没有 xce_ 前缀，补一次映射，别让界面露出裸英文名
     const label = TOOL_LABELS[item.name] || TOOL_LABELS[`xce_${item.name}`] || item.name;
-    const running = item.status === 'running';
-    const kindClass = item.status === 'done' ? styles.toolOk :
-        failed ? styles.toolBad : styles.toolRunning;
-    // 「查看 Agent 的请求」：用户展开卡片后可以点开看这次调用真正发出去的参数。
+    // 「查看 Agent 的请求」：用户展开后可以点开看这次调用真正发出去的参数。
     // 截断到 2KB —— xce_write_script 的 text 参数可能很长，全量展开会把面板撑爆。
     const requestText = item.input ?
         (() => {
@@ -257,27 +277,39 @@ const ToolCard = ({item, onUndo}) => {
             return json.length > 2048 ? `${json.slice(0, 2048)}\n…（更长，已截断）` : json;
         })() : null;
     return (
-        <div className={`${styles.tool} ${kindClass}`}>
-            <button
-                className={styles.toolHead}
-                onClick={() => setOpen(v => !v)}
-                type="button"
-            >
-                <span className={styles.thinkChevron}><Icon
-                    name="chevron"
-                    size={11}
-                /></span>
-                <span className={styles.toolName}>{label}</span>
-                {item.sprite ? <span className={styles.toolArg}>{item.sprite}</span> : null}
-                <span className={styles.toolStatus}>
-                    {running ? <span className={styles.wait}>执行中…</span> : null}
-                    {item.status === 'done' ? <span className={styles.ok}><Icon
-                        name="check"
-                        size={11}
-                    /> {item.duration}ms</span> : null}
-                    {failed ? <span className={styles.bad}>失败</span> : null}
-                </span>
-            </button>
+        <div className={`${styles.tool} ${failed ? styles.toolFailed : ''}`}>
+            <div className={styles.toolRow}>
+                <button
+                    className={styles.toolHead}
+                    onClick={() => setOpen(v => !v)}
+                    type="button"
+                >
+                    <span className={`${styles.thinkChevron} ${open ? styles.thinkChevronOpen : ''}`}>
+                        <Icon
+                            name="chevron"
+                            size={11}
+                        />
+                    </span>
+                    <span className={styles.toolName}>{label}</span>
+                    {/* 老对话里存的是 sprite 字段，新版才有 arg —— 两个都认，别让历史记录里的行秃掉 */}
+                    {item.arg || item.sprite ? (
+                        <span className={styles.toolArg}>{item.arg || item.sprite}</span>
+                    ) : null}
+                    {running ? (
+                        <span className={`${styles.toolStatus} ${styles.wait}`}>
+                            <span className={styles.spinner} />执行中
+                        </span>
+                    ) : null}
+                    {failed ? <span className={`${styles.toolStatus} ${styles.bad}`}>失败</span> : null}
+                </button>
+                {item.undo ? (
+                    <button
+                        className={styles.toolUndo}
+                        onClick={() => onUndo(item)}
+                        type="button"
+                    >撤销</button>
+                ) : null}
+            </div>
             {open ? (
                 <div className={styles.toolBody}>
                     {item.content}
@@ -297,13 +329,6 @@ const ToolCard = ({item, onUndo}) => {
                     ) : null}
                     {showRequest && requestText ? (
                         <div className={styles.toolReq}>{requestText}</div>
-                    ) : null}
-                    {item.undo ? (
-                        <button
-                            className={styles.undo}
-                            onClick={() => onUndo(item)}
-                            type="button"
-                        >撤销这次改动</button>
                     ) : null}
                 </div>
             ) : null}
@@ -918,6 +943,7 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                 name: event.call.name,
                 input: event.call.input,
                 sprite: (event.call.input && event.call.input.sprite) || null,
+                arg: argOf(event.call.input),
                 status: 'running',
                 content: ''
             }]));
@@ -930,7 +956,6 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                         status: event.result.isError ? 'failed' : 'done',
                         content: event.result.content,
                         images: event.result.images || null,
-                        duration: event.duration,
                         undo: event.result.undo || null
                     } :
                     item
@@ -1210,10 +1235,11 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     // 底栏只有 ~310px 宽，「供应商 · 模型」这种全称一定被截断，只留模型名
     const modelLabel = hasApiKey(settings) ?
         ((resolveModel(settings) || {}).name || settings.modelId) : '本地演示模型';
-    const usedK = context ? (context.tokens / 1000).toFixed(1) : '';
+    // 用量照 ZCode 的写法收成 `12.3K (6%)`，完整数字放 title 里 —— 面板太窄，别把两行数字都摊开
+    const usedK = context ? (context.tokens / 1000).toFixed(1).replace(/\.0$/, '') : '';
     const windowK = Math.round(contextWindowOf(settings) / 1000);
-    const contextLabel = context ?
-        `${usedK}k / ${windowK}k（${Math.round(ratio * 100)}%）` : '';
+    const contextLabel = context ? `${usedK}K (${Math.round(ratio * 100)}%)` : '';
+    const contextTitle = context ? `上下文已用 ${usedK}k / ${windowK}k` : '';
 
     return (
         <div className={styles.aiRoot}>
@@ -1371,48 +1397,56 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                             ) : null}
                         </div>
                         <div className={styles.composer}>
-                            <textarea
-                                className={styles.input}
-                                onChange={e => setDraft(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                placeholder="让 AI 写积木，例如：做个数到 10 的计数器"
-                                value={draft}
-                            />
+                            {/* 输入框是一个描边的圆角盒子（学 ZCode）：聚焦时边框转强调色，
+                                模型 / 用量 / 发送都收进盒子里；状态那行挂在盒子**外面**下方，
+                                免得它一变化就把输入框顶上去。 */}
+                            <div className={styles.inputBox}>
+                                <textarea
+                                    className={styles.input}
+                                    onChange={e => setDraft(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="让 AI 写积木，例如：做个数到 10 的计数器"
+                                    value={draft}
+                                />
+                                <div className={styles.bar}>
+                                    <button
+                                        className={styles.modelBtn}
+                                        onClick={openSettings}
+                                        title="换模型"
+                                        type="button"
+                                    >
+                                        <span className={styles.modelBtnText}>{modelLabel}</span>
+                                        <Icon
+                                            name="chevron"
+                                            size={11}
+                                        />
+                                    </button>
+                                    {context ? (
+                                        <span
+                                            className={`${styles.ctx} ${ratio > 0.75 ? styles.ctxWarn : ''}`}
+                                            title={contextTitle}
+                                        >
+                                            {contextLabel}
+                                        </span>
+                                    ) : null}
+                                    {busy ? (
+                                        <button
+                                            className={styles.send}
+                                            onClick={handleStop}
+                                            type="button"
+                                        >停止</button>
+                                    ) : (
+                                        <button
+                                            className={styles.send}
+                                            disabled={!draft.trim() || !portRef.current}
+                                            onClick={handleSend}
+                                            type="button"
+                                        >发送</button>
+                                    )}
+                                </div>
+                            </div>
                             <div className={`${styles.statusBar} ${statusError ? styles.statusError : ''}`}>
                                 {status}
-                            </div>
-                            <div className={styles.bar}>
-                                <button
-                                    className={styles.modelBtn}
-                                    onClick={openSettings}
-                                    title="换模型"
-                                    type="button"
-                                >
-                                    <span className={styles.modelBtnText}>{modelLabel}</span>
-                                    <Icon
-                                        name="chevron"
-                                        size={11}
-                                    />
-                                </button>
-                                {context ? (
-                                    <span className={`${styles.ctx} ${ratio > 0.75 ? styles.ctxWarn : ''}`}>
-                                        {contextLabel}
-                                    </span>
-                                ) : null}
-                                {busy ? (
-                                    <button
-                                        className={styles.send}
-                                        onClick={handleStop}
-                                        type="button"
-                                    >停止</button>
-                                ) : (
-                                    <button
-                                        className={styles.send}
-                                        disabled={!draft.trim() || !portRef.current}
-                                        onClick={handleSend}
-                                        type="button"
-                                    >发送</button>
-                                )}
                             </div>
                         </div>
                     </React.Fragment>
