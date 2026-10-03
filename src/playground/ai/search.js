@@ -59,7 +59,12 @@ export const formatSearchResult = payload => {
     const results = (payload && payload.results) || [];
     const total = (payload && payload.total) || 0;
     if (!results.length) {
-        lines.push(`CaelLabSearch found no results for "${query}". Do not make anything up; try other keywords.`);
+        lines.push(
+            `CaelLabSearch found no results for "${query}". Try again with fewer, plainer words — the index ` +
+            `is weak on long phrases, so a bare term usually finds more than a padded one. You can also read ` +
+            `a page whose URL you already know with xce_read_online. Do not make anything up; if nothing ` +
+            `turns up, say you could not find it.`
+        );
         return lines.join('\n');
     }
 
@@ -116,10 +121,11 @@ export const searchCaelLab = async (query, {signal, timeoutMs = DEFAULT_TIMEOUT_
             throw new Error(`Search timed out (no response from CaelLabSearch within ${timeoutMs / 1000}s).`);
         }
         throw new Error(
-            `Could not reach CaelLabSearch (${fetchError.message}). The most common cause is CORS: the ` +
-            `browser does not allow this page to read caellab.click's response. Tell the user honestly that ` +
-            `search is unavailable right now and let them search at https://caellab.click/ themselves; never ` +
-            `invent content from memory.`
+            `Could not reach CaelLabSearch (${fetchError.message}). The usual cause is CORS: the browser ` +
+            `does not allow this page to read caellab.click's response. Do not stop at the failure — retry, ` +
+            `try different keywords, or read a page whose URL you already know with xce_read_online. If ` +
+            `nothing works, answer from your own knowledge and label it as yours (not a fresh search), and ` +
+            `only as a last resort point the user at https://caellab.click/. Never invent content from memory.`
         );
     }
     clearTimeout(timer);

@@ -315,11 +315,10 @@ export const createTools = ({port, skills = []}) => {
                 if (!ctx.supportsImage) {
                     // 非视觉模型：不塞图片，改成一句能转述给用户的话
                     return ok(
-                        `${caption} But the current model does not accept image input, so you cannot be shown ` +
-                        `this picture.\n` +
+                        `${caption} The current model does not read images, so the picture is not passed on. ` +
+                        `Say that once, then judge the result from the numbers in xce_read_state.\n` +
                         `Tell the user: to let the AI see the stage, switch to a vision-capable model in the ` +
-                        `panel's Settings → Model (the ones marked 「看图」 in the list). Until then you can only ` +
-                        `judge from the numbers in xce_read_state.`
+                        `panel's Settings → Model (the ones marked 「看图」 in the list).`
                     );
                 }
                 return {
@@ -339,8 +338,8 @@ export const createTools = ({port, skills = []}) => {
                 'around it — one line each. Takes no arguments.\n' +
                 'Call this FIRST, before answering anything about the editor itself, CaelLab, or those ' +
                 'sites: the documents are deliberately kept out of the prompt, so this is the only way to ' +
-                'know what is available. Do not answer such questions from memory. To actually read one, ' +
-                'pass its name to xce_read_fast_docs.',
+                'know what is available, and they beat anything you only half-remember. To actually read ' +
+                'one, pass its name to xce_read_fast_docs.',
             readOnly: true,
             inputSchema: {type: 'object', properties: {}},
             handler: () => {
@@ -500,13 +499,12 @@ export const createTools = ({port, skills = []}) => {
                 'Hard limits: 5 second timeout, at most 20KB of text, head summary capped at 2KB — if the ' +
                 'body was truncated the result says so, and you must pass that on instead of treating the ' +
                 'excerpt as the whole page.\n' +
-                'You cannot click, type, log in, or run the page\'s scripts; pages behind a login or drawn ' +
-                'entirely by JavaScript will come back empty or partial.\n' +
-                'Most websites do not allow a browser page to read them (CORS), so many fetches fail — ' +
-                'when one does, the error says so. Report that honestly ("this site does not allow the AI ' +
-                'to read it") and move on; never reconstruct a page from memory.\n' +
-                'Use it to back up claims about the outside world (docs, help pages, a site the user mentions). ' +
-                'Never fabricate page content for a page you did not fetch.',
+                'Most websites block a browser page from reading them (CORS), and a page behind a login or ' +
+                'drawn entirely by JavaScript comes back empty or partial, so a fetch fails more often than ' +
+                'it succeeds; the error says why. When it does, find another way instead of stopping: try a ' +
+                'different URL, then fall back on what you already know and say that is where it came from. ' +
+                'Never invent page content for a page you did not fetch; never reconstruct a page from memory.\n' +
+                'Use it to back up claims about the outside world (docs, help pages, a site the user mentions).',
             readOnly: true,
             inputSchema: {
                 type: 'object',
@@ -526,17 +524,31 @@ export const createTools = ({port, skills = []}) => {
                 `snippet (cut at ${DESC_CAP} characters). The index covers the CaelLab sites and pages it has ` +
                 'crawled from the wider web.\n' +
                 'Use it whenever the answer depends on the outside world — a library, a TurboWarp feature, a ' +
-                'site the user names — and never answer such a question from memory.\n' +
+                'site the user names. This is the real lookup; what you remember is not a substitute.\n' +
+                'Keep the query short and literal — a word or two, spelled the way the user said it. This ' +
+                'index matches words, it does not understand a sentence, so padding the query makes it find ' +
+                'less, not more: searching for Redis is the query "Redis", not "what is Redis and how do I ' +
+                'use it in Scratch", and stacked synonyms or extra adjectives only get in the way. Send the ' +
+                'bare term first; narrow it only when the first result gives you something to refine.\n' +
+                'If it errors or turns up nothing, do not stop and do not hand the job to the user: retry ' +
+                'with different keywords, and read a page whose URL you already know via xce_read_online. ' +
+                'Only if that still leaves you empty-handed, answer from your own knowledge and label it as ' +
+                'yours — not a fresh search, so it may be out of date. Never write invented text as a search ' +
+                'result.\n' +
                 'The result begins with the result page URL and states that the results come from ' +
                 'CaelLabSearch; keep that attribution when you tell the user where something came from, and ' +
                 'give them the URL so they can see the full list.\n' +
-                'It returns snippets only: it cannot open a result. To read one, call xce_read_online with ' +
-                'that URL (and say so if the site refuses).',
+                'It returns snippets only, so to read a whole page pass its URL to xce_read_online.',
             readOnly: true,
             inputSchema: {
                 type: 'object',
                 properties: {
-                    query: {type: 'string', description: 'What to search for, in the user\'s language.'}
+                    query: {
+                        type: 'string',
+                        description: 'The search keywords, in the user\'s language — just the few words ' +
+                            'that matter, spelled the way the user said them. A bare term stays bare: ' +
+                            'searching for Redis means the query "Redis", not a sentence about it.'
+                    }
                 },
                 required: ['query']
             },

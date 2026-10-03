@@ -181,9 +181,12 @@ try {
     const tools = createTools({port: {}, skills: []});
     const tool = tools.find(t => t.name === 'xce_search');
     check('工具表里有 xce_search', !!tool);
-    check('description 提到 CaelLabSearch / caellab.click / 10 条 / 不能点进结果',
+    check('description 提到 CaelLabSearch / caellab.click / 10 条 / 只给摘要、读全文用 read_online',
         /CaelLabSearch/.test(tool.description) && /caellab.click/.test(tool.description) &&
-        /10 results/.test(tool.description) && /cannot open a result/.test(tool.description));
+        /10 results/.test(tool.description) && /snippets only/.test(tool.description) &&
+        /xce_read_online/.test(tool.description));
+    check('description 要求 query 保持原词、别加词拼句',
+        /short and literal/.test(tool.description) && /"Redis"/.test(tool.description));
     check('参数只有 query 且必填',
         JSON.stringify(Object.keys(tool.inputSchema.properties)) === '["query"]' &&
         tool.inputSchema.required.includes('query'));

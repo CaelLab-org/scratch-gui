@@ -247,7 +247,7 @@ check('非视觉模型不塞图片',
   withoutVision.images === void 0 && !withoutVision.isError,
   JSON.stringify(withoutVision.images));
 check('非视觉模型得到的是能让 AI 转述给用户的话',
-  /does not accept image input/.test(withoutVision.content) && /vision-capable model/.test(withoutVision.content),
+  /does not read images/.test(withoutVision.content) && /vision-capable model/.test(withoutVision.content),
   String(withoutVision.content).slice(0, 80));
 
 // === 硬截断走真实 executeTool（loop.js）：超过 20KB 必须被切并在底部注明 ===
