@@ -204,17 +204,20 @@ try {
 
 // ---------- 9. 系统提示词把搜索说进工具表 ----------
 {
+    const toolNames = createTools({port: {}, skills: []}).map(t => t.name);
     const prompt = buildSystemPrompt({
         currentSprite: '角色1',
         extensions: [],
         date: '2026-10-04',
         modelInfo: {name: 'test', supportsImage: false, contextWindow: 1000, maxOutputTokens: 100},
-        toolNames: createTools({port: {}, skills: []}).map(t => t.name)
+        toolNames
     });
     check('工具表里有 xce_search', prompt.includes('`xce_search`'));
     check('写明搜索是 CaelLabSearch、不是模型记忆', /CaelLabSearch/.test(prompt) && /not your memory/.test(prompt));
     check('不再声称「没有搜索引擎」', !/or use a search engine/.test(prompt));
-    check('工具数量跟实际工具数一致（12）', /\bexactly 12 tools\b/.test(prompt),
+    // 数量不写死：加一个工具就跟着变，免得每加一次工具都来改这一行
+    check(`工具数量跟实际工具数一致（${toolNames.length}）`,
+        new RegExp(`\\bexactly ${toolNames.length} tools\\b`).test(prompt),
         (prompt.match(/exactly \d+ tools/) || [])[0]);
 }
 

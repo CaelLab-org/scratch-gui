@@ -836,6 +836,25 @@
     color: var(--accent);
 }
 
+/* 等待类工具进行中的「跳过」：等的时候它是行上唯一能点的东西，给强调色，
+   别像撤销那样一上来就灰着。位置和撤销同一处（行尾）。 */
+.toolSkip {
+    flex: 0 0 auto;
+    height: 20px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.toolSkip:hover {
+    background: var(--bg-layer2);
+}
+
 .spinner {
     width: 9px;
     height: 9px;
