@@ -16,8 +16,10 @@ import {fetchOnline} from './online.js';
 const ok = content => ({content});
 const fail = content => ({content, isError: true});
 
+// 报错里用的角色名清单：**只给真名，不加任何装饰** —— 之前写成「Stage（舞台）」，
+// 模型会连着括号一起当成角色名抄回来，然后一直找不到。
 const listSprites = port =>
-    port.listSprites().map(s => `${s.name}${s.isStage ? '（舞台）' : ''}`)
+    port.listSprites().map(s => s.name)
         .join('、');
 
 // 一行一个角色的清单（ls）。只给名字/数量/变量名，绝不带代码 —— 代码必须按角色单独读
@@ -152,6 +154,15 @@ export const createTools = ({port, skills = []}) => {
                 const lines = [`已在「${sprite}」写入 ${result.blockIds.length} 段脚本。`];
                 if (result.createdVariables.length) lines.push(`新建变量：${result.createdVariables.join('、')}`);
                 if (result.createdLists.length) lines.push(`新建列表：${result.createdLists.join('、')}`);
+                if (result.unrecognized) {
+                    // 转换器认不出的写法：跟缺扩展根本不是一回事，别把两种原因混在一起说
+                    return fail(
+                        `没有写入：这段文本里有工具**认不出来**的积木写法，它的警告是：\n- ` +
+                        `${result.warnings.map(w => String(w)).join('\n- ')}\n` +
+                        `请对照积木选择框里的真实名字改写（常见错法：自己造了积木名、把中文名混进来了），` +
+                        `或者先 xce_read_project 看看已有脚本是怎么写的，照那个写法来。`
+                    );
+                }
                 if (result.missingExtensions && result.missingExtensions.length) {
                     return fail(
                         `没有写入：这段积木用到了当前项目**没有加载**的扩展（${result.missingExtensions.join('、')}）。` +

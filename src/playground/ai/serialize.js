@@ -55,7 +55,13 @@ export const textToBlocks = (text, ctx = {}) => {
     const topLevelIds = [];
     const warnings = [];
     let counter = 0;
-    const newId = (prefix = 'c') => `${prefix}${(counter++).toString(36)}`;
+    // 块 id 必须**跨调用唯一**。曾经是每次转换从 c0 重新开始编，于是第二次 write_script
+    // 生成的 c0/c1... 跟第一次撞车，后写的块把先写的**整段覆盖**掉 ——
+    // 表现就是「工具回写入成功，但读回来只有一段，后面写的都不见了」（用户实际踩到过）。
+    // 加一段每次调用随机的短 tag：既避开同一次会话内的重复，也避开将来加载回旧项目时的碰撞。
+    const idTag = Math.random().toString(36)
+        .slice(2, 6);
+    const newId = (prefix = 'c') => `${prefix}${idTag}${(counter++).toString(36)}`;
 
     const varId = name => {
         if (!(name in variables)) variables[name] = `v${Object.keys(variables).length + 1}`;
@@ -90,9 +96,16 @@ export const textToBlocks = (text, ctx = {}) => {
         return idToOpcode[block.info.id] || null;
     };
 
-    const shadowFor = opcode => (shadows[opcode] && shadows[opcode][0]) || null;
+    // 影子积木**按槽位名**取：表里是 {槽位名: 影子类型}。
+    // 曾经按出现顺序取第一个，于是 looks_changeeffectby 的 CHANGE(math_number) 影子
+    // 被错配给 EFFECT 槽，效果字段变成「挂了个 math_number」的坏块（用户实际踩到过）。
+    const shadowFor = (opcode, slotName) => {
+        const bySlot = shadows[opcode];
+        if (!bySlot || Array.isArray(bySlot)) return null;
+        return bySlot[slotName] || null;
+    };
 
-    // 扩展积木的菜单是按「参数名」登记的（核心积木的 shadows 只能按位置对齐）
+    // 扩展积木的菜单是按「参数名」登记的（跟核心积木的槽位名是同一套）
     const menuShadowForArg = (opcode, slotName) => {
         const byArg = menuShadowByArg[opcode];
         return (byArg && byArg[slotName]) || null;
@@ -123,7 +136,7 @@ export const textToBlocks = (text, ctx = {}) => {
                 // 给的不是 %m.* 类型（比如 translate 的语言、music 的乐器），
                 // 若先信类型会把 [English v] 误当成变量报告块。
                 const shadowOpcode = menuShadowForArg(opcode, slotName) ||
-                    (isMenuSlot ? shadowFor(opcode) : null);
+                    (isMenuSlot ? shadowFor(opcode, slotName) : null);
                 if (shadowOpcode) {
                     const menuId = newId('m');
                     const fieldName = menuFieldName(shadowOpcode) || slotName;

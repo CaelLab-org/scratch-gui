@@ -3,75 +3,6 @@ export default {
  "_generated": "2026-10-03",
  "_source": "scratch-blocks 积木定义 + scratch-vm 扩展定义 + parse-sb3-blocks 翻译键 + default_toolbox.xml（自动生成，勿手改）",
  "idToOpcode": {
-  "boost.motorOnFor": "boost_motorOnFor",
-  "boost.motorOnForRotation": "boost_motorOnForRotation",
-  "boost.motorOn": "boost_motorOn",
-  "boost.motorOff": "boost_motorOff",
-  "boost.setMotorPower": "boost_setMotorPower",
-  "boost.setMotorDirection": "boost_setMotorDirection",
-  "ev3.getMotorPosition": "boost_getMotorPosition",
-  "boost.whenColor": "boost_whenColor",
-  "boost.seeingColor": "boost_seeingColor",
-  "microbit.whenTilted": "boost_whenTilted",
-  "microbit.tiltAngle": "boost_getTiltAngle",
-  "wedo2.setLightHue": "boost_setLightHue",
-  "ev3.motorTurnClockwise": "ev3_motorTurnClockwise",
-  "ev3.motorTurnCounterClockwise": "ev3_motorTurnCounterClockwise",
-  "ev3.motorSetPower": "ev3_motorSetPower",
-  "microbit.whenButtonPressed": "ev3_whenButtonPressed",
-  "ev3.whenDistanceLessThan": "ev3_whenDistanceLessThan",
-  "ev3.whenBrightnessLessThan": "ev3_whenBrightnessLessThan",
-  "microbit.isButtonPressed": "ev3_buttonPressed",
-  "ev3.getDistance": "ev3_getDistance",
-  "ev3.getBrightness": "ev3_getBrightness",
-  "ev3.beepNote": "ev3_beep",
-  "EVENT_WHENGREATERTHAN": "gdxfor_whenGesture",
-  "gdxfor.whenForcePushedOrPulled": "gdxfor_whenForcePushedOrPulled",
-  "gdxfor.getForce": "gdxfor_getForce",
-  "microbit.isTilted": "gdxfor_isTilted",
-  "gdxfor.isFreeFalling": "gdxfor_isFreeFalling",
-  "gdxfor.getSpin": "gdxfor_getSpinSpeed",
-  "gdxfor.getAcceleration": "gdxfor_getAcceleration",
-  "EVENT_WHENKEYPRESSED": "makeymakey_whenMakeyKeyPressed",
-  "makeymakey.whenKeysPressedInOrder": "makeymakey_whenCodePressed",
-  "microbit.displaySymbol": "microbit_displaySymbol",
-  "microbit.displayText": "microbit_displayText",
-  "microbit.clearDisplay": "microbit_displayClear",
-  "microbit.whenPinConnected": "microbit_whenPinConnected",
-  "music.playDrumForBeats": "music_playDrumForBeats",
-  "music.restForBeats": "music_restForBeats",
-  "music.playNoteForBeats": "music_playNoteForBeats",
-  "music.setInstrument": "music_setInstrument",
-  "music.setTempo": "music_setTempo",
-  "music.changeTempo": "music_changeTempo",
-  "music.getTempo": "music_getTempo",
-  "pen.clear": "pen_clear",
-  "pen.stamp": "pen_stamp",
-  "pen.penDown": "pen_penDown",
-  "pen.penUp": "pen_penUp",
-  "pen.setColor": "pen_setPenColorToColor",
-  "pen.changeColorParam": "pen_changePenColorParamBy",
-  "pen.setColorParam": "pen_setPenColorParamTo",
-  "pen.changeSize": "pen_changePenSizeBy",
-  "pen.setSize": "pen_setPenSizeTo",
-  "pen.setShade": "pen_setPenShadeToNumber",
-  "pen.changeShade": "pen_changePenShadeBy",
-  "pen.changeHue": "pen_changePenHueBy",
-  "text2speech.speakAndWaitBlock": "text2speech_speakAndWait",
-  "text2speech.setVoiceBlock": "text2speech_setVoice",
-  "text2speech.setLanguageBlock": "text2speech_setLanguage",
-  "translate.translateBlock": "translate_getTranslate",
-  "translate.viewerLanguage": "translate_getViewerLanguage",
-  "videoSensing.whenMotionGreaterThan": "videoSensing_whenMotionGreaterThan",
-  "videoSensing.videoOn": "videoSensing_videoOn",
-  "videoSensing.videoToggle": "videoSensing_videoToggle",
-  "videoSensing.setVideoTransparency": "videoSensing_setVideoTransparency",
-  "wedo2.motorOnFor": "wedo2_motorOnFor",
-  "wedo2.motorOn": "wedo2_motorOn",
-  "wedo2.motorOff": "wedo2_motorOff",
-  "wedo2.startMotorPower": "wedo2_startMotorPower",
-  "wedo2.setMotorDirection": "wedo2_setMotorDirection",
-  "wedo2.playNoteFor": "wedo2_playNoteFor",
   "MOTION_MOVESTEPS": "motion_movesteps",
   "MOTION_TURNRIGHT": "motion_turnright",
   "MOTION_TURNLEFT": "motion_turnleft",
@@ -125,8 +56,10 @@ export default {
   "EVENT_WHENSTAGECLICKED": "event_whenstageclicked",
   "EVENT_WHENBROADCASTRECEIVED": "event_whenbroadcastreceived",
   "EVENT_WHENBACKDROPSWITCHESTO": "event_whenbackdropswitchesto",
+  "EVENT_WHENGREATERTHAN": "event_whengreaterthan",
   "EVENT_BROADCAST": "event_broadcast",
   "EVENT_BROADCASTANDWAIT": "event_broadcastandwait",
+  "EVENT_WHENKEYPRESSED": "event_whenkeypressed",
   "CONTROL_FOREVER": "control_forever",
   "CONTROL_REPEAT": "control_repeat",
   "CONTROL_IF": "control_if",
@@ -195,23 +128,90 @@ export default {
   "PROCEDURES_CALL": "procedures_call",
   "ARGUMENT_REPORTER_BOOLEAN": "argument_reporter_boolean",
   "ARGUMENT_REPORTER_STRING_NUMBER": "argument_reporter_string_number",
+  "pen.clear": "pen_clear",
+  "pen.stamp": "pen_stamp",
+  "pen.penDown": "pen_penDown",
+  "pen.penUp": "pen_penUp",
+  "pen.setColor": "pen_setPenColorToColor",
+  "pen.changeColorParam": "pen_changePenColorParamBy",
+  "pen.setColorParam": "pen_setPenColorParamTo",
+  "pen.changeSize": "pen_changePenSizeBy",
+  "pen.setSize": "pen_setPenSizeTo",
+  "music.playDrumForBeats": "music_playDrumForBeats",
+  "music.restForBeats": "music_restForBeats",
+  "music.playNoteForBeats": "music_playNoteForBeats",
+  "music.setInstrument": "music_setInstrument",
+  "music.setTempo": "music_setTempo",
+  "music.changeTempo": "music_changeTempo",
+  "music.getTempo": "music_getTempo",
+  "videoSensing.whenMotionGreaterThan": "videoSensing_whenMotionGreaterThan",
+  "videoSensing.videoOn": "videoSensing_videoOn",
+  "videoSensing.videoToggle": "videoSensing_videoToggle",
+  "videoSensing.setVideoTransparency": "videoSensing_setVideoTransparency",
+  "text2speech.speakAndWaitBlock": "text2speech_speakAndWait",
+  "text2speech.setVoiceBlock": "text2speech_setVoice",
+  "text2speech.setLanguageBlock": "text2speech_setLanguage",
+  "translate.translateBlock": "translate_getTranslate",
+  "translate.viewerLanguage": "translate_getViewerLanguage",
+  "boost.motorOnFor": "boost_motorOnFor",
+  "boost.motorOnForRotation": "boost_motorOnForRotation",
+  "boost.motorOn": "boost_motorOn",
+  "boost.motorOff": "boost_motorOff",
+  "boost.setMotorPower": "boost_setMotorPower",
+  "boost.setMotorDirection": "boost_setMotorDirection",
   "boost.getMotorPosition": "boost_getMotorPosition",
+  "boost.whenColor": "boost_whenColor",
+  "boost.seeingColor": "boost_seeingColor",
   "boost.whenTilted": "boost_whenTilted",
   "boost.getTiltAngle": "boost_getTiltAngle",
   "boost.setLightHue": "boost_setLightHue",
+  "ev3.motorTurnClockwise": "ev3_motorTurnClockwise",
+  "ev3.motorTurnCounterClockwise": "ev3_motorTurnCounterClockwise",
+  "ev3.motorSetPower": "ev3_motorSetPower",
+  "ev3.getMotorPosition": "ev3_getMotorPosition",
   "ev3.whenButtonPressed": "ev3_whenButtonPressed",
+  "ev3.whenDistanceLessThan": "ev3_whenDistanceLessThan",
+  "ev3.whenBrightnessLessThan": "ev3_whenBrightnessLessThan",
   "ev3.buttonPressed": "ev3_buttonPressed",
+  "ev3.getDistance": "ev3_getDistance",
+  "ev3.getBrightness": "ev3_getBrightness",
+  "ev3.beepNote": "ev3_beep",
   "gdxfor.whenGesture": "gdxfor_whenGesture",
+  "gdxfor.whenForcePushedOrPulled": "gdxfor_whenForcePushedOrPulled",
+  "gdxfor.getForce": "gdxfor_getForce",
   "gdxfor.whenTilted": "gdxfor_whenTilted",
   "gdxfor.isTilted": "gdxfor_isTilted",
   "gdxfor.getTilt": "gdxfor_getTilt",
+  "gdxfor.isFreeFalling": "gdxfor_isFreeFalling",
+  "gdxfor.getSpin": "gdxfor_getSpinSpeed",
+  "gdxfor.getAcceleration": "gdxfor_getAcceleration",
   "makeymakey.whenKeyPressed": "makeymakey_whenMakeyKeyPressed",
+  "makeymakey.whenKeysPressedInOrder": "makeymakey_whenCodePressed",
+  "microbit.whenButtonPressed": "microbit_whenButtonPressed",
+  "microbit.isButtonPressed": "microbit_isButtonPressed",
   "microbit.whenGesture": "microbit_whenGesture",
+  "microbit.displaySymbol": "microbit_displaySymbol",
+  "microbit.displayText": "microbit_displayText",
+  "microbit.clearDisplay": "microbit_displayClear",
+  "microbit.whenTilted": "microbit_whenTilted",
+  "microbit.isTilted": "microbit_isTilted",
+  "microbit.tiltAngle": "microbit_getTiltAngle",
+  "microbit.whenPinConnected": "microbit_whenPinConnected",
+  "wedo2.motorOnFor": "wedo2_motorOnFor",
+  "wedo2.motorOn": "wedo2_motorOn",
+  "wedo2.motorOff": "wedo2_motorOff",
+  "wedo2.startMotorPower": "wedo2_startMotorPower",
+  "wedo2.setMotorDirection": "wedo2_setMotorDirection",
+  "wedo2.setLightHue": "wedo2_setLightHue",
+  "wedo2.playNoteFor": "wedo2_playNoteFor",
   "wedo2.whenDistance": "wedo2_whenDistance",
   "wedo2.whenTilted": "wedo2_whenTilted",
   "wedo2.getDistance": "wedo2_getDistance",
   "wedo2.isTilted": "wedo2_isTilted",
-  "wedo2.getTiltAngle": "wedo2_getTiltAngle"
+  "wedo2.getTiltAngle": "wedo2_getTiltAngle",
+  "pen.setShade": "pen_setPenShadeToNumber",
+  "pen.changeShade": "pen_changePenShadeBy",
+  "pen.changeHue": "pen_changePenHueBy"
  },
  "spec": {
   "boost_motorOnFor": {
@@ -2863,186 +2863,186 @@ export default {
   }
  },
  "shadows": {
-  "motion_movesteps": [
-   "math_number"
-  ],
-  "motion_turnright": [
-   "math_number"
-  ],
-  "motion_turnleft": [
-   "math_number"
-  ],
-  "motion_pointindirection": [
-   "math_angle"
-  ],
-  "motion_pointtowards": [
-   "motion_pointtowards_menu"
-  ],
-  "motion_goto": [
-   "motion_goto_menu"
-  ],
-  "motion_glidesecstoxy": [
-   "math_number"
-  ],
-  "motion_glideto": [
-   "math_number",
-   "motion_glideto_menu"
-  ],
-  "motion_changexby": [
-   "math_number"
-  ],
-  "motion_changeyby": [
-   "math_number"
-  ],
-  "looks_switchcostumeto": [
-   "looks_costume"
-  ],
-  "looks_switchbackdropto": [
-   "looks_backdrops"
-  ],
-  "looks_switchbackdroptoandwait": [
-   "looks_backdrops"
-  ],
-  "looks_changeeffectby": [
-   "math_number"
-  ],
-  "looks_seteffectto": [
-   "math_number"
-  ],
-  "looks_changesizeby": [
-   "math_number"
-  ],
-  "looks_setsizeto": [
-   "math_number"
-  ],
-  "looks_goforwardbackwardlayers": [
-   "math_integer"
-  ],
-  "sound_play": [
-   "sound_sounds_menu"
-  ],
-  "sound_playuntildone": [
-   "sound_sounds_menu"
-  ],
-  "sound_changeeffectby": [
-   "math_number"
-  ],
-  "sound_seteffectto": [
-   "math_number"
-  ],
-  "sound_changevolumeby": [
-   "math_number"
-  ],
-  "sound_setvolumeto": [
-   "math_number"
-  ],
-  "event_whengreaterthan": [
-   "math_number"
-  ],
-  "event_broadcast": [
-   "event_broadcast_menu"
-  ],
-  "event_broadcastandwait": [
-   "event_broadcast_menu"
-  ],
-  "control_wait": [
-   "math_positive_number"
-  ],
-  "control_repeat": [
-   "math_whole_number"
-  ],
-  "control_create_clone_of": [
-   "control_create_clone_of_menu"
-  ],
-  "sensing_touchingobject": [
-   "sensing_touchingobjectmenu"
-  ],
-  "sensing_touchingcolor": [
-   "colour_picker"
-  ],
-  "sensing_coloristouchingcolor": [
-   "colour_picker",
-   "colour_picker"
-  ],
-  "sensing_distanceto": [
-   "sensing_distancetomenu"
-  ],
-  "sensing_keypressed": [
-   "sensing_keyoptions"
-  ],
-  "sensing_of": [
-   "sensing_of_object_menu"
-  ],
-  "operator_add": [
-   "math_number",
-   "math_number"
-  ],
-  "operator_subtract": [
-   "math_number",
-   "math_number"
-  ],
-  "operator_multiply": [
-   "math_number",
-   "math_number"
-  ],
-  "operator_divide": [
-   "math_number",
-   "math_number"
-  ],
-  "operator_random": [
-   "math_number",
-   "math_number"
-  ],
-  "operator_lt": [
-   "text",
-   "text"
-  ],
-  "operator_equals": [
-   "text",
-   "text"
-  ],
-  "operator_gt": [
-   "text",
-   "text"
-  ],
-  "operator_join": [
-   "text",
-   "text"
-  ],
-  "operator_letter_of": [
-   "math_whole_number",
-   "text"
-  ],
-  "operator_length": [
-   "text"
-  ],
-  "operator_contains": [
-   "text",
-   "text"
-  ],
-  "operator_mod": [
-   "math_number",
-   "math_number"
-  ],
-  "operator_round": [
-   "math_number"
-  ],
-  "operator_mathop": [
-   "math_number"
-  ],
-  "extension_music_drum": [
-   "math_number"
-  ],
-  "extension_wedo_tilt_reporter": [
-   "extension_wedo_tilt_menu"
-  ],
-  "extension_microbit_display": [
-   "matrix"
-  ],
-  "extension_music_play_note": [
-   "note",
-   "math_number"
-  ]
+  "motion_movesteps": {
+   "STEPS": "math_number"
+  },
+  "motion_turnright": {
+   "DEGREES": "math_number"
+  },
+  "motion_turnleft": {
+   "DEGREES": "math_number"
+  },
+  "motion_pointindirection": {
+   "DIRECTION": "math_angle"
+  },
+  "motion_pointtowards": {
+   "TOWARDS": "motion_pointtowards_menu"
+  },
+  "motion_goto": {
+   "TO": "motion_goto_menu"
+  },
+  "motion_glidesecstoxy": {
+   "SECS": "math_number"
+  },
+  "motion_glideto": {
+   "SECS": "math_number",
+   "TO": "motion_glideto_menu"
+  },
+  "motion_changexby": {
+   "DX": "math_number"
+  },
+  "motion_changeyby": {
+   "DY": "math_number"
+  },
+  "looks_switchcostumeto": {
+   "COSTUME": "looks_costume"
+  },
+  "looks_switchbackdropto": {
+   "BACKDROP": "looks_backdrops"
+  },
+  "looks_switchbackdroptoandwait": {
+   "BACKDROP": "looks_backdrops"
+  },
+  "looks_changeeffectby": {
+   "CHANGE": "math_number"
+  },
+  "looks_seteffectto": {
+   "VALUE": "math_number"
+  },
+  "looks_changesizeby": {
+   "CHANGE": "math_number"
+  },
+  "looks_setsizeto": {
+   "SIZE": "math_number"
+  },
+  "looks_goforwardbackwardlayers": {
+   "NUM": "math_integer"
+  },
+  "sound_play": {
+   "SOUND_MENU": "sound_sounds_menu"
+  },
+  "sound_playuntildone": {
+   "SOUND_MENU": "sound_sounds_menu"
+  },
+  "sound_changeeffectby": {
+   "VALUE": "math_number"
+  },
+  "sound_seteffectto": {
+   "VALUE": "math_number"
+  },
+  "sound_changevolumeby": {
+   "VOLUME": "math_number"
+  },
+  "sound_setvolumeto": {
+   "VOLUME": "math_number"
+  },
+  "event_whengreaterthan": {
+   "VALUE": "math_number"
+  },
+  "event_broadcast": {
+   "BROADCAST_INPUT": "event_broadcast_menu"
+  },
+  "event_broadcastandwait": {
+   "BROADCAST_INPUT": "event_broadcast_menu"
+  },
+  "control_wait": {
+   "DURATION": "math_positive_number"
+  },
+  "control_repeat": {
+   "TIMES": "math_whole_number"
+  },
+  "control_create_clone_of": {
+   "CLONE_OPTION": "control_create_clone_of_menu"
+  },
+  "sensing_touchingobject": {
+   "TOUCHINGOBJECTMENU": "sensing_touchingobjectmenu"
+  },
+  "sensing_touchingcolor": {
+   "COLOR": "colour_picker"
+  },
+  "sensing_coloristouchingcolor": {
+   "COLOR": "colour_picker",
+   "COLOR2": "colour_picker"
+  },
+  "sensing_distanceto": {
+   "DISTANCETOMENU": "sensing_distancetomenu"
+  },
+  "sensing_keypressed": {
+   "KEY_OPTION": "sensing_keyoptions"
+  },
+  "sensing_of": {
+   "OBJECT": "sensing_of_object_menu"
+  },
+  "operator_add": {
+   "NUM1": "math_number",
+   "NUM2": "math_number"
+  },
+  "operator_subtract": {
+   "NUM1": "math_number",
+   "NUM2": "math_number"
+  },
+  "operator_multiply": {
+   "NUM1": "math_number",
+   "NUM2": "math_number"
+  },
+  "operator_divide": {
+   "NUM1": "math_number",
+   "NUM2": "math_number"
+  },
+  "operator_random": {
+   "FROM": "math_number",
+   "TO": "math_number"
+  },
+  "operator_lt": {
+   "OPERAND1": "text",
+   "OPERAND2": "text"
+  },
+  "operator_equals": {
+   "OPERAND1": "text",
+   "OPERAND2": "text"
+  },
+  "operator_gt": {
+   "OPERAND1": "text",
+   "OPERAND2": "text"
+  },
+  "operator_join": {
+   "STRING1": "text",
+   "STRING2": "text"
+  },
+  "operator_letter_of": {
+   "LETTER": "math_whole_number",
+   "STRING": "text"
+  },
+  "operator_length": {
+   "STRING": "text"
+  },
+  "operator_contains": {
+   "STRING1": "text",
+   "STRING2": "text"
+  },
+  "operator_mod": {
+   "NUM1": "math_number",
+   "NUM2": "math_number"
+  },
+  "operator_round": {
+   "NUM": "math_number"
+  },
+  "operator_mathop": {
+   "NUM": "math_number"
+  },
+  "extension_music_drum": {
+   "NUMBER": "math_number"
+  },
+  "extension_wedo_tilt_reporter": {
+   "TILT": "extension_wedo_tilt_menu"
+  },
+  "extension_microbit_display": {
+   "MATRIX": "matrix"
+  },
+  "extension_music_play_note": {
+   "NOTE": "note",
+   "BEATS": "math_number"
+  }
  },
  "menuShadowByArg": {
   "boost_motorOnFor": {

@@ -110,6 +110,74 @@ console.log(JSON.stringify(state, null, 1));
 check('x = 10', state.variables.x === 10, `实际 ${JSON.stringify(state.variables.x)}`);
 check('log = [10]', JSON.stringify(state.lists.log) === '[10]', `实际 ${JSON.stringify(state.lists.log)}`);
 
+// === 克隆体不能污染角色列表（用假 VM 精确验，真 VM 造克隆体在无头环境不稳）===
+// 用户实际踩到：跑一次星空之后，角色清单里冒出上百个同名「角色1」（全是克隆体）。
+const fakeTarget = (name, opts = {}) => {
+  const {isStage = false, isClone = false, variables = [], lists = [], scriptCount = 0} = opts;
+  const vars = {};
+  for (const v of variables) vars[v] = {name: v, id: v};
+  for (const l of lists) vars[l] = {name: l, id: l, type: 'list'};
+  return {
+    name,
+    getName: () => name,
+    isStage,
+    isClone,
+    variables: vars,
+    blocks: {
+      _blocks: {},
+      getScripts: () => new Array(scriptCount).fill({})
+    },
+    getCostumes: () => [{name: 'costume1'}],
+    currentCostume: 0,
+    x: 0, y: 0, direction: 90, size: 100, visible: true,
+    lookupVariableById: () => null
+  };
+};
+const fakeStage = fakeTarget('Stage', {isStage: true, variables: ['score']});
+const fakeSprite = fakeTarget('角色1', {variables: ['hp'], scriptCount: 2});
+const fakeClones = [1, 2, 3].map(() => fakeTarget('角色1', {isClone: true, scriptCount: 2}));
+const fakeVm = {
+  runtime: {
+    targets: [fakeStage, fakeSprite, ...fakeClones],
+    getTargetForStage: () => fakeStage,
+    editingTarget: fakeSprite
+  }
+};
+const fakePort = createScratchPort({vm: fakeVm, getWorkspace: () => null});
+check('克隆体不进 ls 清单（3 个克隆体只列 2 个真角色）',
+  fakePort.listSpritesDetailed().length === 2,
+  fakePort.listSpritesDetailed().map(t => t.name).join('、'));
+check('克隆体不进 readState',
+  fakePort.readState().sprites.length === 1, `${fakePort.readState().sprites.length} 个角色`);
+check('报错清单用的是真名（不带「（舞台）」装饰）',
+  fakePort.listSprites().map(s => s.name).join('、') === 'Stage、角色1',
+  fakePort.listSprites().map(s => s.name).join('、'));
+check('名字匹配容忍「Stage（舞台）」这种抄法',
+  fakePort.readTarget('Stage（舞台）') !== null && fakePort.readTarget(' Stage ') !== null);
+
+// === 影子积木不算扩展；按键帽子块必须是核心块 ===
+const cloneTool = tools.find(t => t.name === 'xce_write_script');
+// 回归：`when [space v] key pressed` 曾被翻成 makeymakey 的块，于是「没加载扩展」被拒；
+// `change [ghost v] effect by (-4)` 的 math_number 影子曾让错误里写着「缺少扩展 math」。
+const ghostScript = 'when [space v] key pressed\nchange [ghost v] effect by (-4)';
+const ghostWrite = await cloneTool.handler({sprite: 'Sprite1', text: ghostScript}, {});
+check('按键帽子块 + 数字影子积木能正常写入（不被误报缺扩展）',
+  !ghostWrite.isError && !ghostWrite.content.includes('没有写入'), String(ghostWrite.content).slice(0, 90));
+const writtenOpcodes = Object.values(vm.runtime.targets.find(t => !t.isStage).blocks._blocks)
+  .map(b => b.opcode);
+check('写进去的是核心按键块与核心效果块',
+  writtenOpcodes.includes('event_whenkeypressed') && writtenOpcodes.includes('looks_changeeffectby') &&
+  !writtenOpcodes.some(o => /makeymakey|^unknown_/.test(o)),
+  writtenOpcodes.join(', '));
+const effectBlock = Object.values(vm.runtime.targets.find(t => !t.isStage).blocks._blocks)
+  .find(b => b.opcode === 'looks_changeeffectby');
+check('效果字段是字段（不是挂了个 math_number 的坏块）',
+  !!effectBlock && !!effectBlock.fields.EFFECT && !effectBlock.inputs.EFFECT,
+  JSON.stringify(effectBlock && {fields: Object.keys(effectBlock.fields), inputs: Object.keys(effectBlock.inputs)}));
+check('读回来的效果块是下拉形状（不是 (GHOST)）',
+  /\[ghost v\]/i.test(port.readTarget('Sprite1').text) && !port.readTarget('Sprite1').text.includes('(GHOST)'),
+  port.readTarget('Sprite1').text.split('\n').slice(0, 2).join(' / '));
+
 // === xce_read_stage：视觉模型给图，非视觉模型给一句能转述的话 ===
 // 无头环境没有 renderer，用一个桩顶上（真实浏览器里走 renderer.requestSnapshot）
 const readStage = tools.find(t => t.name === 'xce_read_stage');
@@ -159,6 +227,20 @@ const small = await executeTool(
   {}
 );
 check('没超限的结果原样通过', small.content === '短结果', small.content);
+
+// === 「跑着跑着突然停了」的几种原因，runTurn 都要带 reason 出来 ===
+const alwaysTool = {
+  complete: async () => ({text: '', toolCalls: [{id: 'x', name: 'xce_list_sprites', input: {}}], finishReason: 'tool_calls'})
+};
+const stepped = await runTurn({session: createSession(), model: alwaysTool, tools, maxSteps: 2});
+check('到步数上限带 reason=steps', stepped.reason === 'steps',
+  `reason=${stepped.reason} steps=${stepped.steps}`);
+const capped = {complete: async () => ({text: '', toolCalls: [], finishReason: 'length'})};
+const len = await runTurn({session: createSession(), model: capped, tools});
+check('输出被 max_tokens 掐断带 reason=length', len.reason === 'length', `reason=${len.reason}`);
+const silent = {complete: async () => ({text: '', toolCalls: [], finishReason: null})};
+const emptyReply = await runTurn({session: createSession(), model: silent, tools});
+check('空响应带 reason=empty', emptyReply.reason === 'empty', `reason=${emptyReply.reason}`);
 
 // 缺参数的错误要给模型自我纠正的信息（第一次调用常见参数名编错，比如 text 写成 script）
 const badParams = await executeTool(

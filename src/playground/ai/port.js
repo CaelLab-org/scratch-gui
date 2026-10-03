@@ -90,6 +90,13 @@ const CORE_PREFIXES = new Set([
     'operator', 'data', 'procedures', 'argument'
 ]);
 
+// 影子积木（数字/文本/颜色这些内联的）前缀也不在 CORE_PREFIXES 里，但它们**不是扩展**：
+// math_number 的前缀是 math、colour_picker 是 colour…… 曾把它们当成没加载的扩展，
+// 于是「透明度」这类普通积木被拒，错误里写着「扩展（math）」。
+const SHADOW_PREFIXES = new Set(['math', 'colour', 'text', 'note', 'matrix']);
+// 转换器没认出来的积木（serialize.js 的兜底 opcode），同样不是扩展
+const UNKNOWN_OPCODE = 'unknown_block';
+
 /**
  * 建一个绑定到 vm 的 port
  * @param {object} opts  vm: scratch-vm 实例；getWorkspace: 取 Blockly 主工作区（整理布局用，可空）
@@ -97,8 +104,22 @@ const CORE_PREFIXES = new Set([
  */
 export const createScratchPort = ({vm, getWorkspace}) => {
     const runtime = () => vm.runtime;
-    const findTarget = name => runtime().targets.find(t => t.getName && t.getName() === name);
     const stage = () => runtime().getTargetForStage();
+
+    // 只有「真正的角色」算数：**克隆体不算**。克隆体是运行期的临时物（跑一次星空能冒出上百个），
+    // 它们混进角色列表后，AI 看到的清单里会有几十上百个同名「角色1」，既刷屏又没法操作
+    // （它们没有独立的编辑工作区，写进去的东西按设计本来就留不下来）。
+    const realTargets = () => runtime().targets.filter(t => !t.isClone);
+
+    // 名字匹配要宽容：清单里为了区分舞台写成「Stage（舞台）」，模型会连着括号一起抄回来。
+    const normalizeName = raw => String(raw === void 0 || raw === null ? '' : raw)
+        .trim()
+        .replace(/[（(]\s*舞台\s*[)）]$/, '')
+        .trim();
+    const findTarget = rawName => {
+        const name = normalizeName(rawName);
+        return realTargets().find(t => t.getName && t.getName() === name) || null;
+    };
 
     const splitVars = target => {
         const variables = {};
@@ -137,7 +158,7 @@ export const createScratchPort = ({vm, getWorkspace}) => {
     };
 
     // 给系统提示词用的轻量项目概况：只数脚本段数，不渲染积木文本
-    const describeProject = () => runtime().targets.map(t => ({
+    const describeProject = () => realTargets().map(t => ({
         name: t.getName(),
         isStage: !!t.isStage,
         scriptCount: t.blocks && t.blocks.getScripts ? t.blocks.getScripts().length : 0
@@ -157,10 +178,10 @@ export const createScratchPort = ({vm, getWorkspace}) => {
 
     const port = {
         listSprites: () =>
-            runtime().targets.map(t => ({name: t.getName(), isStage: t.isStage, id: t.id})),
+            realTargets().map(t => ({name: t.getName(), isStage: t.isStage, id: t.id})),
 
         // ls 用的轻量清单：名字/脚本数/变量名/列表名，绝不渲染积木文本
-        listSpritesDetailed: () => runtime().targets.map(t => {
+        listSpritesDetailed: () => realTargets().map(t => {
             const {variables, lists} = splitVars(t);
             return {
                 name: t.getName(),
@@ -217,9 +238,29 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             // 用到了没加载的扩展就直接拒绝写入，把该加载哪个扩展告诉调用方，
             // 由 AI 转告用户去左下角添加。
             const needed = new Set();
+            const unknown = [];
             for (const block of Object.values(converted.blocks)) {
-                const prefix = String(block.opcode).split('_')[0];
-                if (!CORE_PREFIXES.has(prefix)) needed.add(prefix);
+                const opcode = String(block.opcode);
+                if (opcode === UNKNOWN_OPCODE) {
+                    // 转换器没认出来：这是「工具不认识这段写法」，不是扩展问题，单独说清楚
+                    unknown.push(opcode);
+                    continue;
+                }
+                const prefix = opcode.split('_')[0];
+                if (SHADOW_PREFIXES.has(prefix) || CORE_PREFIXES.has(prefix)) continue;
+                needed.add(prefix);
+            }
+            // 有认不出的积木就整体拒绝：写进去只会变成灰块，还会把用户的脚本弄乱
+            if (unknown.length) {
+                return {
+                    blockIds: [],
+                    topBlockIds: [],
+                    createdVariables: [],
+                    createdLists: [],
+                    missingExtensions: [],
+                    unrecognized: true,
+                    warnings: converted.warnings
+                };
             }
             const loaded = loadedExtensionIds();
             const missingExtensions = [...needed].filter(id => !loaded.includes(id));
@@ -291,7 +332,8 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             const sprites = [];
             const variables = {};
             const lists = {};
-            for (const target of runtime().targets) {
+            // 克隆体不列：跑一次星空能留下上百个，读状态会变成一屏同名条目（用户实际踩到过）
+            for (const target of realTargets()) {
                 if (target.isStage) {
                     for (const variable of Object.values(target.variables)) {
                         if (!variable) continue;

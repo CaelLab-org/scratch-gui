@@ -388,45 +388,57 @@ export const fetchProviderModels = async ({providerId, baseUrl, apiKey, signal})
 
 // 内部消息 -> OpenAI 兼容的线上消息。工具的入参在这里才序列化成字符串。
 //
-// reasoning_content 必须回传：开思考时，带 tool_calls 的 assistant 消息要把它原样带回去，
-// 否则下一轮 400（实测）。只有不带工具调用的普通回复不用回传，省上下文。
-export const toWireMessages = messages => messages.map(message => {
-    if (message.role === 'tool') {
-        const images = message.images || [];
-        if (!images.length) {
+// reasoning_content 的取舍：接口要求带 tool_calls 的 assistant 消息必须回传思考内容，
+// 否则 400。但把**每一轮**的思考都带上会越滚越大（用户明确要求思考别堆进历史）。
+// 折中（实测 200）：只回传**最后一条**带工具调用的 assistant 消息的思考，更早的剥掉 ——
+// 接口接受，老的思考本来就是死重。
+export const toWireMessages = messages => {
+    let lastReasoningIndex = -1;
+    messages.forEach((message, index) => {
+        if (message.role === 'assistant' && message.toolCalls && message.toolCalls.length && message.reasoning) {
+            lastReasoningIndex = index;
+        }
+    });
+    return messages.map((message, index) => {
+        if (message.role === 'tool') {
+            const images = message.images || [];
+            if (!images.length) {
+                return {
+                    role: 'tool',
+                    tool_call_id: message.toolCallId,
+                    content: String(message.content === void 0 ? '' : message.content)
+                };
+            }
+            // 图片走 content 数组：实测 DeepSeek 认得这种写法
             return {
                 role: 'tool',
                 tool_call_id: message.toolCallId,
-                content: String(message.content === void 0 ? '' : message.content)
+                content: [
+                    {type: 'text', text: String(message.content || '')},
+                    ...images.map(image => ({
+                        type: 'image_url',
+                        image_url: {url: image.url}
+                    }))
+                ]
             };
         }
-        // 图片走 content 数组：实测 DeepSeek 认得这种写法
-        return {
-            role: 'tool',
-            tool_call_id: message.toolCallId,
-            content: [
-                {type: 'text', text: String(message.content || '')},
-                ...images.map(image => ({
-                    type: 'image_url',
-                    image_url: {url: image.url}
-                }))
-            ]
-        };
-    }
-    if (message.role === 'assistant') {
-        const wire = {role: 'assistant', content: message.content || null};
-        if (message.toolCalls && message.toolCalls.length) {
-            wire.tool_calls = message.toolCalls.map(call => ({
-                id: call.id,
-                type: 'function',
-                function: {name: call.name, arguments: JSON.stringify(call.input || {})}
-            }));
-            if (message.reasoning) wire.reasoning_content = message.reasoning;
+        if (message.role === 'assistant') {
+            const wire = {role: 'assistant', content: message.content || null};
+            if (message.toolCalls && message.toolCalls.length) {
+                wire.tool_calls = message.toolCalls.map(call => ({
+                    id: call.id,
+                    type: 'function',
+                    function: {name: call.name, arguments: JSON.stringify(call.input || {})}
+                }));
+                if (index === lastReasoningIndex && message.reasoning) {
+                    wire.reasoning_content = message.reasoning;
+                }
+            }
+            return wire;
         }
-        return wire;
-    }
-    return {role: message.role, content: message.content};
-});
+        return {role: message.role, content: message.content};
+    });
+};
 
 export const toWireTools = tools => tools.map(tool => ({
     type: 'function',

@@ -177,8 +177,16 @@ const extractShadows = () => {
   const blockRe = /<block\s+type="([^"]+)"[^>]*>([\s\S]*?)<\/block>/g;
   let m;
   while ((m = blockRe.exec(src))) {
-    const shadows = [...m[2].matchAll(/<shadow\s+type="([^"]+)"/g)].map(x => x[1]);
-    if (shadows.length) map[m[1]] = shadows;
+    // 影子必须**按槽位名**记，不能只按出现顺序：
+    // looks_changeeffectby 只有 CHANGE 槽带 math_number 影子，按顺序取第一个就会把这个
+    // 数字影子错配给 EFFECT 槽 —— 写进项目里的效果字段变成「挂了个 math_number」的坏块。
+    const bySlot = {};
+    // 工具箱是**字符串拼出来**的 JS：'<value name="X">' + '<shadow type="Y">'，
+    // 中间夹着 `' +\n        '`，所以槽位名和 shadow 之间要容忍一小段任意字符。
+    const valueRe = /<value\s+name="([^"]+)"[^>]*>[\s\S]{0,120}?<shadow\s+type="([^"]+)"/g;
+    let v;
+    while ((v = valueRe.exec(m[2]))) bySlot[v[1]] = v[2];
+    if (Object.keys(bySlot).length) map[m[1]] = bySlot;
   }
   return map;
 };
@@ -204,6 +212,12 @@ const VM_EXT_DIR = resolveVmExtensions();
 const spec = {};
 const menuValues = {};
 const idToOpcode = {};
+// 扩展先扫（要拿菜单值），但 id -> opcode 的映射**必须核心优先**：
+// 有些扩展积木的文本跟核心积木一模一样（Makey Makey 的「当按下按键」= 事件类的「当按下按键」），
+// 按归一化文本对齐时会撞上。撞了要以核心为准，否则会出现
+// `when [space v] key pressed` 被翻成 makeymakey_whenMakeyKeyPressed、项目里却没加载扩展的怪事。
+const extIdToOpcode = {};
+const idCollisions = [];
 
 const extractExtensions = () => {
   const blocks = {};        // opcode -> {sbId, args, menus}
@@ -270,7 +284,7 @@ const extractExtensions = () => {
       blocks[opcode] = {sbId: sbByNormText[norm(block.text)] || null, args, menus: menuOf};
 
       const sbId = blocks[opcode].sbId;
-      if (sbId && !(sbId in idToOpcode)) idToOpcode[sbId] = opcode;
+      if (sbId && !(sbId in extIdToOpcode)) extIdToOpcode[sbId] = opcode;
       // 扩展块的槽位名就是参数名，顺序即定义顺序；全部是 input（菜单项另有影子块）
       if (!(opcode in spec)) {
         spec[opcode] = {
@@ -299,6 +313,15 @@ for (const [opcode, rec] of Object.entries(defs)) spec[opcode] = normalizeDef(re
 for (const [opcode, def] of Object.entries(psb.allBlocks)) {
   const key = def.translationKey || opcode.toUpperCase();
   if (!(key in idToOpcode)) idToOpcode[key] = opcode;
+}
+
+// 核心已经占住的 id，扩展一律让位；让位过哪些块记下来，构建时打出来（下次再撞能看见）
+for (const [sbId, opcode] of Object.entries(extIdToOpcode)) {
+  if (sbId in idToOpcode) {
+    idCollisions.push(`${sbId}：核心 ${idToOpcode[sbId]} 胜，扩展 ${opcode} 让位`);
+    continue;
+  }
+  idToOpcode[sbId] = opcode;
 }
 
 // 菜单显示文本 -> 内部值（英文）
@@ -363,6 +386,7 @@ console.log(`  messagePatches:  ${Object.keys(messagePatches).length}`);
 console.log(`  sbBlocks:        ${Object.keys(sbBlocks).length}`);
 console.log(`  扩展积木:        ${Object.keys(extensionBlocks).length}（对上 scratchblocks id 的：${Object.values(extensionBlocks).filter(b => b.sbId).length}）`);
 console.log(`  扩展明细:        ${extResult.summary.join(' | ')}`);
+console.log(`  id 冲突（核心优先）: ${idCollisions.length}${idCollisions.length ? `\n    - ${idCollisions.join('\n    - ')}` : ''}`);
 
 // 部分扩展（microbit / ev3 之类）会留下定时器，进程不会自己退出
 process.exit(0);
