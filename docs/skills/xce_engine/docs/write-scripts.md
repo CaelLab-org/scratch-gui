@@ -11,7 +11,8 @@ parameter shape or the block-text format.
 | `text` | string | The script in scratchblocks notation. May contain several scripts separated by blank lines. |
 
 There is **no** `script` parameter and no `code` parameter. Passing the code under any other name
-produces `错误：缺少参数 sprite, text` — the fix is to resend with `sprite` and `text`.
+produces `Error: missing parameter(s) sprite, text. The parameters of xce_write_script are: sprite, text.` —
+the fix is to resend with `sprite` and `text`.
 
 A call with `text` but no `sprite` fails the same way. There is no default sprite; if the user did not
 name one, use the `<current-sprite>` value or ask.

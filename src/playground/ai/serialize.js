@@ -221,7 +221,7 @@ export const textToBlocks = (text, ctx = {}) => {
         }
 
         if (!opcode) {
-            warnings.push(`不支持的积木：${sbBlock.info.id || sbBlock.info.selector || '未知'}（已跳过）`);
+            warnings.push(`Unsupported block: ${sbBlock.info.id || sbBlock.info.selector || 'unknown'} (skipped)`);
             const id = newId('u');
             blocks[id] = {opcode: 'unknown_block', next: null, parent, inputs: {}, fields: {}, shadow: false, topLevel};
             return id;
@@ -230,7 +230,7 @@ export const textToBlocks = (text, ctx = {}) => {
         const sbDef = meta.sbBlocks[sbBlock.info.id];
         const s = spec[opcode];
         if (!s || !sbDef) {
-            warnings.push(`没有参数表：${sbBlock.info.id} (${opcode})（已跳过）`);
+            warnings.push(`No parameter table: ${sbBlock.info.id} (${opcode}) (skipped)`);
             const id = newId('u');
             blocks[id] = {opcode, next: null, parent, inputs: {}, fields: {}, shadow: false, topLevel};
             return id;
@@ -247,14 +247,15 @@ export const textToBlocks = (text, ctx = {}) => {
 
         if (slotChildren.length !== placeholders.length) {
             warnings.push(
-                `${sbBlock.info.id}: 槽位数不符（解析出 ${slotChildren.length}，定义 ${placeholders.length}）`
+                `${sbBlock.info.id}: slot count mismatch ` +
+                `(parsed ${slotChildren.length}, defined ${placeholders.length})`
             );
         }
 
         for (let i = 0; i < placeholders.length; i++) {
             const slotName = slotNames[i];
             if (!slotName) {
-                warnings.push(`${sbBlock.info.id}: 第 ${i + 1} 个槽没有参数名`);
+                warnings.push(`${sbBlock.info.id}: slot ${i + 1} has no parameter name`);
                 continue;
             }
             fillSlot(block, id, slotName, sbDef.slotTypes[i], slotChildren[i], opcode);
@@ -322,7 +323,7 @@ export const targetBlocksToText = target => {
         try {
             parts.push(psb.toScratchblocks(id, blocks, 'en', {tab: '  '}));
         } catch (e) {
-            warnings.push(`渲染 ${id} 失败：${e && e.message}`);
+            warnings.push(`Failed to render ${id}: ${e && e.message}`);
         }
     }
     return {text: parts.join('\n\n'), warnings};

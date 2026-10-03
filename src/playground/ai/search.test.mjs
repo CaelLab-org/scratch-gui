@@ -47,19 +47,19 @@ const SAMPLE = {
 // ---------- 1. 整形：来源写清楚、结果页地址在顶行 ----------
 {
     const text = formatSearchResult(SAMPLE);
-    check('顶行是「来自 CaelLabSearch」+ 结果页地址',
-        text.startsWith('来自 CaelLabSearch（caellab.click）：https://caellab.click/s/TurboWarp'),
+    check('顶行是「From CaelLabSearch」+ 结果页地址',
+        text.startsWith('From CaelLabSearch (caellab.click): https://caellab.click/s/TurboWarp'),
         JSON.stringify(text.split('\n')[0]));
     check('写明结果由 CaelLabSearch 提供、不是模型记忆',
-        text.includes('由 CaelLabSearch 提供') && text.includes('不是你的记忆'));
-    check('标注转述时要说明来源', text.includes('来源是 CaelLabSearch'));
-    check('报总数与条数', text.includes('共约 539 条') && text.includes('前 2 条'));
+        text.includes('comes from CaelLabSearch') && text.includes('not from your memory'));
+    check('标注转述时要说明来源', text.includes('say so when you pass it on'));
+    check('报总数与条数', text.includes('about 539 results') && text.includes('first 2'));
     check('高亮标签被剥掉', !/<mark>/.test(text) && text.includes('Intro | TurboWarp Documentation'));
     check('每条都有序号 / 站点 / 链接 / 摘要',
         text.includes('1. Intro | TurboWarp Documentation') &&
-        text.includes('站点：TurboWarp 文档 · docs.turbowarp.org') &&
-        text.includes('链接：https://docs.turbowarp.org/') &&
-        text.includes('摘要：TurboWarp is a mod of Scratch'));
+        text.includes('site: TurboWarp 文档 · docs.turbowarp.org') &&
+        text.includes('URL: https://docs.turbowarp.org/') &&
+        text.includes('snippet: TurboWarp is a mod of Scratch'));
 }
 
 // ---------- 2. 条数与两个上限 ----------
@@ -81,16 +81,21 @@ const SAMPLE = {
     const titleLine = text.split('\n').find(line => /^1\. /.test(line)).slice(3);
     check(`标题截到 ${TITLE_CAP} 字（+省略号）`, titleLine.length <= TITLE_CAP + 1 && titleLine.endsWith('…'),
         String(titleLine.length));
-    const descLine = text.split('\n').find(line => line.trim().startsWith('摘要：')).trim();
+    // 量的是值本身，前缀（"snippet: "）不算长度
+    const descLine = text.split('\n').map(line => line.trim())
+        .find(line => line.startsWith('snippet:'))
+        .slice('snippet:'.length)
+        .trim();
     check(`摘要截到 ${DESC_CAP} 字（+省略号）`,
-        descLine.length <= DESC_CAP + 4 && descLine.endsWith('…'), String(descLine.length));
-    check('结果比总数少时提示可以换词再搜', text.includes('要更多结果可以换更具体的词'));
+        descLine.length <= DESC_CAP + 1 && descLine.endsWith('…'), String(descLine.length));
+    check('结果比总数少时提示可以换词再搜', text.includes('search again with a more specific query'));
 }
 
 // ---------- 3. 没搜到 / 被安全搜索拦掉，措辞必须分开 ----------
 {
     const empty = formatSearchResult({...SAMPLE, total: 0, results: []});
-    check('没搜到：说明没结果且不许编', empty.includes('没有搜到「TurboWarp」') && empty.includes('别编造内容'));
+    check('没搜到：说明没结果且不许编',
+        empty.includes('found no results for "TurboWarp"') && empty.includes('Do not make anything up'));
 
     const blocked = formatSearchResult({
         ...SAMPLE,
@@ -99,7 +104,8 @@ const SAMPLE = {
         safety: {level: 2, blocked: true}
     });
     check('被拦下不等于没搜到（文案分开）',
-        blocked.includes('安全搜索整体拦下') && !blocked.includes('没有搜到'), JSON.stringify(blocked));
+        blocked.includes("blocked outright by CaelLabSearch's safe search") &&
+        !blocked.includes('found no results'), JSON.stringify(blocked));
 }
 
 // ---------- 4. 成功链路：真 fetch 形状 ----------
@@ -129,12 +135,12 @@ const failuresExpected = async (label, response, pattern) => {
 
 await failuresExpected('429 说「很忙」并给等待秒数',
     {ok: false, status: 429, headers: {get: () => '60'}},
-    /很忙.*60\s*秒/);
+    /busy.*about 60s/);
 await failuresExpected('500 报 HTTP 状态', {ok: false, status: 500}, /HTTP 500/);
 await failuresExpected('响应不是 JSON 时明说',
     {ok: true, status: 200, json: async () => {
         throw new Error('Unexpected token <');
-    }}, /不是合法的 JSON/);
+    }}, /not valid JSON/);
 await failuresExpected('ok:false 带出接口的错误信息',
     okResponse({ok: false, error: 'busy'}), /busy/);
 
@@ -150,9 +156,9 @@ try {
         message = e.message;
     }
     check('连不上时提醒可能是跨域，并让用户自己去 caellab.click',
-        !!message && /CaelLabSearch/.test(message) && /跨域/.test(message) && message.includes('https://caellab.click/'),
+        !!message && /CaelLabSearch/.test(message) && /CORS/.test(message) && message.includes('https://caellab.click/'),
         message);
-    check('绝不返回空结果假装没搜到', !/没有搜到/.test(message));
+    check('绝不返回空结果假装没搜到', !/found no results/.test(message));
 } finally {
     globalThis.fetch = originalFetch;
 }
@@ -165,7 +171,7 @@ try {
     } catch (e) {
         message = e.message;
     }
-    check('空关键词报错', !!message && /关键词/.test(message), message);
+    check('空关键词报错', !!message && /keyword/.test(message), message);
 } finally {
     globalThis.fetch = originalFetch;
 }
@@ -185,7 +191,7 @@ try {
     globalThis.fetch = async () => okResponse(SAMPLE);
     try {
         const result = await tool.handler({query: 'TurboWarp'}, {});
-        check('handler 正常路径回 content', !result.isError && result.content.includes('来自 CaelLabSearch'));
+        check('handler 正常路径回 content', !result.isError && result.content.includes('From CaelLabSearch'));
     } finally {
         globalThis.fetch = originalFetch;
     }
@@ -196,7 +202,7 @@ try {
     try {
         const result = await tool.handler({query: 'TurboWarp'}, {});
         check('handler 失败路径收成 isError（别让循环炸）',
-            result.isError === true && /跨域/.test(result.content), String(result.content).slice(0, 50));
+            result.isError === true && /CORS/.test(result.content), String(result.content).slice(0, 50));
     } finally {
         globalThis.fetch = originalFetch;
     }

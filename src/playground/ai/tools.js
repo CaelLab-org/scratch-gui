@@ -4,8 +4,8 @@
  * 两条规矩：
  *   1. 全部只通过 ScratchPort 访问项目，不直接碰 VM / Blockly —— 同一套工具能跑在浏览器
  *      （真 VM）和无头环境（headless scratch-vm / 假 port）里。
- *   2. **description 用英文写**（和系统提示词一样，指令稳定性更好、也更省 token），
- *      但返回给模型看的 content 用中文 —— 那些字还要原样显示在界面的工具卡上给用户看。
+ *   2. **description 和返回内容都用英文写**（和系统提示词一样，指令稳定性更好、也更省 token），
+ *      中文只留在界面上 —— 工具卡上的名字、状态这些由 panel.jsx 自己拼，跟这里的 content 无关。
  *
  * 结果形状：{content, isError?, undo?, images?}。images 是 [{url, mimeType}]，
  * 只有当前模型收图片时才会被填上（见 xce_read_stage）。
@@ -21,14 +21,15 @@ const fail = content => ({content, isError: true});
 // 模型会连着括号一起当成角色名抄回来，然后一直找不到。
 const listSprites = port =>
     port.listSprites().map(s => s.name)
-        .join('、');
+        .join(', ');
 
 // 一行一个角色的清单（ls）。只给名字/数量/变量名，绝不带代码 —— 代码必须按角色单独读
 const listSpritesDetailed = port => port.listSpritesDetailed()
     .map(t => {
-        const head = `- ${t.name}${t.isStage ? '（舞台）' : ''}：${t.scriptCount} 段脚本`;
-        const vars = t.variables.length ? `，变量：${t.variables.join('、')}` : '';
-        const lists = t.lists.length ? `，列表：${t.lists.join('、')}` : '';
+        const head = `- ${t.name}${t.isStage ? ' (the stage)' : ''}: ${t.scriptCount} ` +
+            `script${t.scriptCount === 1 ? '' : 's'}`;
+        const vars = t.variables.length ? `, variables: ${t.variables.join(', ')}` : '';
+        const lists = t.lists.length ? `, lists: ${t.lists.join(', ')}` : '';
         return `${head}${vars}${lists}`;
     })
     .join('\n');
@@ -103,7 +104,7 @@ export const createTools = ({port, skills = []}) => {
                 'xce_read_project. The project contents are NOT given to you up front — always discover them.',
             readOnly: true,
             inputSchema: {type: 'object', properties: {}},
-            handler: () => ok(listSpritesDetailed(port) || '（项目里还没有角色）')
+            handler: () => ok(listSpritesDetailed(port) || '(this project has no sprites yet)')
         },
 
         {
@@ -130,33 +131,37 @@ export const createTools = ({port, skills = []}) => {
             handler: ({sprite, lineStart, lineEnd}) => {
                 if (!sprite) {
                     // 没带角色名：只给清单，绝不一口气倒出全部代码
-                    return ok(`${listSpritesDetailed(port)}\n\n要读某个角色的积木代码，带 sprite 参数再调一次（一次只读一个角色）。`);
+                    return ok(`${listSpritesDetailed(port)}\n\nTo read a sprite's blocks, call again with the ` +
+                        'sprite parameter (one sprite per call).');
                 }
                 const target = port.readTarget(sprite);
-                if (!target) return fail(`找不到角色「${sprite}」。现有：${listSprites(port)}`);
+                if (!target) return fail(`No sprite named "${sprite}". Existing sprites: ${listSprites(port)}`);
 
                 const allLines = String(target.text || '').split('\n');
                 const total = allLines.length;
                 let lines = allLines;
-                let shown = `第 1–${total} 行`;
+                let shown = `lines 1-${total}`;
                 const start = Number(lineStart);
                 const end = Number(lineEnd);
                 if (start > 0 || end > 0) {
                     const s = Math.max(1, Math.floor(start || 1));
                     const e = Math.min(total, Math.floor(end || total));
-                    if (s > e) return fail(`行范围不对：${s}–${e}。行号从 1 开始，lineEnd 要 ≥ lineStart。`);
+                    if (s > e) {
+                        return fail(`Bad line range: ${s}-${e}. Lines are 1-based, and lineEnd must be ` +
+                            'greater than or equal to lineStart.');
+                    }
                     lines = allLines.slice(s - 1, e);
-                    shown = `第 ${s}–${e} 行`;
+                    shown = `lines ${s}-${e}`;
                 }
 
-                const header = [`# ${sprite}（${shown}，共 ${total} 行）`];
+                const header = [`# ${sprite} (${shown}, ${total} line${total === 1 ? '' : 's'} total)`];
                 if (Object.keys(target.variables).length) {
-                    header.push(`变量：${Object.keys(target.variables).join('、')}`);
+                    header.push(`Variables: ${Object.keys(target.variables).join(', ')}`);
                 }
                 if (Object.keys(target.lists).length) {
-                    header.push(`列表：${Object.keys(target.lists).join('、')}`);
+                    header.push(`Lists: ${Object.keys(target.lists).join(', ')}`);
                 }
-                return ok(`${header.join('\n')}\n${lines.join('\n') || '（这个角色还没有积木）'}`);
+                return ok(`${header.join('\n')}\n${lines.join('\n') || '(this sprite has no blocks yet)'}`);
             }
         },
 
@@ -179,29 +184,34 @@ export const createTools = ({port, skills = []}) => {
             },
             handler: async ({sprite, text}) => {
                 const target = port.readTarget(sprite);
-                if (!target) return fail(`找不到角色「${sprite}」。现有：${listSprites(port)}`);
+                if (!target) return fail(`No sprite named "${sprite}". Existing sprites: ${listSprites(port)}`);
                 const result = await port.writeScript(sprite, text);
-                const lines = [`已在「${sprite}」写入 ${result.blockIds.length} 段脚本。`];
-                if (result.createdVariables.length) lines.push(`新建变量：${result.createdVariables.join('、')}`);
-                if (result.createdLists.length) lines.push(`新建列表：${result.createdLists.join('、')}`);
+                const count = result.blockIds.length;
+                const lines = [`Wrote ${count} script${count === 1 ? '' : 's'} into "${sprite}".`];
+                if (result.createdVariables.length) lines.push(`New variables: ${result.createdVariables.join(', ')}`);
+                if (result.createdLists.length) lines.push(`New lists: ${result.createdLists.join(', ')}`);
                 if (result.unrecognized) {
                     // 转换器认不出的写法：跟缺扩展根本不是一回事，别把两种原因混在一起说
                     return fail(
-                        `没有写入：这段文本里有工具**认不出来**的积木写法，它的警告是：\n- ` +
+                        `Nothing was written: this text uses block syntax the tool does **not recognize**. ` +
+                        `Its warnings were:\n- ` +
                         `${result.warnings.map(w => String(w)).join('\n- ')}\n` +
-                        `请对照积木选择框里的真实名字改写（常见错法：自己造了积木名、把中文名混进来了），` +
-                        `或者先 xce_read_project 看看已有脚本是怎么写的，照那个写法来。`
+                        `Rewrite it with the real names from the block palette (common mistakes: inventing a ` +
+                        `block name, or mixing in a translated name). Or call xce_read_project first and copy ` +
+                        `how the existing scripts are written.`
                     );
                 }
                 if (result.missingExtensions && result.missingExtensions.length) {
                     return fail(
-                        `没有写入：这段积木用到了当前项目**没有加载**的扩展（${result.missingExtensions.join('、')}）。` +
-                        `我不能替用户加扩展，那会改掉他的项目。请告诉用户这么操作：先点面板顶部最左边那个` +
-                        `「收起面板」按钮把 AI 面板收起来，露出左下角的「添加扩展」，选中对应扩展，` +
-                        `再点「AI 对话」把面板放回来，然后让你重来一次。也可以换一种不用扩展的写法。`
+                        `Nothing was written: these blocks need an extension the project has **not loaded** ` +
+                        `(${result.missingExtensions.join(', ')}). You must not load an extension yourself — ` +
+                        `that would modify the user's project. Tell the user to do this: click the leftmost ` +
+                        `button at the top of the panel (「收起面板」) to hide the AI panel, click 「添加扩展」 ` +
+                        `at the bottom-left, pick the extension, click 「AI 对话」 to bring the panel back, and ` +
+                        `then ask you to try again. Or use blocks that need no extension.`
                     );
                 }
-                if (result.warnings.length) lines.push(`警告：\n- ${result.warnings.join('\n- ')}`);
+                if (result.warnings.length) lines.push(`Warnings:\n- ${result.warnings.join('\n- ')}`);
                 if (!result.blockIds.length) return fail(lines.join('\n'));
                 return {
                     content: lines.join('\n'),
@@ -229,7 +239,9 @@ export const createTools = ({port, skills = []}) => {
             },
             handler: async ({sprite, topBlockId}) => {
                 const removed = await port.deleteScript(sprite, topBlockId);
-                return removed ? ok(`已删除「${sprite}」里的脚本 ${topBlockId}。`) : fail(`没有找到脚本 ${topBlockId}。`);
+                return removed ?
+                    ok(`Deleted script ${topBlockId} from "${sprite}".`) :
+                    fail(`No script ${topBlockId} was found.`);
             }
         },
 
@@ -247,9 +259,9 @@ export const createTools = ({port, skills = []}) => {
             },
             handler: async ({seconds}) => {
                 const outcome = await port.runProject(Math.max(0.2, Math.min(30, seconds || 3)), {});
-                if (outcome === 'timeout') return ok('项目仍在运行（已到等待上限）。');
-                if (outcome === 'stopped') return ok('项目已停止。');
-                return ok('项目跑完了。');
+                if (outcome === 'timeout') return ok('The project is still running (the wait limit was reached).');
+                if (outcome === 'stopped') return ok('The project was stopped.');
+                return ok('The project finished running.');
             }
         },
 
@@ -266,15 +278,19 @@ export const createTools = ({port, skills = []}) => {
                 const lines = [];
                 for (const sprite of state.sprites) {
                     lines.push(
-                        `${sprite.name}：x=${sprite.x} y=${sprite.y} 方向=${sprite.direction} 大小=${sprite.size}% ` +
-                        `显示=${sprite.visible ? '是' : '否'} 造型=${sprite.costume}`
+                        `${sprite.name}: x=${sprite.x} y=${sprite.y} direction=${sprite.direction} ` +
+                        `size=${sprite.size}% visible=${sprite.visible ? 'yes' : 'no'} costume=${sprite.costume}`
                     );
                 }
                 const vars = Object.entries(state.variables);
-                if (vars.length) lines.push(`变量：${vars.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('，')}`);
+                if (vars.length) {
+                    lines.push(`Variables: ${vars.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')}`);
+                }
                 const lists = Object.entries(state.lists);
-                if (lists.length) lines.push(`列表：${lists.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('，')}`);
-                return ok(lines.join('\n') || '（没有可读的状态）');
+                if (lists.length) {
+                    lines.push(`Lists: ${lists.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')}`);
+                }
+                return ok(lines.join('\n') || '(nothing to read)');
             }
         },
 
@@ -291,16 +307,19 @@ export const createTools = ({port, skills = []}) => {
             handler: async (input, ctx = {}) => {
                 const dataUrl = await port.snapshotStage();
                 if (!dataUrl) {
-                    return fail('截屏失败：渲染器没有在超时前给出画面。项目可能还没渲染过哪怕一帧，先 xce_run_project 再试。');
+                    return fail('Screenshot failed: the renderer produced no frame before the timeout. The ' +
+                        'project may not have rendered a single frame yet — call xce_run_project first, then retry.');
                 }
                 const size = port.stageSize();
-                const caption = `舞台截图（${size.width}x${size.height}，当前画面）。`;
+                const caption = `Stage screenshot (${size.width}x${size.height}, current frame).`;
                 if (!ctx.supportsImage) {
                     // 非视觉模型：不塞图片，改成一句能转述给用户的话
                     return ok(
-                        `${caption}但当前模型不支持图片输入，这张图没法给你看。\n` +
-                        `请转告用户：要让 AI 看舞台画面，得在面板的「设置 → 模型」里换一个支持看图的模型` +
-                        `（列表里标了「看图」的那些）。在那之前，你只能靠 xce_read_state 的数字判断。`
+                        `${caption} But the current model does not accept image input, so you cannot be shown ` +
+                        `this picture.\n` +
+                        `Tell the user: to let the AI see the stage, switch to a vision-capable model in the ` +
+                        `panel's Settings → Model (the ones marked 「看图」 in the list). Until then you can only ` +
+                        `judge from the numbers in xce_read_state.`
                     );
                 }
                 return {
@@ -325,9 +344,10 @@ export const createTools = ({port, skills = []}) => {
             readOnly: true,
             inputSchema: {type: 'object', properties: {}},
             handler: () => {
-                if (!skills.length) return ok('当前没有可用的资料。');
+                if (!skills.length) return ok('No reference documents are loaded.');
                 const lines = skills.map(skill => `- \`${skill.name}\` — ${skill.description}`);
-                return ok(`可用的一级能力（用 xce_read_fast_docs 加名字读全文）：\n${lines.join('\n')}`);
+                return ok(`Available skills (read one in full with xce_read_fast_docs and its name):\n` +
+                    `${lines.join('\n')}`);
             }
         },
 
@@ -363,10 +383,10 @@ export const createTools = ({port, skills = []}) => {
                     const doc = skill && (skill.docs || []).find(entry => entry.name === docName);
                     if (!doc) {
                         const own = skill ?
-                            `「${skillName}」的详细文档有：` +
-                            `${(skill.docs || []).map(entry => entry.name).join('、') || '（无）'}` :
-                            `没有叫「${skillName}」的资料，先调 xce_read_skill。`;
-                        return fail(`没有这篇详细文档：${wanted}。${own}`);
+                            `"${skillName}" has these detailed docs: ` +
+                            `${(skill.docs || []).map(entry => entry.name).join(', ') || '(none)'}` :
+                            `There is no skill called "${skillName}" — call xce_read_skill first.`;
+                        return fail(`No such detailed doc: ${wanted}. ${own}`);
                     }
                     return ok(doc.body);
                 }
@@ -374,16 +394,16 @@ export const createTools = ({port, skills = []}) => {
                 if (!skill) {
                     return fail(
                         skills.length ?
-                            `没有叫「${wanted}」的资料。先调 xce_read_skill 看有什么；` +
-                            `可用的有：${skills.map(entry => entry.name).join('、')}` :
-                            '当前没有可用的资料。'
+                            `There is no skill called "${wanted}". Call xce_read_skill to see what exists; ` +
+                            `available: ${skills.map(entry => entry.name).join(', ')}` :
+                            'No reference documents are loaded.'
                     );
                 }
                 // 简略版 + 它有哪些详细文档（详细文档必须主动来读，不喂提示词）
                 const docs = skill.docs || [];
                 const docLines = docs.map(entry => `- ${skill.name}/${entry.name}`).join('\n');
                 const docList = docs.length ?
-                    `\n\n详细文档（用 xce_read_fast_docs 读，名字形如 "${skill.name}/<文档名>"）：\n${docLines}` :
+                    `\n\nDetailed docs (read one with xce_read_fast_docs, named "${skill.name}/<doc>"):\n${docLines}` :
                     '';
                 return ok(`${skill.body}${docList}`);
             }
@@ -407,14 +427,16 @@ export const createTools = ({port, skills = []}) => {
                     const abs = Math.abs(offsetMin);
                     const hh = String(Math.floor(abs / 60)).padStart(2, '0');
                     const mm = String(abs % 60).padStart(2, '0');
-                    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-                    zone = `${tz}（UTC${sign}${hh}:${mm}），本地时间：${now.toLocaleString('zh-CN', {hour12: false})}`;
+                    const options = Intl.DateTimeFormat().resolvedOptions();
+                    zone = `${options.timeZone || 'unknown'} (UTC${sign}${hh}:${mm}), local time: ` +
+                        `${now.toLocaleString(options.locale, {hour12: false})}`;
                 } catch (e) {
                     // 拿不到时区就只给 UTC
                 }
-                const lines = [`当前 UTC 时间：${now.toISOString()}`];
-                if (zone) lines.push(`用户设备时区：${zone}`);
-                lines.push('[提醒] 你与用户可能有时差：对用户说时间时用上面的本地时间（或先换算），别把 UTC 直接当成用户的时间。');
+                const lines = [`Current UTC time: ${now.toISOString()}`];
+                if (zone) lines.push(`User device timezone: ${zone}`);
+                lines.push('[Note] You and the user may be in different timezones: when you tell the user a ' +
+                    'time, use the local time above (or convert first) — never pass UTC off as the user\'s time.');
                 return ok(lines.join('\n'));
             }
         },
@@ -446,23 +468,27 @@ export const createTools = ({port, skills = []}) => {
             handler: async ({seconds}, ctx = {}) => {
                 const wanted = Number(seconds);
                 if (!Number.isFinite(wanted) || wanted <= 0) {
-                    return fail('seconds 必须是大于 0 的数字（单位：秒）。想接着往下做就别调这个工具。');
+                    return fail('seconds must be a number greater than 0 (unit: seconds). If you want to keep ' +
+                        'going, do not call this tool.');
                 }
                 const total = Math.min(wanted, MAX_WAIT_SECONDS);
                 const elapsed = (await waitSeconds(total, ctx)).toFixed(1);
                 const clamped = wanted > MAX_WAIT_SECONDS ?
-                    `（你要求等 ${wanted} 秒，超过 ${MAX_WAIT_SECONDS} 秒上限，按上限等。）` : '';
+                    ` (you asked for ${wanted}s, above the ${MAX_WAIT_SECONDS}s ceiling, so the ceiling was ` +
+                    'used.)' : '';
                 if (ctx.signal && ctx.signal.aborted) {
-                    return ok(`等待被打断了（用户按了停止）：实际等了 ${elapsed} 秒。${clamped}`);
+                    return ok(`The wait was interrupted (the user pressed stop): it actually lasted ` +
+                        `${elapsed}s.${clamped}`);
                 }
                 if (ctx.skip && ctx.skip.skipped) {
                     return ok(
-                        `用户跳过了这次等待：实际只等了 ${elapsed} 秒（原本要等 ${total} 秒）。` +
-                        `别把那段时间当成已经过去。确实还需要时间的话，说清为什么，再等一次短的；` +
-                        `能边跑边等的（比如 xce_run_project）就别干等。${clamped}`
+                        `The user skipped this wait: only ${elapsed}s actually passed (of ${total}s). ` +
+                        `Do not treat that time as having elapsed. If you still need time, say why and wait ` +
+                        `again briefly; if something can run while you watch it (xce_run_project), do not sit ` +
+                        `idle.${clamped}`
                     );
                 }
-                return ok(`已等待约 ${total} 秒。${clamped}`);
+                return ok(`Waited about ${total}s.${clamped}`);
             }
         },
 
@@ -518,7 +544,7 @@ export const createTools = ({port, skills = []}) => {
                 try {
                     return await searchCaelLab(query, {signal: ctx.signal});
                 } catch (e) {
-                    // 抛出去会被 loop 包成「工具执行失败：…」，这里自己收成干净的中文便于直接给用户看
+                    // 抛出去会被 loop 包成「Tool execution failed: …」，这里自己收成干净的英文便于直接给用户看
                     return fail((e && e.message) || String(e));
                 }
             }

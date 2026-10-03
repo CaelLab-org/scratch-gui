@@ -38,17 +38,18 @@ check('连续空行被压成最多一行', !/\n{3,}/.test(text));
 // ---------- 2. extractHead ----------
 const withBoth = extractHead('<html><head><title>官网</title><meta name="description" content="这是一段说明"></head></html>');
 check('title + description 都取到',
-    withBoth.includes('标题：官网') && withBoth.includes('站点说明：这是一段说明'), JSON.stringify(withBoth));
+    withBoth.includes('Title: 官网') && withBoth.includes('Site description: 这是一段说明'), JSON.stringify(withBoth));
 check('没有 title 返回 null（整段不给）', extractHead('<html><head></head></html>') === null);
 check('title 里的标签被剥掉',
-    extractHead('<title>一<b>x</b>二</title>').includes('标题：一x二'));
+    extractHead('<title>一<b>x</b>二</title>').includes('Title: 一x二'));
 const longDesc = '很'.repeat(3000);
 const capped = extractHead(`<title>T</title><meta name="description" content="${longDesc}">`);
 check('head 超过 2KB 被截到上限', capped.length <= HEAD_CAP, String(capped.length));
-check('超过 2KB 时只保住 title 开头', capped.startsWith('标题：T'), JSON.stringify(capped.slice(0, 20)));
+check('超过 2KB 时只保住 title 开头', capped.startsWith('Title: T'), JSON.stringify(capped.slice(0, 20)));
 const titleOnly = extractHead('<title>只有标题</title><meta name="description" content="太长才不带'.repeat(400) + '">');
 check('description 塞不下时只给 title',
-    titleOnly.startsWith('标题：只有标题') && !titleOnly.includes('站点说明'), JSON.stringify(titleOnly.slice(0, 30)));
+    titleOnly.startsWith('Title: 只有标题') && !titleOnly.includes('Site description'),
+    JSON.stringify(titleOnly.slice(0, 30)));
 
 // ---------- 3. fetchOnline：直连成功（HTML） ----------
 const HTML_PAGE = '<html><head><title>甲页</title><meta name="description" content="说明"></head>' +
@@ -57,10 +58,10 @@ const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => ({ok: true, status: 200, text: async () => HTML_PAGE});
 try {
     const out = await fetchOnline('https://example.com/a');
-    check('直连成功：head 摘要在最前', out.content.startsWith('标题：甲页'), out.content.slice(0, 30));
+    check('直连成功：head 摘要在最前', out.content.startsWith('Title: 甲页'), out.content.slice(0, 30));
     check('直连成功：正文是提取后的文本', out.content.includes('正文内容') && !/<p>/.test(out.content));
     check('直连成功：没截断', out.truncated === false);
-    check('直连成功：不提代理', !out.content.includes('代理'));
+    check('直连成功：不提代理', !/proxy/i.test(out.content));
 } finally {
     globalThis.fetch = originalFetch;
 }
@@ -78,7 +79,7 @@ try {
         message = e.message;
     }
     check('CORS 拒读时报人话',
-        !!message && /跨域|CORS/.test(message) && /不要凭记忆编造/.test(message), message);
+        !!message && /CORS/.test(message) && /never invent page content/i.test(message), message);
 } finally {
     globalThis.fetch = originalFetch;
 }
@@ -104,7 +105,7 @@ try {
     const out = await fetchOnline('https://example.com/long');
     check('正文截断到 20KB', out.truncated === true && out.content.length < BODY_CAP + HEAD_CAP + 400,
         `content=${out.content.length}`);
-    check('截断必须写进结果里（折叠的要告诉 AI）', out.content.includes('只显示了开头部分'), out.content.slice(-120));
+    check('截断必须写进结果里（折叠的要告诉 AI）', out.content.includes('only the beginning is shown'), out.content.slice(-120));
 } finally {
     globalThis.fetch = originalFetch;
 }

@@ -111,10 +111,10 @@ export const createScratchPort = ({vm, getWorkspace}) => {
     // （它们没有独立的编辑工作区，写进去的东西按设计本来就留不下来）。
     const realTargets = () => runtime().targets.filter(t => !t.isClone);
 
-    // 名字匹配要宽容：清单里为了区分舞台写成「Stage（舞台）」，模型会连着括号一起抄回来。
+    // 名字匹配要宽容：清单里为了区分舞台写成「Stage (the stage)」/「Stage（舞台）」，模型会连着括号一起抄回来。
     const normalizeName = raw => String(raw === void 0 || raw === null ? '' : raw)
         .trim()
-        .replace(/[（(]\s*舞台\s*[)）]$/, '')
+        .replace(/[（(]\s*(?:舞台|the stage|stage)\s*[)）]$/i, '')
         .trim();
     const findTarget = rawName => {
         const name = normalizeName(rawName);
@@ -211,7 +211,7 @@ export const createScratchPort = ({vm, getWorkspace}) => {
 
         writeScript: async (spriteName, text) => {
             const target = findTarget(spriteName);
-            if (!target) throw new Error(`找不到角色「${spriteName}」`);
+            if (!target) throw new Error(`No sprite named "${spriteName}"`);
             const {variables, lists} = splitVars(target);
             const stageIds = allVariableIds();
 

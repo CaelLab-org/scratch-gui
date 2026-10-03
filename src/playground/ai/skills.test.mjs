@@ -125,7 +125,7 @@ check('xce_engine 有 write-scripts 详细文档',
     JSON.stringify(engine && (engine.docs || []).map(d => d.name)));
 const brief = await readFastDocs.handler({name: 'xce_engine'}, {});
 check('读 skill 得到简略版并列出详细文档名',
-    !brief.isError && brief.content.includes('详细文档') && brief.content.includes('xce_engine/write-scripts'),
+    !brief.isError && brief.content.includes('Detailed docs') && brief.content.includes('xce_engine/write-scripts'),
     String(brief.content).slice(-140));
 const deep = await readFastDocs.handler({name: 'xce_engine/write-scripts'}, {});
 check('"skill/doc" 读到详细文档',

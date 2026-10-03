@@ -43,16 +43,17 @@ check('ls 列出角色且不给代码', ls.content.includes('Sprite1') && !ls.co
 
 const wholeEmpty = await readProjectTool.handler({sprite: 'Sprite1'}, {});
 check('按角色读代码（此时项目还是空的，表头也要对）',
-    wholeEmpty.content.includes('# Sprite1（第 1–1 行，共 1 行）'), String(wholeEmpty.content).split('\n')[0]);
+    wholeEmpty.content.includes('# Sprite1 (lines 1-1, 1 line total)'), String(wholeEmpty.content).split('\n')[0]);
 
 const noSprite = await readProjectTool.handler({}, {});
 check('不带角色名只给清单不给代码',
-    !noSprite.content.includes('@greenFlag') && noSprite.content.includes('sprite 参数'),
+    !noSprite.content.includes('@greenFlag') && noSprite.content.includes('sprite parameter'),
     String(noSprite.content).split('\n').pop().slice(0, 50));
 
 const time = await getTimeTool.handler({}, {});
 check('时间工具给 UTC + 时区 + 时差提醒',
-    /UTC 时间：\d{4}-/.test(time.content) && /时区/.test(time.content) && /时差/.test(time.content),
+    /Current UTC time: \d{4}-/.test(time.content) && /timezone/.test(time.content) &&
+    /different timezones/.test(time.content),
     String(time.content).split('\n')[0]);
 
 // === xce_time：按需等待，用户可以在界面上跳过 ===
@@ -60,14 +61,14 @@ const waitTool = tools.find(t => t.name === 'xce_time');
 check('工具表里有等待工具，且标了可跳过', !!waitTool && waitTool.skippable === true);
 
 const waited = await waitTool.handler({seconds: 0.2}, {});
-check('正常等待报出等了多久', /已等待/.test(waited.content) && !waited.isError, String(waited.content));
+check('正常等待报出等了多久', /Waited about/.test(waited.content) && !waited.isError, String(waited.content));
 
 const skipToken = createSkipToken();
 const pendingWait = waitTool.handler({seconds: 30}, {skip: skipToken});
 skipToken.skip();
 const skippedWait = await pendingWait;
 check('点跳过立刻返回，并说清只等了多久（不等满 30 秒）',
-    /用户跳过了这次等待/.test(skippedWait.content) && /实际只等了/.test(skippedWait.content),
+    /user skipped this wait/.test(skippedWait.content) && /only [\d.]+s actually passed/.test(skippedWait.content),
     String(skippedWait.content).slice(0, 70));
 
 // 上限：请求 9999 秒会被夹到 60；靠跳过立刻收工，测试不会真等一分钟
@@ -85,7 +86,7 @@ const abortController = new AbortController();
 const pendingAbort = waitTool.handler({seconds: 30}, {signal: abortController.signal});
 abortController.abort();
 const abortedWait = await pendingAbort;
-check('用户按停止时等待立刻结束', /打断/.test(abortedWait.content), String(abortedWait.content).slice(0, 60));
+check('用户按停止时等待立刻结束', /interrupted/.test(abortedWait.content), String(abortedWait.content).slice(0, 60));
 
 const session = createSession();
 session.messages.push({role: 'user', content: '帮我写一段数到 10 的脚本'});
@@ -121,11 +122,11 @@ check('能读回文本', after.text.includes('@greenFlag') && after.text.include
 // 现在有真代码了：验证按角色读 + 行分页
 const whole = await readProjectTool.handler({sprite: 'Sprite1'}, {});
 check('按角色读代码带行数表头',
-    whole.content.includes('# Sprite1（第 1–') && whole.content.includes('共 '),
+    whole.content.includes('# Sprite1 (lines 1-') && whole.content.includes('lines total'),
     String(whole.content).split('\n')[0]);
 const paged = await readProjectTool.handler({sprite: 'Sprite1', lineStart: 2, lineEnd: 3}, {});
 check('行分页只返回指定行',
-    paged.content.includes('第 2–3 行') && paged.content.length < whole.content.length,
+    paged.content.includes('lines 2-3') && paged.content.length < whole.content.length,
     String(paged.content).split('\n')[0]);
 const badRange = await readProjectTool.handler({sprite: 'Sprite1', lineStart: 5, lineEnd: 2}, {});
 check('行范围倒置报错', badRange.isError === true, String(badRange.content).slice(0, 50));
@@ -184,8 +185,9 @@ check('克隆体不进 readState',
 check('报错清单用的是真名（不带「（舞台）」装饰）',
   fakePort.listSprites().map(s => s.name).join('、') === 'Stage、角色1',
   fakePort.listSprites().map(s => s.name).join('、'));
-check('名字匹配容忍「Stage（舞台）」这种抄法',
-  fakePort.readTarget('Stage（舞台）') !== null && fakePort.readTarget(' Stage ') !== null);
+check('名字匹配容忍「Stage（舞台）」/「Stage (the stage)」这种抄法',
+  fakePort.readTarget('Stage（舞台）') !== null && fakePort.readTarget(' Stage ') !== null &&
+  fakePort.readTarget('Stage (the stage)') !== null);
 
 // === 连续写入必须各留一段（回归：块 id 每次从 c0 重编，后写的整段覆盖先写的）===
 // 用户实际踩到过：连写两段，工具都回「写入成功」，但读回来只剩一段。
@@ -207,7 +209,7 @@ check('两段都在（读回文本里两段都在）',
 const ghostScript = 'when [space v] key pressed\nchange [ghost v] effect by (-4)';
 const ghostWrite = await cloneTool.handler({sprite: 'Sprite1', text: ghostScript}, {});
 check('按键帽子块 + 数字影子积木能正常写入（不被误报缺扩展）',
-  !ghostWrite.isError && !ghostWrite.content.includes('没有写入'), String(ghostWrite.content).slice(0, 90));
+  !ghostWrite.isError && !/Nothing was written/.test(ghostWrite.content), String(ghostWrite.content).slice(0, 90));
 const writtenOpcodes = Object.values(vm.runtime.targets.find(t => !t.isStage).blocks._blocks)
   .map(b => b.opcode);
 check('写进去的是核心按键块与核心效果块',
@@ -238,14 +240,14 @@ check('视觉模型拿到图片',
   withVision.images[0].url.startsWith('data:image/png'),
   JSON.stringify(withVision.images && withVision.images[0].mimeType));
 check('图片结果带一句说明（用户在工具卡上看到的字）',
-  /舞台截图/.test(String(withVision.content)), String(withVision.content));
+  /Stage screenshot/.test(String(withVision.content)), String(withVision.content));
 
 const withoutVision = await readStage.handler({}, {supportsImage: false});
 check('非视觉模型不塞图片',
   withoutVision.images === void 0 && !withoutVision.isError,
   JSON.stringify(withoutVision.images));
 check('非视觉模型得到的是能让 AI 转述给用户的话',
-  /不支持图片输入/.test(withoutVision.content) && /换一个支持看图的模型/.test(withoutVision.content),
+  /does not accept image input/.test(withoutVision.content) && /vision-capable model/.test(withoutVision.content),
   String(withoutVision.content).slice(0, 80));
 
 // === 硬截断走真实 executeTool（loop.js）：超过 20KB 必须被切并在底部注明 ===
@@ -257,7 +259,7 @@ const hugeTool = {
 };
 const truncated = await executeTool({name: 'fake_huge', input: {}}, [hugeTool], {});
 check('超过 20KB 的工具结果被硬截断',
-  truncated.content.length < 30 * 1024 && truncated.content.includes('[已被截断，由于过长'),
+  truncated.content.length < 30 * 1024 && truncated.content.includes('[Truncated: too long'),
   `len=${truncated.content.length}`);
 const truncatedPaged = await executeTool(
   {name: 'fake_huge_paged', input: {}},
@@ -295,7 +297,7 @@ const badParams = await executeTool(
 );
 check('缺参数时报出正确的参数名单',
   badParams.isError === true && badParams.content.includes('sprite, text') &&
-  badParams.content.includes('参数是：sprite, text'),
+  badParams.content.includes('parameters of xce_write_script are: sprite, text'),
   String(badParams.content).slice(0, 120));
 
 // === 「跳过等待」的整条链路：loop 在 tool-start 上发令牌 → 界面调用它 → 工具立刻返回 ===
@@ -320,7 +322,7 @@ await runTurn({
 });
 check('等待工具在 tool-start 上带出跳过令牌（界面据此画按钮）', !!sawSkip);
 check('循环里跳过立刻收工，结果如实说被跳过',
-  waitSession.toolCalls.length === 1 && /用户跳过了这次等待/.test(waitSession.toolCalls[0].result.content),
+  waitSession.toolCalls.length === 1 && /user skipped this wait/.test(waitSession.toolCalls[0].result.content),
   String((waitSession.toolCalls[0] || {}).result && waitSession.toolCalls[0].result.content).slice(0, 60));
 
 let plainSkip = 'unset';
