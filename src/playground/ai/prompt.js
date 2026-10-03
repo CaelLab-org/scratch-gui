@@ -14,6 +14,32 @@
  * 改这里的文字之前先想清楚：这些字每一轮都要重发一遍，属于常驻开销。
  */
 
+// 剩几次往返开始提醒模型（用户定的：平时别念，快用完了才说 —— 剩 3 次起）
+export const WARN_AT = 3;
+
+/**
+ * 单轮往返预算的提示 —— **只在快用完时（剩不超过 WARN_AT 次）才发**，其余轮返回空串。
+ *
+ * 为什么是尾巴而不是系统提示词：系统提示词在请求最前面，改一个字就让整个会话前缀的
+ * prompt 缓存失效，每一轮都得按全价重发一遍。挂在尾巴上不进会话历史，前缀一动不动。
+ *
+ * @param {object} opts {step, maxSteps, warnAt} 这一轮是第几次往返、这一轮一共给几次、剩几次开始提醒
+ * @returns {string} 给模型看的一段（当 system 消息挂在消息尾巴上）；不用提醒就是空串
+ */
+export const buildStepBudget = ({step, maxSteps, warnAt = WARN_AT} = {}) => {
+    if (!(maxSteps > 0) || !(step > 0)) return '';
+    // 含这一轮，还剩几次
+    const remaining = maxSteps - step + 1;
+    if (remaining < 1 || remaining > warnAt) return '';
+    const state = remaining === 1 ?
+        'This is the last round-trip: after this reply the turn stops, no matter what is left. Write the user your answer, or a short report of what is done and what is not.' :
+        `Round-trips left in this turn, including this one: ${remaining}.`;
+    return `<turn-budget note="Added by the editor when the round-trip budget is nearly spent. Not part of the conversation, not kept in history.">
+${state} (This editor allows ${maxSteps} round-trips per turn.)
+When the budget reaches zero the turn is cut off where it stands, so wrap up now: finish what you are doing, and if something is still open, say plainly what it is instead of starting anything new.
+</turn-budget>`;
+};
+
 export const buildSystemPrompt = ({currentSprite, extensions, date, modelInfo, userPrompt, toolNames}) => {
     const base = `
 You are the assistant built into **XMUER Coding Engine** (engine.xmuer.online), a block programming editor built by CaelLab (虚舟实验室) on top of Scratch — it is a fork of TurboWarp, which is a fork of scratch-gui, so it genuinely is based on Scratch; just don't claim to be scratch.org itself. You work through a chat panel docked beside the user's workspace, and you change the project by calling tools. Your user is usually a student aged 10-15, sometimes their teacher. Write plainly, without jargon and without emoji.

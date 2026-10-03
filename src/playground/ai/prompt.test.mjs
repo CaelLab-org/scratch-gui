@@ -1,7 +1,7 @@
 // 系统提示词的无头自测：身份注入 + 用户自定义提示词的拼接
 // 用法：node src/playground/ai/prompt.test.mjs
 /* eslint-disable no-console */
-import {buildSystemPrompt} from './prompt.js';
+import {buildSystemPrompt, buildStepBudget} from './prompt.js';
 
 const failures = [];
 const check = (label, condition, detail) => {
@@ -56,6 +56,24 @@ check('全是空白等于没写', !buildSystemPrompt({...base, userPrompt: '   \
 check('undefined 不炸', !buildSystemPrompt({...base, userPrompt: void 0}).includes(marker));
 check('多行提示词原样保留',
     buildSystemPrompt({...base, userPrompt: '第一行\n第二行'}).includes('第一行\n第二行'));
+
+// ---------- 4. 往返预算提醒：平时不说，剩 3 次起才说 ----------
+check('轮次宽裕时一个字都不发', buildStepBudget({step: 1, maxSteps: 30}) === '' &&
+    buildStepBudget({step: 27, maxSteps: 30}) === '' &&
+    buildStepBudget({step: 1, maxSteps: 5}) === '');
+const warn3 = buildStepBudget({step: 28, maxSteps: 30});
+check('剩 3 次开始提醒，并写清还剩几次',
+    /including this one: 3/.test(warn3) && /allows 30 round-trips/.test(warn3),
+    warn3.split('\n')[1]);
+check('提醒是给模型的数据块，也说明不进历史',
+    warn3.startsWith('<turn-budget') && /not kept in history/.test(warn3));
+check('只剩 1 次时把话说死',
+    /This is the last round-trip/.test(buildStepBudget({step: 30, maxSteps: 30})) &&
+    !/This is the last round-trip/.test(buildStepBudget({step: 29, maxSteps: 30})));
+check('上限越小提醒来得越早（跟着用户设置走）',
+    buildStepBudget({step: 3, maxSteps: 5}) !== '' && buildStepBudget({step: 6, maxSteps: 10}) === '' &&
+    buildStepBudget({step: 8, maxSteps: 10}) !== '');
+check('边界不炸', buildStepBudget({}) === '' && buildStepBudget() === '');
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

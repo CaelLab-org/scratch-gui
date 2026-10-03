@@ -9,6 +9,32 @@
  * 否则下一次请求的消息历史里会出现「声明了工具调用却没有结果」——provider 直接报错。
  */
 
+import {createRepeatDetector} from './repeat.js';
+import {buildStepBudget} from './prompt.js';
+
+// 单轮最多几次模型往返。够干完一个完整的活（看清单 → 读代码 → 写 → 跑 → 查状态），
+// 又不至于让「卡住的一轮」无限烧钱。用户在设置里可以调（推荐 15~60，见 STEP_LIMITS）。
+export const STEP_LIMITS = {min: 5, max: 120, default: 30};
+
+/**
+ * 把设置里填的往返上限夹进合法区间。
+ * @param {*} value 用户填的值（可能是字符串、NaN、负数）
+ * @returns {number} 5~120 之间的整数
+ */
+export const clampMaxSteps = value => {
+    const n = Math.round(Number(value));
+    if (!isFinite(n)) return STEP_LIMITS.default;
+    return Math.min(STEP_LIMITS.max, Math.max(STEP_LIMITS.min, n));
+};
+
+/**
+ * 当前设置下的往返上限（没填过就是默认值）
+ * @param {object} settings 会话设置
+ * @returns {number} 这一次 runTurn 该给几次往返
+ */
+export const maxStepsOf = settings =>
+    (settings && Number(settings.maxSteps) > 0 ? clampMaxSteps(settings.maxSteps) : STEP_LIMITS.default);
+
 // 工具的模型可见声明
 export const toolToSchema = tool => ({
     name: tool.name,
@@ -98,29 +124,63 @@ export const executeTool = async (call, tools, ctx) => {
  *   tools    工具数组（见 tools.js）
  *   signal   AbortSignal
  *   onEvent  ({type, ...}) => void，给 UI 用
- *   maxSteps 兜底：单轮最多几次模型往返（默认 12）
+ *   maxSteps 单轮最多几次模型往返（设置里调的，缺省 STEP_LIMITS.default）
+ * @returns {Promise<object>} {text, steps, maxSteps, reason, aborted}
  */
-export const runTurn = async ({session, model, tools, signal, onEvent = () => {}, maxSteps = 12, system}) => {
+export const runTurn = async ({
+    session, model, tools, signal, onEvent = () => {}, maxSteps = STEP_LIMITS.default, system
+}) => {
     const schemas = tools.map(toolToSchema);
     let steps = 0;
     let finalText = '';
     // 循环为什么结束：正常收尾=null；'steps'=到步数上限；'length'=输出被 max_tokens 掐断；
-    // 'empty'=模型没返回内容（连接中途断掉之类）。UI 据此给用户明确的提示，而不是「跑着跑着就没了」。
+    // 'empty'=模型没返回内容（连接中途断掉之类）；'repeat'=检测到死循环被主动打断。
+    // UI 据此给用户明确的提示，而不是「跑着跑着就没了」。
     let reason = null;
     let finished = false;
 
     while (steps++ < maxSteps) {
         if (signal && signal.aborted) break;
 
-        // 系统提示词每轮现拼（角色/项目概况可能已经变了），但不进会话历史
-        const messages = system ? [{role: 'system', content: system}, ...session.messages] : session.messages;
+        // 系统提示词每轮现拼（角色/项目概况可能已经变了），但不进会话历史；
+        // 剩余往返次数只在快用完时（见 prompt.js 的 WARN_AT）另挂一条 system 消息在**最末尾**
+        const messages = (system ? [{role: 'system', content: system}] : []).concat(session.messages);
+        const budget = buildStepBudget({step: steps, maxSteps});
+        if (budget) messages.push({role: 'system', content: budget});
+
+        // 打转检测：正文与思考各看一路（同一条流里混着喂会把两段文本拼成假的重复）。
+        // 工具参数流打转不在这里管：它会被 max_tokens 掐断，收尾按 'length' 处理（见 providers）
+        const watchers = {text: createRepeatDetector(), reasoning: createRepeatDetector()};
+        let looped = null;
+
         const reply = await model.complete(messages, schemas, {
             signal,
-            onChunk: chunk => onEvent({type: 'chunk', ...chunk})
+            onChunk: chunk => {
+                onEvent({type: 'chunk', ...chunk});
+                if (looped || !chunk || !chunk.delta) return null;
+                const kind = chunk.kind === 'reasoning_delta' ? 'reasoning' : 'text';
+                const found = watchers[kind].push(chunk.delta);
+                if (!found) return null;
+                looped = {...found, kind};
+                // 告诉界面「为什么突然停了」，同时让 provider 掐断这条流（它会取消连接）
+                onEvent({type: 'repeat', ...looped});
+                return {stop: true};
+            }
         });
         if (!reply) {
             reason = 'empty';
             break;
+        }
+
+        // 打转打断：重复的那一坨不进历史 —— 否则下一轮模型看见自己刚在鬼打墙，接着绕。
+        // 只留干净的前缀（looped.at 之后全是重复内容）。
+        if (looped) {
+            reason = 'repeat';
+            if (looped.kind === 'text' && typeof reply.text === 'string') {
+                reply.text = reply.text.slice(0, looped.at);
+            } else if (typeof reply.reasoning === 'string') {
+                reply.reasoning = reply.reasoning.slice(0, looped.at);
+            }
         }
 
         // 真实用量：prompt_tokens 就是这一轮发出去的前缀长度，上下文计量以它为准
@@ -136,8 +196,12 @@ export const runTurn = async ({session, model, tools, signal, onEvent = () => {}
         if (reply.toolCalls && reply.toolCalls.length) assistantMessage.toolCalls = reply.toolCalls;
         // 思考原文只在会话里留一轮：toWireMessages 只回传最后一条（更早的剥掉，用户要求别堆进历史）
         if (reply.reasoning) assistantMessage.reasoning = reply.reasoning;
-        session.messages.push(assistantMessage);
-        onEvent({type: 'assistant', message: assistantMessage, usage: reply.usage});
+        // 空回复（思考里打转被切干净、或本来就没内容）不必留一条空消息在历史里
+        if (assistantMessage.content || assistantMessage.toolCalls) {
+            session.messages.push(assistantMessage);
+            onEvent({type: 'assistant', message: assistantMessage, usage: reply.usage});
+        }
+        if (looped) break;
 
         const calls = assistantMessage.toolCalls || [];
         if (!calls.length) {
@@ -183,5 +247,5 @@ export const runTurn = async ({session, model, tools, signal, onEvent = () => {}
         reason = 'steps';
     }
 
-    return {text: finalText, steps, reason, aborted: !!(signal && signal.aborted)};
+    return {text: finalText, steps, maxSteps, reason, aborted: !!(signal && signal.aborted)};
 };

@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import {createScratchPort} from './port.js';
 import {createTools} from './tools.js';
 import {createSession, toModelMessages} from './session.js';
-import {runTurn, executeTool, createSkipToken} from './loop.js';
+import {runTurn, executeTool, createSkipToken, STEP_LIMITS, clampMaxSteps, maxStepsOf} from './loop.js';
 import {createScriptedModel, demoSteps} from './model.js';
 import {emptyProject} from './test-project.mjs';
 
@@ -341,6 +341,123 @@ await runTurn({
   }
 });
 check('普通工具不带跳过令牌（没有东西可跳过）', plainSkip === null, String(plainSkip));
+
+// === 单轮往返预算：默认 30（设置里可调 5~120），只在剩 3 次时才提醒模型 ===
+// 提醒挂在**消息尾巴**上（单独一条 system），不能动系统提示词 —— 前缀一变，整个会话的
+// prompt 缓存就废了，每一轮都按全价重发。
+check('上限可调且被夹在 5~120',
+  clampMaxSteps(3) === 5 && clampMaxSteps(9999) === 120 && clampMaxSteps('45') === 45 &&
+  clampMaxSteps('x') === STEP_LIMITS.default && maxStepsOf({}) === 30 && maxStepsOf({maxSteps: 60}) === 60,
+  `${clampMaxSteps(3)}/${clampMaxSteps(9999)}/${maxStepsOf({maxSteps: 60})}`);
+
+const budgetSeen = [];
+const budgetSession = createSession();
+budgetSession.messages.push({role: 'user', content: '在吗'});
+await runTurn({
+  session: budgetSession,
+  model: {
+    complete: async messages => {
+      budgetSeen.push(messages);
+      return {text: '在', toolCalls: []};
+    }
+  },
+  tools
+});
+check('轮次还宽裕时一个字都不多念',
+  budgetSeen[0].every(m => !/turn-budget/.test(String(m.content))),
+  `消息 ${budgetSeen[0].length} 条，尾巴=${budgetSeen[0][budgetSeen[0].length - 1].role}`);
+
+// 快用完了才提醒：maxSteps=4 时，第 1 轮还剩 4 次不说，第 2 轮剩 3 次开始说
+const lateSeen = [];
+const lateSession = createSession();
+lateSession.messages.push({role: 'user', content: '列一下角色'});
+await runTurn({
+  session: lateSession,
+  model: {
+    complete: async messages => {
+      lateSeen.push(messages);
+      return {text: '', finishReason: 'tool_calls', toolCalls: [{id: 'x', name: 'xce_list_sprites', input: {}}]};
+    }
+  },
+  tools,
+  maxSteps: 4
+});
+const noteAt = index => {
+  const seen = lateSeen[index] || [];
+  const tail = seen[seen.length - 1];
+  return tail && tail.role === 'system' && /turn-budget/.test(String(tail.content)) ? String(tail.content) : null;
+};
+check('剩 4 次时不提醒', noteAt(0) === null, String(lateSeen[0].length) + ' 条消息');
+check('剩 3 次开始提醒，并写清还剩几次', /including this one: 3/.test(noteAt(1) || ''), String(noteAt(1)));
+check('只剩 1 次时把话说死（到零就收工）',
+  /This is the last round-trip/.test(noteAt(3) || ''), String(noteAt(3)).split('\n')[1]);
+check('提醒挂在消息尾巴、且是最后一条；不进会话历史',
+  /turn-budget/.test(noteAt(1) || '') && lateSeen[1][lateSeen[1].length - 1].role === 'system' &&
+  lateSeen[1][0].role !== 'system');
+check('提醒里带上这一轮给的总次数', /allows 4 round-trips/.test(noteAt(1) || ''));
+
+// === 模型在流里打转：当场打断，reason=repeat，打转的那段不进历史 ===
+const rambleSession = createSession();
+rambleSession.messages.push({role: 'user', content: '帮我看看'});
+const rambleEvents = [];
+let rambleRounds = 0;
+const rambleModel = {
+  complete: async (messages, schemas, {onChunk = () => {}} = {}) => {
+    let text = '';
+    let stopped = false;
+    // 先一句正常的话，然后开始复读同一句（模拟思考打转）
+    text += '先看一下你的项目。';
+    onChunk({kind: 'text_delta', delta: '先看一下你的项目。'});
+    for (let i = 0; i < 200 && !stopped; i++) {
+      rambleRounds++;
+      const piece = '我再确认一下这一点。';
+      text += piece;
+      const verdict = onChunk({kind: 'text_delta', delta: piece});
+      if (verdict && verdict.stop) stopped = true;
+    }
+    return {text, toolCalls: [], stopped, finishReason: null};
+  }
+};
+const rambled = await runTurn({
+  session: rambleSession,
+  model: rambleModel,
+  tools,
+  onEvent: e => rambleEvents.push(e)
+});
+check('流里打转 → reason=repeat', rambled.reason === 'repeat', `reason=${rambled.reason} steps=${rambled.steps}`);
+check('很早就打断了（复读远没吐完）', rambleRounds < 150, `复读了 ${rambleRounds} 遍（上限 200）`);
+check('打断时给界面发了 repeat 事件',
+  rambleEvents.filter(e => e.type === 'repeat').length === 1 &&
+  rambleEvents.find(e => e.type === 'repeat').kind === 'text',
+  JSON.stringify(rambleEvents.filter(e => e.type === 'repeat')));
+const rambleAnswer = rambleSession.messages.find(m => m.role === 'assistant');
+check('只有干净的前缀进历史（打转的那句一个字都没留）',
+  !!rambleAnswer && rambleAnswer.content === '先看一下你的项目。',
+  JSON.stringify(rambleAnswer && rambleAnswer.content));
+
+// 思考里打转同样要打断，而且不该留一条空消息在历史里
+const thinkSession = createSession();
+thinkSession.messages.push({role: 'user', content: '想想'});
+const thoughtLoop = await runTurn({
+  session: thinkSession,
+  model: {
+    complete: async (messages, schemas, {onChunk = () => {}} = {}) => {
+      let reasoning = '';
+      let stopped = false;
+      for (let i = 0; i < 200 && !stopped; i++) {
+        reasoning += '等等，我再想想。';
+        const verdict = onChunk({kind: 'reasoning_delta', delta: '等等，我再想想。'});
+        if (verdict && verdict.stop) stopped = true;
+      }
+      return {text: '', reasoning, toolCalls: [], stopped};
+    }
+  },
+  tools
+});
+check('思考里打转一样打断', thoughtLoop.reason === 'repeat', `reason=${thoughtLoop.reason}`);
+check('打转得只剩空的回复不留进历史',
+  thinkSession.messages.length === 1 && thinkSession.messages[0].role === 'user',
+  thinkSession.messages.map(m => m.role).join('、'));
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

@@ -3,7 +3,7 @@
 /* eslint-disable no-console, no-undef */
 import {
     newConversationId, loadConversationIndex, loadConversation,
-    saveConversation, deleteConversation, DROPPED_NOTE
+    saveConversation, deleteConversation, setCurrentConversation, DROPPED_NOTE
 } from './store.js';
 
 const failures = [];
@@ -63,6 +63,15 @@ check('列表里带消息数', index1.conversations[0].messageCount === 1);
 const idEmpty = newConversationId();
 check('空会话保存返回 false', saveConversation(idEmpty, {messages: [], toolCalls: []}, []) === false);
 check('空会话没进列表', loadConversationIndex().conversations.length === 1);
+
+// ---------- 切换位置要落盘（点「新对话」后刷新不该弹回上一条） ----------
+check('切到新对话后 currentId 清空', setCurrentConversation(null) === true && loadConversationIndex().currentId === null);
+check('清空位置不碰已有会话', loadConversationIndex().conversations.length === 1);
+// 空会话的自动落盘（防抖 / 关页面）走的是「不入库」分支，不能顺手把位置改回去
+const idEmpty2 = newConversationId();
+saveConversation(idEmpty2, {messages: [], toolCalls: []}, []);
+check('空会话落盘不会改回位置', loadConversationIndex().currentId === null);
+check('再切回旧会话能记住', setCurrentConversation(idA) === true && loadConversationIndex().currentId === idA);
 
 // ---------- 截图剥离 ----------
 const idB = newConversationId();
