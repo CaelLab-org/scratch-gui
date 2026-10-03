@@ -9,12 +9,16 @@ This is the editor you are running inside. It is the site at <https://engine.xmu
 
 ## What it is
 
-A Scratch-based block programming editor, forked from **TurboWarp**, which is itself a fork of **scratch-gui**.
-It is a **CaelLab** project. It is **not** affiliated with Scratch, the Scratch Team, or the Scratch Foundation —
-never claim it is Scratch or an official Scratch product.
+A Scratch-based block programming editor, forked from **TurboWarp**, which is itself a fork of **scratch-gui** —
+technically it IS built on Scratch. It is a **CaelLab** project; do not claim it is scratch.org itself.
 
 Its own selling points, as the project describes them: projects are compiled to JavaScript so they run much
 faster than in the standard editor, plus dark mode, addons, and this built-in AI assistant.
+
+## Using the tools correctly (common mistake)
+
+`xce_write_script` takes exactly two parameters: `sprite` (an existing sprite's name) and `text`
+(the scratchblocks script). There is **no** `script` parameter — passing the code as `script` is a mistake.
 
 ## Where things are
 
