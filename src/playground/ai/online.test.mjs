@@ -140,5 +140,108 @@ const bad = await (async () => {
 })();
 check('非 http(s) 的地址被拒', !!bad && /http/.test(bad), String(bad).slice(0, 60));
 
+// ---------- 9. 桌面版：交给主进程取（没有 CORS），页面自己的 fetch 完全不碰 ----------
+const DESKTOP_PAGE = '<html><head><title>桌面取回来的页</title></head><body><p>桌面正文</p></body></html>';
+const ipcCalls = [];
+let browserFetchCalls = 0;
+globalThis.window = {
+    EditorPreload: {
+        fetchOnline: async (url, timeoutMs) => {
+            ipcCalls.push([url, timeoutMs]);
+            return {ok: true, status: 200, text: DESKTOP_PAGE, truncated: false};
+        }
+    }
+};
+globalThis.fetch = async () => {
+    browserFetchCalls++;
+    return {ok: true, status: 200, text: () => Promise.resolve('不该走这里')};
+};
+try {
+    const out = await fetchOnline('https://example.com/desktop');
+    check('桌面版走主进程通道（preload.fetchOnline）',
+        ipcCalls.length === 1 && ipcCalls[0][0] === 'https://example.com/desktop', JSON.stringify(ipcCalls));
+    check('桌面版一次都不碰页面里的 fetch', browserFetchCalls === 0, `调用 ${browserFetchCalls} 次`);
+    check('桌面版取回来的内容照常提取',
+        out.content.includes('Title: 桌面取回来的页') && out.content.includes('桌面正文'), out.content.slice(0, 40));
+    check('桌面版超时按默认 5 秒传过去', ipcCalls[0][1] === 5000, String(ipcCalls[0][1]));
+} finally {
+    delete globalThis.window;
+    globalThis.fetch = originalFetch;
+}
+
+// ---------- 10. 桌面版失败：报网络问题，不许再甩锅给 CORS ----------
+globalThis.window = {EditorPreload: {fetchOnline: async () => ({ok: false, networkError: 'net::ERR_NAME_NOT_RESOLVED'})}};
+try {
+    let message = null;
+    try {
+        await fetchOnline('https://nope.invalid/x');
+    } catch (e) {
+        message = e.message;
+    }
+    check('桌面版网络失败报网络原因、且说明与 CORS 无关',
+        !!message && /ERR_NAME_NOT_RESOLVED/.test(message) && /CORS is not involved/.test(message), message);
+    check('桌面版失败也照样要求换路子（不是把活儿推回用户）',
+        !!message && /never invent page content/i.test(message));
+} finally {
+    delete globalThis.window;
+}
+
+// ---------- 11. 桌面版：HTTP 状态与二进制都报得清楚 ----------
+globalThis.window = {EditorPreload: {fetchOnline: async () => ({ok: false, status: 404, text: 'not found'})}};
+try {
+    let message = null;
+    try {
+        await fetchOnline('https://example.com/missing');
+    } catch (e) {
+        message = e.message;
+    }
+    check('桌面版 404 报 HTTP 状态', !!message && /HTTP 404/.test(message), message);
+} finally {
+    delete globalThis.window;
+}
+
+globalThis.window = {EditorPreload: {fetchOnline: async () => ({ok: false, status: 200, binary: 'image/png'})}};
+try {
+    let message = null;
+    try {
+        await fetchOnline('https://example.com/pic.png');
+    } catch (e) {
+        message = e.message;
+    }
+    check('桌面版遇到二进制直接说不是文字页',
+        !!message && /not a text page/.test(message) && /image\/png/.test(message), message);
+} finally {
+    delete globalThis.window;
+}
+
+// ---------- 12. 桌面版：原始响应被截 → 必须告诉模型（正文没到 20KB 也不能瞒） ----------
+globalThis.window = {
+    EditorPreload: {
+        fetchOnline: async () => ({
+            ok: true, status: 200, text: '<html><body><p>就这一段</p></body></html>', truncated: true
+        })
+    }
+};
+try {
+    const out = await fetchOnline('https://example.com/huge');
+    check('桌面版原始截断写进结果里', out.truncated === true && /cut off/i.test(out.content), out.content);
+} finally {
+    delete globalThis.window;
+}
+
+// ---------- 13. 工具描述跟着环境走（桌面版不许再自称受 CORS 限制） ----------
+globalThis.window = {EditorPreload: {fetchOnline: async () => ({ok: true, status: 200, text: '', truncated: false})}};
+try {
+    const desktopTool = createTools({port: {}, skills: []}).find(t => t.name === 'xce_read_online');
+    check('桌面版的工具描述写成「应用自己取、没有跨域」',
+        /desktop app/.test(desktopTool.description) &&
+        /cross-origin rules do not apply/.test(desktopTool.description) &&
+        !/Most websites block a browser page/.test(desktopTool.description), desktopTool.description.slice(0, 120));
+    check('桌面版描述仍保留 20KB / 5 秒这些硬上限',
+        /20KB/.test(desktopTool.description) && /5 second/.test(desktopTool.description));
+} finally {
+    delete globalThis.window;
+}
+
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

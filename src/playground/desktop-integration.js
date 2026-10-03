@@ -6,6 +6,9 @@
  * 所以这段必须抢在它们之前求值 —— 由 playground/import-first.js 在最前面引出。
  *
  * 网页版没有 window.EditorPreload，整段直接跳过，线上行为不变。
+ *
+ * 桥的另一个用处（AI 取网页，xce_read_online）**不在这里** —— 那个在调用时才判
+ * window.EditorPreload（见 ai/online.js），这样无头测试里也能临时挂一个假的。
  */
 
 const preload = window.EditorPreload;

@@ -11,7 +11,7 @@
  * 只有当前模型收图片时才会被填上（见 xce_read_stage）。
  */
 
-import {fetchOnline} from './online.js';
+import {fetchOnline, isDesktopMode} from './online.js';
 import {searchCaelLab, MAX_RESULTS, TITLE_CAP, DESC_CAP} from './search.js';
 
 const ok = content => ({content});
@@ -94,6 +94,30 @@ const shrinkImage = dataUrl => new Promise(resolve => {
  * @returns {Array<object>} 工具数组
  */
 export const createTools = ({port, skills = []}) => {
+    // read_online 的「哪些站读得到」这句跟着环境走：桌面版由应用自己发请求，没有页面的跨域限制，
+    // 不这么说模型会在本来能读的站上自己先放弃（用户要的正是这个差别）。
+    const fetchReach = isDesktopMode() ?
+        'This is the desktop app, so the page is fetched by the application itself rather than from a web ' +
+        'page: cross-origin rules do not apply and ordinary public pages come back readable — assume a URL ' +
+        'will work and try it. A page behind a login, or one drawn entirely by JavaScript, still comes back ' +
+        'empty or partial; the error says which.' :
+        'Most websites block a browser page from reading them (CORS), and a page behind a login or drawn ' +
+        'entirely by JavaScript comes back empty or partial, so a fetch fails more often than it succeeds; ' +
+        'the error says why.';
+    // 逐段拼成一篇，段间换行；「哪一级环境」那句是变量，拼在数组里而不是串接，免得踩 prefer-template
+    const readOnlineDescription = [
+        'Fetch one public web page by URL and return it as readable text (not HTML): page title first, then ' +
+        'the body text, hidden content stripped.',
+        'Hard limits: 5 second timeout, at most 20KB of text, head summary capped at 2KB — if the body was ' +
+        'truncated the result says so, and you must pass that on instead of treating the excerpt as the ' +
+        'whole page.',
+        fetchReach,
+        'When a fetch does fail, find another way instead of stopping: try a different URL, then fall back on ' +
+        'what you already know and say that is where it came from. Never invent page content for a page you ' +
+        'did not fetch; never reconstruct a page from memory.',
+        'Use it to back up claims about the outside world (docs, help pages, a site the user mentions).'
+    ].join('\n');
+
     const tools = [
         {
             name: 'xce_list_sprites',
@@ -493,18 +517,7 @@ export const createTools = ({port, skills = []}) => {
 
         {
             name: 'xce_read_online',
-            description:
-                'Fetch one public web page by URL and return it as readable text (not HTML): page title ' +
-                'first, then the body text, hidden content stripped.\n' +
-                'Hard limits: 5 second timeout, at most 20KB of text, head summary capped at 2KB — if the ' +
-                'body was truncated the result says so, and you must pass that on instead of treating the ' +
-                'excerpt as the whole page.\n' +
-                'Most websites block a browser page from reading them (CORS), and a page behind a login or ' +
-                'drawn entirely by JavaScript comes back empty or partial, so a fetch fails more often than ' +
-                'it succeeds; the error says why. When it does, find another way instead of stopping: try a ' +
-                'different URL, then fall back on what you already know and say that is where it came from. ' +
-                'Never invent page content for a page you did not fetch; never reconstruct a page from memory.\n' +
-                'Use it to back up claims about the outside world (docs, help pages, a site the user mentions).',
+            description: readOnlineDescription,
             readOnly: true,
             inputSchema: {
                 type: 'object',
