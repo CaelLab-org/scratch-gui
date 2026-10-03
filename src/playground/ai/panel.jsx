@@ -34,6 +34,7 @@ import {
 } from './settings.js';
 import {buildSystemPrompt} from './prompt.js';
 import {maybeCompact, measure} from './compact.js';
+import {buildTurns, formatWorkDuration} from './turns.js';
 import {Markdown} from './markdown.jsx';
 import {
     loadConversation, saveConversation, newConversationId, loadConversationIndex,
@@ -351,6 +352,48 @@ ToolCard.propTypes = {
     item: PropTypes.object,
     onUndo: PropTypes.func,
     onSkip: PropTypes.func
+};
+
+// ---------------------------------------------------------------------------
+// 工作段（「已工作 Nm Ns」）
+// ---------------------------------------------------------------------------
+
+// 一轮里干活的痕迹 + 一条可展开的标题行。
+//
+// 学 ZCode：标题只报一件事 —— 这段活儿花了多久；细节收在下面，想看再点开。
+// 跑的时候默认摊开（要看得见在干嘛）且整行走强调色；干完且有了收尾答复就自动收起、
+// 回到灰色元信息的样子。没有答复的那种（模型干完就停了）保持摊开，否则整轮会空成一行字。
+const WorkGroup = ({label, live, defaultOpen, children}) => {
+    const [open, setOpen] = useState(defaultOpen);
+    // 收尾答复一到，defaultOpen 由 true 变 false，这里跟着收起来 —— 用户自己点开过也认这个
+    useEffect(() => {
+        setOpen(defaultOpen);
+    }, [defaultOpen]);
+    return (
+        <div className={styles.work}>
+            <button
+                className={styles.workHead}
+                onClick={() => setOpen(v => !v)}
+                type="button"
+            >
+                <span className={`${styles.workChevron} ${open ? styles.workChevronOpen : ''}`}>
+                    <Icon
+                        name="chevron"
+                        size={11}
+                    />
+                </span>
+                <span className={`${styles.workLabel} ${live ? styles.workLive : ''}`}>{label}</span>
+            </button>
+            {open ? <div className={styles.workBody}>{children}</div> : null}
+        </div>
+    );
+};
+
+WorkGroup.propTypes = {
+    children: PropTypes.node,
+    defaultOpen: PropTypes.bool,
+    label: PropTypes.string,
+    live: PropTypes.bool
 };
 
 // ---------------------------------------------------------------------------
@@ -813,6 +856,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     const [settingsDraft, setSettingsDraft] = useState(() => loadSettings());
     const [context, setContext] = useState(null);
     const [showJump, setShowJump] = useState(false);
+    // 「工作中 Ns」要每秒跳一格。只在忙的时候开这个表，闲时不许有任何定时器。
+    const [now, setNow] = useState(() => Date.now());
     const abortRef = useRef(null);
     // 正在执行的等待类工具 -> 它的「跳过」令牌（函数不能进 items：那些条目要序列化进 localStorage）
     const skipRef = useRef({});
@@ -824,6 +869,15 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     const latestRef = useRef({session: null, items: []});
 
     const dock = usePaletteDock(mode !== 'code' && mode !== 'full');
+
+    // 干活的时候每秒走一格表 —— 只为「工作中 Ns」这一个数字服务（学 ZCode 的活跃计时）。
+    // 闲下来就把定时器关掉，别让一个聊天面板在后台一直重渲染。
+    useEffect(() => {
+        if (!busy) return;
+        setNow(Date.now());
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, [busy]);
 
     // 会话不再每轮新建：不然没有上下文、也没法总结。首次挂载时把上次的对话读回来
     // （store 是多会话版：按 currentId 还原；没有就领一个新 id，空会话不入库）。
@@ -904,8 +958,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                     {...last, text: last.text + delta};
             } else {
                 copy.push(kind === 'reasoning_delta' ?
-                    {kind: 'agent', text: '', reasoning: delta, streaming: true} :
-                    {kind: 'agent', text: delta, reasoning: '', streaming: true});
+                    {kind: 'agent', text: '', reasoning: delta, streaming: true, at: Date.now()} :
+                    {kind: 'agent', text: delta, reasoning: '', streaming: true, at: Date.now()});
             }
             return copy;
         });
@@ -929,6 +983,9 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                 const reasoningMs = reasoningStartedAt.current ?
                     Date.now() - reasoningStartedAt.current : 0;
                 reasoningStartedAt.current = 0;
+                // 这一步要不要调工具 —— 「已工作」里收的是干活的那几步（含它们的旁白），
+                // 不收最后那段收尾答复
+                const hasTools = !!(event.message.toolCalls && event.message.toolCalls.length);
                 if (last && last.kind === 'agent' && last.streaming) {
                     copy[copy.length - 1] = {
                         ...last,
@@ -936,7 +993,9 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                         text: last.text || event.message.content || '',
                         reasoning: last.reasoning || event.message.reasoning || '',
                         reasoningMs,
-                        streaming: false
+                        streaming: false,
+                        hasTools,
+                        at: Date.now()
                     };
                 } else if (event.message.content || event.message.reasoning) {
                     copy.push({
@@ -944,7 +1003,9 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                         text: event.message.content || '',
                         reasoning: event.message.reasoning || '',
                         reasoningMs,
-                        streaming: false
+                        streaming: false,
+                        hasTools,
+                        at: Date.now()
                     });
                 }
                 return copy;
@@ -961,7 +1022,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                 arg: argOf(event.call.input),
                 skippable: !!event.skip,
                 status: 'running',
-                content: ''
+                content: '',
+                at: Date.now()
             }]));
             break;
         case 'tool-end':
@@ -973,7 +1035,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                         status: event.result.isError ? 'failed' : 'done',
                         content: event.result.content,
                         images: event.result.images || null,
-                        undo: event.result.undo || null
+                        undo: event.result.undo || null,
+                        at: Date.now()
                     } :
                     item
             )));
@@ -999,7 +1062,9 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
         const text = draft.trim();
         if (!text || busy || !portRef.current) return;
         setDraft('');
-        setItemsState(prev => prev.concat([{kind: 'user', text}]));
+        // 这一轮计时的起点（也是「已工作 Nm Ns」的 t0）
+        const startedAt = Date.now();
+        setItemsState(prev => prev.concat([{kind: 'user', text, at: startedAt}]));
         // 自己发的话必须跟到底部，哪怕刚才在往上翻
         stickRef.current = true;
         setShowJump(false);
@@ -1150,6 +1215,49 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
         saveProjectNow();
         setStatus('已撤销');
     }, []);
+
+    // 渲染一条转录条目。用户消息不经过这里 —— 它挂在「轮」上，由分组那层画。
+    const renderItem = (item, key) => {
+        if (item.kind === 'notice') {
+            return (<div
+                className={styles.notice}
+                key={key}
+            >{item.text}</div>);
+        }
+        if (item.kind === 'agent') {
+            return (
+                <div
+                    className={styles.agent}
+                    key={key}
+                >
+                    {item.reasoning ? (
+                        <Thinking
+                            ms={item.reasoningMs}
+                            streaming={item.streaming}
+                            text={item.reasoning}
+                        />
+                    ) : null}
+                    {item.text ? (
+                        <Markdown
+                            styles={styles}
+                            text={item.text}
+                        />
+                    ) : null}
+                </div>
+            );
+        }
+        return (
+            <ToolCard
+                item={item}
+                key={key}
+                onSkip={handleSkip}
+                onUndo={handleUndo}
+            />
+        );
+    };
+
+    // 按「用户提交」分轮：干活的痕迹收进「已工作 Nm Ns」，收尾答复留在它下面
+    const turns = buildTurns(items, {now, active: busy});
 
     const handleSaveSettings = useCallback(() => {
         const saved = saveSettings(settingsDraft);
@@ -1367,50 +1475,35 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                                         )}
                                     </div>
                                 ) : null}
-                                {items.map((item, index) => {
-                                    if (item.kind === 'user') {
-                                        return (<div
-                                            className={styles.user}
-                                            key={index}
-                                        >{item.text}</div>);
-                                    }
-                                    if (item.kind === 'notice') {
-                                        return (<div
-                                            className={styles.notice}
-                                            key={index}
-                                        >{item.text}</div>);
-                                    }
-                                    if (item.kind === 'agent') {
-                                        return (
-                                            <div
-                                                className={styles.agent}
-                                                key={index}
-                                            >
-                                                {item.reasoning ? (
-                                                    <Thinking
-                                                        ms={item.reasoningMs}
-                                                        streaming={item.streaming}
-                                                        text={item.reasoning}
-                                                    />
-                                                ) : null}
-                                                {item.text ? (
-                                                    <Markdown
-                                                        styles={styles}
-                                                        text={item.text}
-                                                    />
-                                                ) : null}
-                                            </div>
-                                        );
-                                    }
-                                    return (
-                                        <ToolCard
-                                            item={item}
-                                            key={index}
-                                            onSkip={handleSkip}
-                                            onUndo={handleUndo}
-                                        />
-                                    );
-                                })}
+                                {turns.map(turn => (
+                                    <React.Fragment key={turn.key}>
+                                        {turn.user ? (
+                                            <div className={styles.user}>{turn.user.text}</div>
+                                        ) : null}
+                                        {turn.segments.map((segment, segmentIndex) => {
+                                            const key = `${turn.key}-${segmentIndex}`;
+                                            const body = segment.items
+                                                .map((item, i) => renderItem(item, `${key}-${i}`));
+                                            if (segment.type !== 'work') {
+                                                return <React.Fragment key={key}>{body}</React.Fragment>;
+                                            }
+                                            const duration = formatWorkDuration(turn.durationMs);
+                                            const label = turn.running ?
+                                                `工作中${duration ? ` ${duration}` : '…'}` :
+                                                duration ? `已工作 ${duration}` : '已处理';
+                                            return (
+                                                <WorkGroup
+                                                    defaultOpen={turn.running || !turn.hasAnswer}
+                                                    key={key}
+                                                    label={label}
+                                                    live={turn.running}
+                                                >
+                                                    {body}
+                                                </WorkGroup>
+                                            );
+                                        })}
+                                    </React.Fragment>
+                                ))}
                             </div>
                             {showJump ? (
                                 <button

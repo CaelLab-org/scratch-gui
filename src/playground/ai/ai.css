@@ -592,7 +592,8 @@
 .settingsBody::-webkit-scrollbar,
 .toolBody::-webkit-scrollbar,
 .modelsList::-webkit-scrollbar,
-.thinkBody::-webkit-scrollbar {
+.thinkBody::-webkit-scrollbar,
+.workBody::-webkit-scrollbar {
     width: 8px;
 }
 
@@ -600,7 +601,8 @@
 .settingsBody::-webkit-scrollbar-thumb,
 .toolBody::-webkit-scrollbar-thumb,
 .modelsList::-webkit-scrollbar-thumb,
-.thinkBody::-webkit-scrollbar-thumb {
+.thinkBody::-webkit-scrollbar-thumb,
+.workBody::-webkit-scrollbar-thumb {
     border: 2px solid transparent;
     border-radius: 4px;
     background-clip: content-box;
@@ -686,6 +688,74 @@
 }
 
 .agent:last-child {
+    margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------- 工作段
+ *
+ * 学 ZCode 的「已工作 Nm Ns」：一轮里干活的痕迹（思考、工具行、带工具调用的旁白）
+ * 收进这么一条可展开的标题行，收尾答复留在它下面 —— 面板只有 310px 宽，
+ * 干活的过程不该把结论顶出屏幕。
+ * 跑的时候默认摊开（要看得见在干嘛）且整行走强调色；干完且有了答复就自动收起、回到灰色。
+ * 细节用缩进 + 一条灰竖线，跟思考细节同一套视觉（省地方，也一眼看出是从属关系）。
+ */
+
+.work {
+    margin: 0 0 10px;
+}
+
+.workHead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 2px 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.workHead:hover {
+    color: var(--text-2);
+}
+
+.workLabel {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workLive {
+    color: var(--accent);
+}
+
+.workChevron {
+    flex: 0 0 auto;
+    color: var(--text-3);
+    transition: transform 0.15s ease;
+}
+
+.workChevronOpen {
+    transform: rotate(90deg);
+}
+
+.workBody {
+    max-height: 340px;
+    margin: 4px 0 0 18px;
+    padding-left: 9px;
+    overflow-y: auto;
+    border-left: 2px solid var(--border-l1);
+}
+
+/* 段内最后一条不用再留一份底部间距 */
+.workBody > :last-child {
     margin-bottom: 0;
 }
 
