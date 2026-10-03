@@ -38,7 +38,8 @@ const DECODER = {
     '&#x27;': '\''
 };
 
-const decodeEntities = text => String(text)
+// 也被 search.js 用（接口回的摘要片段带 HTML 实体）
+export const decodeEntities = text => String(text)
     .replace(/&(?:amp|lt|gt|quot|#39|apos|nbsp|#x27);/g, entity => DECODER[entity] || entity);
 
 /**

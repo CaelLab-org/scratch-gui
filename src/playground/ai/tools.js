@@ -12,6 +12,7 @@
  */
 
 import {fetchOnline} from './online.js';
+import {searchCaelLab, MAX_RESULTS, TITLE_CAP, DESC_CAP} from './search.js';
 
 const ok = content => ({content});
 const fail = content => ({content, isError: true});
@@ -413,6 +414,38 @@ export const createTools = ({port, skills = []}) => {
                 required: ['url']
             },
             handler: ({url}, ctx = {}) => fetchOnline(url, {signal: ctx.signal})
+        },
+
+        {
+            name: 'xce_search',
+            description:
+                'Search with CaelLabSearch, CaelLab\'s own search engine at caellab.click. Returns up to ' +
+                `${MAX_RESULTS} results, one line each: title (cut at ${TITLE_CAP} characters), site, URL and a ` +
+                `snippet (cut at ${DESC_CAP} characters). The index covers the CaelLab sites and pages it has ` +
+                'crawled from the wider web.\n' +
+                'Use it whenever the answer depends on the outside world — a library, a TurboWarp feature, a ' +
+                'site the user names — and never answer such a question from memory.\n' +
+                'The result begins with the result page URL and states that the results come from ' +
+                'CaelLabSearch; keep that attribution when you tell the user where something came from, and ' +
+                'give them the URL so they can see the full list.\n' +
+                'It returns snippets only: it cannot open a result. To read one, call xce_read_online with ' +
+                'that URL (and say so if the site refuses).',
+            readOnly: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    query: {type: 'string', description: 'What to search for, in the user\'s language.'}
+                },
+                required: ['query']
+            },
+            handler: async ({query}, ctx = {}) => {
+                try {
+                    return await searchCaelLab(query, {signal: ctx.signal});
+                } catch (e) {
+                    // 抛出去会被 loop 包成「工具执行失败：…」，这里自己收成干净的中文便于直接给用户看
+                    return fail((e && e.message) || String(e));
+                }
+            }
         }
     ];
 

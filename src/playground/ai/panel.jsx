@@ -57,7 +57,8 @@ const TOOL_LABELS = {
     xce_get_time: '获取时间',
     xce_read_skill: '查阅资料',
     xce_read_fast_docs: '读取文档',
-    xce_read_online: '打开网页'
+    xce_read_online: '打开网页',
+    xce_search: '搜索网络'
 };
 
 const EMPTY_HINTS = [
@@ -761,7 +762,7 @@ HistoryView.propTypes = {
 // 面板
 // ---------------------------------------------------------------------------
 
-const AIPanel = ({vm}) => {
+const AIPanel = ({vm, activeTabIndex = 0}) => {
     const [mode, setMode] = useState('ai');
     const [draft, setDraft] = useState('');
     const [busy, setBusy] = useState(false);
@@ -1181,6 +1182,13 @@ const AIPanel = ({vm}) => {
         setConvIndex(loadConversationIndex());
     }, []);
 
+    // 停靠位置是按积木选择框量出来的，而造型 / 声音标签页里那一格根本不存在
+    // （量出来是一片 0，面板会跳到左上角压住画布）。所以只要不在「代码」页，整个面板收起来 ——
+    // 连收起态那个小把钮一起收（它同样浮在画布上）。切回代码页自己就回来了，会话不丢。
+    // 全屏形态例外：那是用户明确要求的铺满，而且它盖住了标签栏，本来就切不了页。
+    const onCodeTab = activeTabIndex === 0;
+    if (!onCodeTab && mode !== 'full') return null;
+
     if (mode === 'code') {
         return (
             <button
@@ -1415,10 +1423,14 @@ const AIPanel = ({vm}) => {
 };
 
 AIPanel.propTypes = {
+    activeTabIndex: PropTypes.number,
     vm: PropTypes.object
 };
 
 const mapStateToProps = state => ({
+    // 拿不到就按「代码页」算（宁可多显示，也别因为 store 还没挂上就把面板藏了）
+    activeTabIndex: state.scratchGui && state.scratchGui.editorTab ?
+        state.scratchGui.editorTab.activeTabIndex : 0,
     vm: state.scratchGui && state.scratchGui.vm
 });
 
