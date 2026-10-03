@@ -9,3 +9,6 @@ src/addons/addons
 src/addons/libraries
 src/addons/api-libraries
 src/addons/generated
+
+# 自动生成的积木元数据表（build-tables.mjs 的产物），改了也会被下次生成覆盖
+src/playground/ai/tables/blocks-meta.js

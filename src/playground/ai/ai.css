@@ -1,0 +1,1130 @@
+/*
+ * AI 终端面板样式。
+ *
+ * 规则取自 ZCode 的 DESIGN.md 与 dsh 的 web-styling 文档（两个项目实盘在用的那套）：
+ *   - 字号只有 3 档：正文 14/22、次级 13/18、行内代码 12（比正文小一档）
+ *   - 间距基数 4px，只用 4 / 8 / 12 / 16
+ *   - 颜色层级：文字 3 档、背景 3 档 + 用户消息单独一档、边框 3 档；色相不超过 5 个
+ *   - 圆角按嵌套递减：卡片 8 → 内部 6
+ *   - 只有用户消息有底色（ZCode 原话：speaker labels were visually noisy）
+ *   - 滚动条必须自己画，否则原生滚动条会跟界面打架
+ *   - markdown 必须把语法符藏掉（**、#、反引号不能出现在画面上）
+ *
+ * **配色不用 ZCode 的深色终端风，用 XCE 自己的浅色品牌** —— 面板是嵌在浅色编辑器里的，
+ * 深色会像贴上去的一块膏药（见下面 .ai-root 里的变量）。
+ *
+ * 面板是**停靠在积木选择框那格**的，宽度只有 ~310px，所以：
+ *   - 那一格是贴着屏幕左缘和底边的，圆角会漏出底下的东西 → 停靠时一律方角 + 一条右边框；
+ *   - 头部和底栏一律 nowrap，绝不允许换行（312px 下会挤成三行，非常难看）。
+ *
+ * 字体栈照 dsh：代码字体不带裸 monospace 兜底，否则 Windows 上的中文会掉到 SimSun。
+ */
+
+.ai-root {
+    /* 浅色，跟随 XCE 品牌（AGENTS.md「品牌」一节）：页面底色 #f5f6f8、卡片 #ffffff、
+       边框 #e4e7ec、主色 #2b6fec / hover #1d5bd6、阴影一律中性 rgba(16,24,40,…) 不许带色。
+       面板是嵌在编辑器里的：菜单栏就是这个 #2b6fec，用户气泡用的是编辑器自己的
+       --ui-primary（#e9f1fc，舞台/角色面板同色），所以贴上去看不出是外挂的。 */
+    --bg-base: #ffffff;
+    --bg-layer1: #f5f6f8;
+    --bg-layer2: #eceef2;
+    --bg-user: #e9f1fc;
+    --border-l1: #e4e7ec;
+    --border-l2: #d5d9e0;
+    --border-l3: #b9c0cc;
+    --text-1: #101828;
+    --text-2: #5a6472;
+    --text-3: #98a2b3;
+    --accent: #1d5bd6;
+    --accent-solid: #2b6fec;
+    --success: #12a150;
+    --warning: #b54708;
+    --error: #d92d20;
+    --shadow-float: 0 4px 14px rgba(16, 24, 40, 0.14);
+    --shadow-panel: 0 0 0 1px var(--border-l1), 0 12px 36px rgba(16, 24, 40, 0.12);
+
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+        'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--text-1);
+}
+
+.mono {
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------------------------------------------------------------- 让位时的小把钮 */
+
+.handle {
+    position: fixed;
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--accent-solid, #2b6fec);
+    color: #fff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--shadow-float);
+}
+
+.handle:hover {
+    filter: brightness(1.08);
+}
+
+/* ---------------------------------------------------------------- 面板外壳 */
+
+.panel {
+    position: fixed;
+    z-index: 900;
+    display: flex;
+    flex-direction: column;
+    /* 停靠矩形是量出来的像素值，边框算在外还是算在内必须确定，否则偏差 1px 就会露出底下的积木 */
+    box-sizing: border-box;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--bg-base);
+    /* 停靠态：贴屏幕左缘和底边，方角 + 一条右边框；圆角会把底下的积木漏出来 */
+    border-right: 1px solid var(--border-l1);
+}
+
+.panelFull {
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border-right: 0;
+}
+
+/* ---------------------------------------------------------------- 头部 */
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    height: 36px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--border-l1);
+    background: var(--bg-layer1);
+    white-space: nowrap;
+}
+
+.dot {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin: 0 4px 0 2px;
+    border-radius: 50%;
+    background: var(--text-3);
+}
+
+.dotBusy {
+    background: var(--success);
+    animation: aiPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes aiPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-overflow: ellipsis;
+}
+
+.iconBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+}
+
+.iconBtn:hover:enabled {
+    background: var(--bg-layer2);
+    color: var(--text-1);
+}
+
+.iconBtn:disabled {
+    color: var(--border-l3);
+    cursor: default;
+}
+
+/* ---------------------------------------------------------------- 设置页 */
+
+.settings {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    background: var(--bg-base);
+}
+
+.settingsHead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-l1);
+}
+
+.settingsTitle {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.settingsBody {
+    flex: 1;
+    min-height: 0;
+    padding: 12px;
+    overflow-y: auto;
+}
+
+.field {
+    display: block;
+    margin-bottom: 12px;
+}
+
+.fieldLabel {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.fieldNote {
+    margin-top: 4px;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.fieldInput,
+.fieldSelect {
+    display: block;
+    width: 100%;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--border-l2);
+    border-radius: 6px;
+    outline: none;
+    box-sizing: border-box;
+    background: var(--bg-layer1);
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.fieldSelect {
+    cursor: pointer;
+}
+
+.fieldInput:focus,
+.fieldSelect:focus {
+    border-color: var(--accent-solid);
+}
+
+.fieldTextarea {
+    display: block;
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border-l2);
+    border-radius: 6px;
+    outline: none;
+    box-sizing: border-box;
+    resize: vertical;
+    background: var(--bg-layer1);
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.fieldTextarea:focus {
+    border-color: var(--accent-solid);
+}
+
+.fieldTextarea::placeholder {
+    color: var(--text-3);
+}
+
+.rowButtons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.btn {
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--border-l2);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.btn:hover:enabled {
+    background: var(--bg-layer2);
+}
+
+.btn:disabled {
+    color: var(--text-3);
+    cursor: default;
+}
+
+.btnPrimary {
+    border-color: var(--accent-solid);
+    background: var(--accent-solid);
+    color: #fff;
+    font-weight: 600;
+}
+
+.btnPrimary:hover:enabled {
+    background: var(--accent-solid);
+    filter: brightness(1.08);
+}
+
+/* ---------------------------------------------------------------- 历史对话列表 */
+
+/* 跟设置视图同一个骨架：flex 列，头 + 内容区。312px 下每行不许换行，标题走省略。 */
+.history {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    background: var(--bg-base);
+}
+
+.historyHead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-l1);
+}
+
+.historyTitle {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.historyNew {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    height: 30px;
+    margin: 8px 12px 4px;
+    border: 1px dashed var(--border-l3);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.historyNew:hover {
+    border-color: var(--accent-solid);
+    background: var(--bg-layer1);
+}
+
+.historyList {
+    flex: 1;
+    min-height: 0;
+    padding: 4px 8px 12px;
+    overflow-y: auto;
+}
+
+.historyItem {
+    display: flex;
+    align-items: stretch;
+    margin-top: 2px;
+    border-radius: 6px;
+}
+
+.historyItem:hover {
+    background: var(--bg-layer1);
+}
+
+.historyItemCurrent {
+    background: var(--bg-user);
+}
+
+.historyItemCurrent:hover {
+    background: var(--bg-user);
+}
+
+.historyMain {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 4px 6px 8px;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.historyItemTitle {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-1);
+    font-size: 13px;
+    line-height: 20px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.historyItemMeta {
+    flex: 0 0 auto;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.historyDelete {
+    flex: 0 0 auto;
+    align-self: center;
+    height: 22px;
+    margin-left: 4px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    visibility: hidden;
+}
+
+.historyItem:hover .historyDelete,
+.historyDeleteArm {
+    visibility: visible;
+}
+
+.historyDelete:hover,
+.historyDeleteArm {
+    background: var(--bg-layer2);
+    color: var(--error);
+}
+
+.historyEmpty {
+    margin: 16px 4px;
+    color: var(--text-3);
+    font-size: 13px;
+    line-height: 20px;
+    text-align: center;
+}
+
+/* 模型清单：312px 宽下列表比 datalist 好用得多 */
+.modelsList {
+    max-height: 216px;
+    overflow-y: auto;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
+    background: var(--bg-layer1);
+}
+
+.modelsEmpty {
+    padding: 10px 12px;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.modelRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--border-l1);
+    background: transparent;
+    color: var(--text-1);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.modelRow:last-child {
+    border-bottom: 0;
+}
+
+.modelRow:hover {
+    background: var(--bg-layer2);
+}
+
+.modelRowOn {
+    background: var(--bg-user);
+}
+
+.modelTick {
+    flex: 0 0 auto;
+    width: 12px;
+    color: var(--accent);
+}
+
+.modelText {
+    flex: 1;
+    min-width: 0;
+}
+
+.modelName {
+    display: block;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 18px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modelId {
+    display: block;
+    overflow: hidden;
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tag {
+    flex: 0 0 auto;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg-layer2);
+    color: var(--text-2);
+    font-size: 11px;
+    line-height: 16px;
+}
+
+.tagImg {
+    background: var(--bg-user);
+    color: var(--accent);
+}
+
+.tagThink {
+    background: #fdf0e3;
+    color: var(--warning);
+}
+
+/* ---------------------------------------------------------------- 转录区 */
+
+/* 转录区 + 浮在上面的「回到底部」（浮层要相对它定位，所以多一层壳） */
+.transcriptWrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.transcript {
+    flex: 1;
+    min-height: 0;
+    padding: 12px;
+    overflow-y: auto;
+    overflow-wrap: break-word;
+    background: var(--bg-base);
+}
+
+.jump {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    height: 26px;
+    padding: 0 12px;
+    border: 1px solid var(--border-l3);
+    border-radius: 13px;
+    background: var(--bg-layer2);
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: var(--shadow-float);
+}
+
+.jump:hover {
+    border-color: var(--accent-solid);
+}
+
+.transcript::-webkit-scrollbar,
+.settingsBody::-webkit-scrollbar,
+.toolBody::-webkit-scrollbar,
+.modelsList::-webkit-scrollbar,
+.thinkBody::-webkit-scrollbar {
+    width: 8px;
+}
+
+.transcript::-webkit-scrollbar-thumb,
+.settingsBody::-webkit-scrollbar-thumb,
+.toolBody::-webkit-scrollbar-thumb,
+.modelsList::-webkit-scrollbar-thumb,
+.thinkBody::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 4px;
+    background-clip: content-box;
+    background-color: var(--border-l3);
+}
+
+/* 空状态：别留一片黑洞 */
+.empty {
+    color: var(--text-2);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.emptyTitle {
+    margin: 0 0 8px;
+    color: var(--text-1);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.empty p {
+    margin: 0 0 8px;
+}
+
+.emptyHints {
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.emptyHints li {
+    margin-bottom: 6px;
+}
+
+.emptyHint {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border-l1);
+    border-radius: 6px;
+    background: var(--bg-layer1);
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 18px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.emptyHint:hover {
+    border-color: var(--border-l3);
+    background: var(--bg-layer2);
+}
+
+.emptyWarn {
+    margin-top: 12px !important;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-l1);
+    color: var(--warning);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+/* 用户消息：整个界面里唯一有底色的一块 */
+.user {
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--bg-user);
+    white-space: pre-wrap;
+}
+
+.agent {
+    margin-bottom: 12px;
+    color: var(--text-1);
+}
+
+.agent:last-child {
+    margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------- 思考过程 */
+
+.think {
+    margin-bottom: 8px;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
+    background: var(--bg-layer1);
+    overflow: hidden;
+}
+
+.thinkHead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.thinkHead:hover {
+    color: var(--text-1);
+}
+
+.thinkLabel {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.thinkChevron {
+    flex: 0 0 auto;
+    transition: transform 0.15s ease;
+}
+
+.thinkOpen .thinkChevron {
+    transform: rotate(90deg);
+}
+
+.thinkBody {
+    max-height: 220px;
+    padding: 0 10px 8px;
+    overflow-y: auto;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 19px;
+    white-space: pre-wrap;
+}
+
+/* ---------------------------------------------------------------- 工具卡 */
+
+.tool {
+    margin-bottom: 8px;
+    border: 1px solid var(--border-l1);
+    border-left: 2px solid var(--border-l3);
+    border-radius: 8px;
+    background: var(--bg-layer1);
+    overflow: hidden;
+}
+
+.toolOk {
+    border-left-color: var(--success);
+}
+
+.toolBad {
+    border-left-color: var(--error);
+}
+
+.toolRunning {
+    border-left-color: var(--warning);
+}
+
+.toolHead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--text-1);
+    cursor: pointer;
+    text-align: left;
+}
+
+.toolHead:hover {
+    background: var(--bg-layer2);
+}
+
+.toolName {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.toolArg {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-3);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.toolStatus {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-3);
+}
+
+.ok {
+    color: var(--success);
+}
+
+.bad {
+    color: var(--error);
+}
+
+.wait {
+    color: var(--warning);
+}
+
+.toolBody {
+    max-height: 260px;
+    padding: 8px 10px;
+    overflow: auto;
+    border-top: 1px solid var(--border-l1);
+    color: var(--text-2);
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 12px;
+    line-height: 18px;
+    white-space: pre-wrap;
+}
+
+.toolImg {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    border: 1px solid var(--border-l2);
+    border-radius: 6px;
+    background: var(--bg-layer1);
+}
+
+.toolImgNote {
+    margin-top: 8px;
+    color: var(--text-3);
+    font-size: 12px;
+}
+
+/* 「查看 Agent 的请求」：用户展开工具卡后，可以看这次调用真正发出去的参数 */
+.reqToggle {
+    display: block;
+    margin-top: 8px;
+    height: 22px;
+    padding: 0 8px;
+    border: 1px solid var(--border-l2);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.reqToggle:hover {
+    background: var(--bg-layer2);
+    color: var(--text-1);
+}
+
+.toolReq {
+    max-height: 200px;
+    margin-top: 6px;
+    padding: 8px 10px;
+    overflow: auto;
+    border: 1px solid var(--border-l1);
+    border-radius: 6px;
+    background: var(--bg-base);
+    color: var(--text-2);
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 11px;
+    line-height: 17px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.undo {
+    margin: 0 10px 8px;
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid var(--border-l2);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.undo:hover {
+    background: var(--bg-layer2);
+    color: var(--text-1);
+}
+
+/* ---------------------------------------------------------------- markdown */
+
+.mdP {
+    margin: 0 0 8px;
+}
+
+.mdH1,
+.mdH2,
+.mdH3 {
+    margin: 16px 0 8px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.mdH1 {
+    font-size: 18px;
+}
+
+.mdH2 {
+    font-size: 16px;
+}
+
+.mdH3 {
+    font-size: 14px;
+}
+
+.mdList {
+    margin: 0 0 8px;
+    padding-left: 20px;
+}
+
+.mdList li {
+    margin-bottom: 4px;
+}
+
+.mdQuote {
+    margin: 0 0 8px;
+    padding: 2px 0 2px 12px;
+    border-left: 2px solid var(--border-l3);
+    color: var(--text-2);
+}
+
+.mdHr {
+    margin: 12px 0;
+    border: 0;
+    border-top: 1px solid var(--border-l1);
+}
+
+.mdCode {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg-layer2);
+    color: var(--accent);
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 12px;
+}
+
+.mdPre {
+    margin: 0 0 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
+    background: var(--bg-layer1);
+    color: var(--text-1);
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 12px;
+    line-height: 18px;
+    white-space: pre;
+}
+
+.mdBlocks {
+    border-left: 2px solid var(--accent-solid);
+}
+
+.mdLink {
+    color: var(--accent);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.mdLink:hover {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+}
+
+.mdTable {
+    width: 100%;
+    margin: 0 0 8px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.mdTable th,
+.mdTable td {
+    padding: 4px 8px;
+    border: 1px solid var(--border-l1);
+    text-align: left;
+}
+
+.mdTable th {
+    background: var(--bg-layer1);
+    color: var(--text-2);
+    font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- 输入区 */
+
+.composer {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--border-l1);
+    background: var(--bg-layer1);
+}
+
+.input {
+    display: block;
+    width: 100%;
+    height: 64px;
+    padding: 8px 12px;
+    border: none;
+    outline: none;
+    resize: none;
+    box-sizing: border-box;
+    background: transparent;
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.input::placeholder {
+    color: var(--text-3);
+}
+
+.statusBar {
+    padding: 4px 12px 0;
+    overflow: hidden;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.statusError {
+    color: var(--error);
+}
+
+.bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px 8px;
+    white-space: nowrap;
+}
+
+.modelBtn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.modelBtn:hover {
+    background: var(--bg-layer2);
+    color: var(--text-1);
+}
+
+.modelBtnText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ctx {
+    flex: 0 0 auto;
+    color: var(--text-3);
+    font-size: 12px;
+}
+
+.ctxWarn {
+    color: var(--warning);
+}
+
+.send {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    height: 26px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--accent-solid);
+    color: #fff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.send:hover:enabled {
+    filter: brightness(1.08);
+}
+
+.send:disabled {
+    background: var(--bg-layer2);
+    color: var(--text-3);
+    cursor: default;
+}
+
+/* 自动总结之类的系统提示行 */
+.notice {
+    margin-bottom: 12px;
+    padding: 6px 10px;
+    border: 1px dashed var(--border-l2);
+    border-radius: 6px;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 18px;
+}

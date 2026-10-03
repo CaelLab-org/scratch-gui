@@ -44,6 +44,8 @@ import runAddons from '../addons/entry';
 import InvalidEmbed from '../components/tw-invalid-embed/invalid-embed.jsx';
 import {APP_NAME} from '../lib/brand.js';
 import {getLocaleFromPath, getBCP47Code} from '../lib/locales-config.js';
+import AIPanel from './ai/panel.jsx';
+import ProjectPersistence from './project-persistence.jsx';
 import xceLogo from '../../static/xce-logo.png';
 
 import styles from './interface.css';
@@ -258,14 +260,13 @@ class Interface extends React.Component {
                         backpackHost="_local_"
                         {...props}
                     />
+                    {isEditor ? <AIPanel /> : null}
+                    {isEditor ? <ProjectPersistence /> : null}
                     {isHomepage ? null : (
                         <React.Fragment>
                             {isBrowserSupported() ? null : (
                                 <BrowserModal isRtl={isRtl} />
                             )}
-                            <div className={styles.section}>
-                                <ProjectInput />
-                            </div>
                             {hasCloudVariables && projectId !== '0' && (
                                 <div className={styles.section}>
                                     <CloudVariableBadge />

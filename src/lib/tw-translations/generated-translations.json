@@ -5030,7 +5030,7 @@
         "tw.settingsModal.removeMiscLimits": "移除其他限制",
         "tw.settingsModal.removeMiscLimitsHelp": "取消音效范围限制和画笔大小限制。",
         "tw.settingsModal.storeProjectOptions": "在作品中保留设置",
-        "tw.settingsModal.storeProjectOptionsHelp": "在作品文件中储存已选择的设置，它们会在 TurboWarp 加载作品文件时自动被应用。循环计时器和不使用编译不会被保存。",
+        "tw.settingsModal.storeProjectOptionsHelp": "在作品文件中储存已选择的设置，它们会在本编辑器加载作品文件时自动被应用。循环计时器和不使用编译不会被保存。",
         "tw.settingsModal.title": "高级设置",
         "tw.settingsModal.warpTimer": "循环计时器",
         "tw.settingsModal.warpTimerHelp": "让脚本检查它们是否卡在长循环或无限循环中，并以低帧率运行，从而避免它们在循环结束前使浏览器假死。这会解决大多数崩溃，但对性能有很大负面影响，所以它只在编辑器中默认启用。",
