@@ -89,7 +89,7 @@ export const groupByTurns = messages => {
     return groups;
 };
 
-export const CLEARED = '[较早的工具返回已清理]';
+export const CLEARED = '[earlier tool result cleared]';
 
 /**
  * 轻量压缩：把最近 keepRecent 轮之外的工具返回内容换成占位符。不调模型。
@@ -128,7 +128,7 @@ First write your analysis inside <analysis></analysis> tags: what the user asked
 3. Facts discovered about the project: sprite names, variable and list names, script contents that matter, extension availability.
 4. Anything left unfinished, and the next step.
 
-Write it in Chinese, compact, no greeting. Facts and names exactly as they were — never paraphrase a variable name.`;
+Write it in English, compact, no greeting. Facts and names exactly as they were — never paraphrase, translate or rename a sprite, variable or list name.`;
 
 /**
  * 整段压缩：把 keepRecent 轮之外的全部内容压成一条摘要消息。
@@ -154,12 +154,12 @@ export const compactSession = async ({session, model, keepRecent = 2, signal, on
     const transcript = oldMessages.map(message => {
         if (message.role === 'tool') {
             const shot = message.images && message.images.length ?
-                `（其中包含 ${message.images.length} 张舞台截图）` : '';
-            return `[工具返回] ${String(message.content).slice(0, 600)}${shot}`;
+                ` (including ${message.images.length} stage screenshot(s))` : '';
+            return `[tool result] ${String(message.content).slice(0, 600)}${shot}`;
         }
         let line = `[${message.role}] ${String(message.content || '').slice(0, 1200)}`;
         if (message.toolCalls && message.toolCalls.length) {
-            line += `\n[它调用了] ${message.toolCalls.map(c => c.name).join(', ')}`;
+            line += `\n[it called] ${message.toolCalls.map(c => c.name).join(', ')}`;
         }
         return line;
     }).join('\n');
@@ -168,7 +168,7 @@ export const compactSession = async ({session, model, keepRecent = 2, signal, on
     const reply = await model.complete(
         [{
             role: 'user',
-            content: `${SUMMARY_PROMPT}\n\n--- 需要总结的对话 ---\n${transcript}`
+            content: `${SUMMARY_PROMPT}\n\n--- conversation to summarize ---\n${transcript}`
         }],
         [],
         {signal, onChunk: () => {}}
@@ -183,8 +183,9 @@ export const compactSession = async ({session, model, keepRecent = 2, signal, on
         {
             role: 'user',
             content:
-                `（这是一次自动总结。之前的 ${oldGroups.length} 轮对话被压缩成了下面这段摘要，` +
-                `原文不再逐字保留 —— 需要当前事实就用工具重新读项目。）\n\n${summary}`
+                `(This is an automatic summary. The previous ${oldGroups.length} turns were compressed into ` +
+                `the summary below; the original text is no longer kept verbatim — re-read the project with ` +
+                `tools if you need current facts.)\n\n${summary}`
         },
         ...recent
     ];

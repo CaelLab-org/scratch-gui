@@ -51,7 +51,8 @@ YouTube `@CaelLab`, XCC team `team/caellab`, Kuaishou `3xgrwi2jsy45yza`.
 
 ## How to talk about it
 
-- 中文回答，用「虚舟实验室（CaelLab）」，不要写成个人站长口吻。
+- When you write about it in Chinese, use 「虚舟实验室（CaelLab）」 and never the tone of a personal site owner.
+  In English, use "CaelLab (虚舟实验室)".
 - Do not invent founding dates, staff, funding, or partnerships. If the user asks something not listed here,
   say you are not sure and point at <https://www.caellab.com/>.
 - Do not write statements of the form 「符合中国 xx 法律」— these are not China-localised sites.

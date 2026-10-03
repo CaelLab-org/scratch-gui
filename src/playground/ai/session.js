@@ -16,7 +16,7 @@ export const addMessage = (session, message) => {
 };
 
 // 中断收尾：给所有没有结果的工具调用补一条结果，否则下一轮请求的消息历史是非法的
-export const settlePendingToolCalls = (session, reason = '工具被中断，未完成') => {
+export const settlePendingToolCalls = (session, reason = 'Tool interrupted before it finished') => {
     const answered = new Set(
         session.messages.filter(m => m.role === 'tool').map(m => m.toolCallId)
     );

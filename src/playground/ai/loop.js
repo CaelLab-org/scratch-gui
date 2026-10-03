@@ -23,8 +23,9 @@ export const MAX_TOOL_CHARS = 20 * 1024;
 const truncateContent = (content, tool) => {
     if (typeof content !== 'string' || content.length <= MAX_TOOL_CHARS) return content;
     const hint = tool && tool.paged ?
-        '可带 lineStart / lineEnd 参数再调一次获取指定行范围（行范围结果同样最多 20KB）。' : '';
-    return `${content.slice(0, MAX_TOOL_CHARS)}\n\n[已被截断，由于过长（超过 20KB）。${hint}]`;
+        ' Call again with lineStart / lineEnd to get a specific line range' +
+        ' (a paged result is capped at 20KB too).' : '';
+    return `${content.slice(0, MAX_TOOL_CHARS)}\n\n[Truncated: too long (over 20KB).${hint}]`;
 };
 
 /**
@@ -57,7 +58,7 @@ export const createSkipToken = () => {
 export const executeTool = async (call, tools, ctx) => {
     const tool = tools.find(t => t.name === call.name);
     if (!tool) {
-        return {content: `错误：没有名为 ${call.name} 的工具`, isError: true};
+        return {content: `Error: there is no tool named ${call.name}`, isError: true};
     }
     try {
         const input = call.input || {};
@@ -68,15 +69,14 @@ export const executeTool = async (call, tools, ctx) => {
             // 给它正确的名单就能自己纠正，不用用户插手
             const propNames = Object.keys((tool.inputSchema && tool.inputSchema.properties) || {});
             return {
-                content: `错误：缺少参数 ${missing.join(', ')}。` +
-                    `${tool.name} 的参数是：${propNames.join(', ')}。` +
-                    `对照上面的名单检查参数名再调一次。`,
+                content: `Error: missing parameter(s) ${missing.join(', ')}. The parameters of ${tool.name} ` +
+                    `are: ${propNames.join(', ')}. Check the parameter names against that list and call again.`,
                 isError: true
             };
         }
         if (tool.validate) {
             const problem = tool.validate(input);
-            if (problem) return {content: `错误：${problem}`, isError: true};
+            if (problem) return {content: `Error: ${problem}`, isError: true};
         }
         const result = await tool.handler(input, ctx);
         if (typeof result === 'string') return {content: truncateContent(result, tool)};
@@ -87,7 +87,7 @@ export const executeTool = async (call, tools, ctx) => {
             images: result.images
         };
     } catch (e) {
-        return {content: `工具执行失败：${(e && e.message) || e}`, isError: true};
+        return {content: `Tool execution failed: ${(e && e.message) || e}`, isError: true};
     }
 };
 

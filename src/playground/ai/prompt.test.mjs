@@ -25,6 +25,12 @@ check('工具面说死（六个工具都点到）',
     ['xce_read_project', 'xce_write_script', 'xce_delete_script', 'xce_run_project', 'xce_read_state', 'xce_read_stage']
         .every(name => plain.includes(name)));
 
+// ---------- 1.5 语言规矩：回答跟用户走，思考用英文 ----------
+check('回答语言跟着用户走（不再写死中文）', /Answer in the language the user writes in/.test(plain));
+check('思考一律英文', /Think in English/.test(plain));
+check('不再硬性要求中文回答', !/Always reply in Chinese/.test(plain));
+check('中文里仍叫「角色」不叫「精灵」', plain.includes('「角色」') && plain.includes('「精灵」'));
+
 // 没写自定义提示词就不许出现分隔标记
 check('没有自定义提示词时不留空分隔块', !plain.includes('[End of system prompt]'));
 

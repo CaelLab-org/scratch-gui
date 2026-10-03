@@ -98,9 +98,9 @@ export const extractHead = (html, cap = HEAD_CAP) => {
         clean((metaTag.match(/content\s*=\s*["']([\s\S]*?)["']/i) || [null, ''])[1]) : '';
 
     // title 永远在（有 title 是给不给 head 的唯一开关），description 塞得下才带
-    let summary = `标题：${clean(title)}`;
+    let summary = `Title: ${clean(title)}`;
     if (description) {
-        const candidate = `${summary}\n站点说明：${description}`;
+        const candidate = `${summary}\nSite description: ${description}`;
         if (candidate.length <= cap) summary = candidate;
     }
     return summary.slice(0, cap);
@@ -115,7 +115,7 @@ export const extractHead = (html, cap = HEAD_CAP) => {
 export const fetchOnline = async (url, {timeoutMs = DEFAULT_TIMEOUT_MS, signal} = {}) => {
     const target = String(url || '').trim();
     if (!/^https?:\/\/\S+/i.test(target)) {
-        throw new Error(`这不是能抓的地址：${target || '（空）'}。要 http(s) 开头的完整网址。`);
+        throw new Error(`Not a fetchable URL: ${target || '(empty)'}. It must be a full URL starting with http(s).`);
     }
 
     // 5 秒超时；外层 signal（用户按停止）也并入这个控制器
@@ -138,14 +138,15 @@ export const fetchOnline = async (url, {timeoutMs = DEFAULT_TIMEOUT_MS, signal} 
     } catch (fetchError) {
         clearTimeout(timer);
         const aborted = controller.signal.aborted && !(signal && signal.aborted);
-        if (signal && signal.aborted) throw new Error('抓取被用户中断。');
-        if (aborted) throw new Error(`抓取超时（${timeoutMs / 1000} 秒没等到响应）。`);
+        if (signal && signal.aborted) throw new Error('The fetch was interrupted by the user.');
+        if (aborted) throw new Error(`Fetch timed out (no response within ${timeoutMs / 1000}s).`);
         // TypeError + "Failed to fetch" 就是 CORS 拒读（或断网/拒连）——这是浏览器安全模型，
         // 代码绕不过。把实情报出去，让模型转告用户，绝不编内容。
         throw new Error(
-            `抓不到这个页面（${fetchError.message}）。最常见的原因是跨域限制（CORS）：` +
-            `目标网站没有声明「允许别的网站读取」，浏览器就会拦下响应，这不是故障。` +
-            `请如实告诉用户这个站不让 AI 直接读，让他自己打开链接看；不要凭记忆编造页面内容。`);
+            `Could not fetch this page (${fetchError.message}). The most common cause is CORS: the target ` +
+            `site does not declare that other sites may read it, so the browser blocks the response — that ` +
+            `is not a malfunction. Tell the user honestly that this site does not let the AI read it and let ` +
+            `them open the link themselves; never invent page content from memory.`);
     }
 
     // 粗判 HTML：有标签就算。纯文本接口（.txt、JSON）原样给
@@ -161,10 +162,11 @@ export const fetchOnline = async (url, {timeoutMs = DEFAULT_TIMEOUT_MS, signal} 
     sections.push(body.slice(0, BODY_CAP));
     if (truncated) {
         // 截断必须说出口，不然模型把半篇当全文
-        sections.push(`[正文超过 ${Math.round(BODY_CAP / 1024)}KB，只显示了开头部分。需要后面的内容可以让用户换页面的具体章节地址，或者告诉用户直接去原页面看。]`);
+        sections.push(`[The body is over ${Math.round(BODY_CAP / 1024)}KB; only the beginning is shown. For the ` +
+            `rest, ask the user for a more specific section URL, or tell them to open the original page.]`);
     }
     if (!body.trim() && !head) {
-        throw new Error('页面抓到了，但提取不出任何文字（可能整页都是脚本画的）。');
+        throw new Error('The page was fetched, but no text could be extracted (it may be drawn entirely by scripts).');
     }
 
     return {content: sections.join('\n\n').trim(), truncated};
