@@ -17,11 +17,28 @@
  *     都不开这个头，所以大多数页面会抓不到；能抓到的只有 API 这类**特意放行跨域**的端点。
  *     抓不到时把原因如实报给模型，让它转告用户「这个站不让浏览器直接读」，
  *     别猜、别编。要读任意站得有个**自己服务器上的中转端点**（见面板说明），那是部署层面的事。
+ *   - **桌面版（Electron 壳）绕开 CORS，但不绕过浏览器**：判断有没有 `window.EditorPreload.fetchOnline`
+ *     —— 有就是桌面版，请求交给**主进程**发（`net.fetch`，Chromium 的网络栈但没有页面 origin 那层
+ *     跨域检查），公开网页因此能真读回来；没有就还是页面里的 `window.fetch`。两条路的**上限完全一样**
+ *     （5 秒 / 正文 20KB / head 2KB），桌面那条另有一个 1MB 的原始响应上限，由主进程执行。
  */
 
 export const HEAD_CAP = 2048;
 export const BODY_CAP = 20 * 1024;
 export const DEFAULT_TIMEOUT_MS = 5000;
+
+/**
+ * 桌面版的桥（src-preload/editor.js 暴露）。浏览器与无头测试里没有它。
+ * 每次调用现查，不在模块求值时缓存 —— 测试要能临时挂上/摘掉。
+ * @returns {object|null} 桥对象；不是桌面版就是 null
+ */
+const desktopBridge = () => {
+    if (typeof window === 'undefined' || !window.EditorPreload) return null;
+    return typeof window.EditorPreload.fetchOnline === 'function' ? window.EditorPreload : null;
+};
+
+/** @returns {boolean} 当前是不是桌面版（决定措辞：桌面版不受 CORS 限制） */
+export const isDesktopMode = () => !!desktopBridge();
 
 // 块级标签：出现就换行，让文本有段落结构
 /* eslint-disable-next-line max-len -- 标签清单是数据，拆行反而难核对 */
@@ -107,6 +124,103 @@ export const extractHead = (html, cap = HEAD_CAP) => {
 };
 
 /**
+ * 网页版/无头环境的通道：页面里的 `window.fetch`（受 CORS 管）。
+ * @param {string} target 要抓的地址
+ * @param {object} opts {timeoutMs, signal}
+ * @returns {Promise<{body: string, rawTruncated: boolean}>} 原始响应文本（桌面通道才会截，这里恒为 false）
+ */
+const readTextInBrowser = async (target, {timeoutMs, signal}) => {
+    // 5 秒超时；外层 signal（用户按停止）也并入这个控制器
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    if (signal) {
+        if (signal.aborted) controller.abort();
+        else signal.addEventListener('abort', () => controller.abort(), {once: true});
+    }
+
+    try {
+        const response = await fetch(target, {signal: controller.signal});
+        if (!response.ok) {
+            clearTimeout(timer);
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const body = await response.text();
+        clearTimeout(timer);
+        return {body, rawTruncated: false};
+    } catch (fetchError) {
+        clearTimeout(timer);
+        const aborted = controller.signal.aborted && !(signal && signal.aborted);
+        if (signal && signal.aborted) throw new Error('The fetch was interrupted by the user.');
+        if (aborted) throw new Error(`Fetch timed out (no response within ${timeoutMs / 1000}s).`);
+        if (/^HTTP \d+$/.test(fetchError.message)) throw fetchError;
+        // TypeError + "Failed to fetch" 就是 CORS 拒读（或断网/拒连）——这是浏览器安全模型，
+        // 代码绕不过。但「读不到」不等于「答不了」：让模型换别的路子，别一失败就把用户支走。
+        throw new Error(
+            `Could not fetch this page (${fetchError.message}). The usual cause is CORS: the site does not ` +
+            `declare that other sites may read it, so the browser blocks the response. Do not stop here — ` +
+            `try another URL, or fall back on what you already know and say that is where it came from. ` +
+            `Mention in one line that this page could not be read; never invent page content from memory.`);
+    }
+};
+
+/**
+ * 桌面版的通道：交给主进程的 `net.fetch`（没有页面 origin，也就没有 CORS）。
+ * 用户按停止时不等 IPC 回来 —— 主进程那条请求自己会在超时后结束。
+ * @param {object} bridge window.EditorPreload（含 fetchOnline）
+ * @param {string} target 要抓的地址
+ * @param {object} opts {timeoutMs, signal}
+ * @returns {Promise<{body: string, rawTruncated: boolean}>} 原始响应文本；被主进程的上限截过则 rawTruncated 为真
+ */
+const readTextInDesktop = async (bridge, target, {timeoutMs, signal}) => {
+    if (signal && signal.aborted) throw new Error('The fetch was interrupted by the user.');
+
+    const interrupted = new Promise((resolve, reject) => {
+        if (!signal) return;
+        signal.addEventListener('abort', () => reject(new Error('aborted')), {once: true});
+    });
+
+    let result;
+    try {
+        result = await Promise.race([bridge.fetchOnline(target, timeoutMs), interrupted]);
+    } catch (error) {
+        if (signal && signal.aborted) throw new Error('The fetch was interrupted by the user.');
+        throw new Error(
+            `Could not fetch this page (${(error && error.message) || error}). The desktop app asks for pages ` +
+            `itself, so CORS is not involved; this looks like a network-level failure (offline, DNS, TLS, ` +
+            `connection refused or a timeout). Do not stop here — try another URL, or fall back on what you ` +
+            `already know and say that is where it came from. Mention in one line that this page could not be ` +
+            `read; never invent page content from memory.`);
+    }
+
+    if (result && result.binary) {
+        throw new Error(`This URL is not a text page (content-type: ${result.binary}), so there is nothing to ` +
+            'read here.');
+    }
+    if (result && result.networkError) {
+        throw new Error(
+            `Could not fetch this page (${result.networkError}). The desktop app asks for pages itself, so CORS ` +
+            `is not involved; this looks like a network-level failure (offline, DNS, TLS, connection refused or ` +
+            `a timeout). Do not stop here — try another URL, or fall back on what you already know and say that ` +
+            `is where it came from. Never invent page content from memory.`);
+    }
+    if (!result || !result.ok) {
+        throw new Error(`HTTP ${result ? result.status : '?'}`);
+    }
+    return {body: result.text, rawTruncated: !!result.truncated};
+};
+
+/**
+ * 抓一个 URL，返回页面原始文本（还没做 HTML 提取）。
+ * @param {string} target 要抓的地址（http/https）
+ * @param {object} opts {timeoutMs, signal}
+ * @returns {Promise<{body: string, rawTruncated: boolean}>} 原始响应文本与「是否被下载上限截过」
+ */
+const readText = (target, opts) => {
+    const bridge = desktopBridge();
+    return bridge ? readTextInDesktop(bridge, target, opts) : readTextInBrowser(target, opts);
+};
+
+/**
  * 抓一个 URL，返回给模型看的内容。
  * @param {string} url 要抓的地址（http/https）
  * @param {object} opts {timeoutMs, signal}
@@ -118,56 +232,32 @@ export const fetchOnline = async (url, {timeoutMs = DEFAULT_TIMEOUT_MS, signal} 
         throw new Error(`Not a fetchable URL: ${target || '(empty)'}. It must be a full URL starting with http(s).`);
     }
 
-    // 5 秒超时；外层 signal（用户按停止）也并入这个控制器
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    if (signal) {
-        if (signal.aborted) controller.abort();
-        else signal.addEventListener('abort', () => controller.abort(), {once: true});
-    }
-
-    let body;
-    try {
-        const response = await fetch(target, {signal: controller.signal});
-        if (!response.ok) {
-            clearTimeout(timer);
-            throw new Error(`HTTP ${response.status}`);
-        }
-        body = await response.text();
-        clearTimeout(timer);
-    } catch (fetchError) {
-        clearTimeout(timer);
-        const aborted = controller.signal.aborted && !(signal && signal.aborted);
-        if (signal && signal.aborted) throw new Error('The fetch was interrupted by the user.');
-        if (aborted) throw new Error(`Fetch timed out (no response within ${timeoutMs / 1000}s).`);
-        // TypeError + "Failed to fetch" 就是 CORS 拒读（或断网/拒连）——这是浏览器安全模型，
-        // 代码绕不过。但「读不到」不等于「答不了」：让模型换别的路子，别一失败就把用户支走。
-        throw new Error(
-            `Could not fetch this page (${fetchError.message}). The usual cause is CORS: the site does not ` +
-            `declare that other sites may read it, so the browser blocks the response. Do not stop here — ` +
-            `try another URL, or fall back on what you already know and say that is where it came from. ` +
-            `Mention in one line that this page could not be read; never invent page content from memory.`);
-    }
+    const {body: raw, rawTruncated} = await readText(target, {timeoutMs, signal});
 
     // 粗判 HTML：有标签就算。纯文本接口（.txt、JSON）原样给
     let head = null;
-    if (/<[a-z!]/i.test(body.slice(0, 512))) {
-        head = extractHead(body);
-        body = htmlToText(body);
+    let body = raw;
+    if (/<[a-z!]/i.test(raw.slice(0, 512))) {
+        head = extractHead(raw);
+        body = htmlToText(raw);
     }
 
     const sections = [];
     if (head) sections.push(head.slice(0, HEAD_CAP));
-    const truncated = body.length > BODY_CAP;
+    const bodyTruncated = body.length > BODY_CAP;
     sections.push(body.slice(0, BODY_CAP));
-    if (truncated) {
+    if (bodyTruncated) {
         // 截断必须说出口，不然模型把半篇当全文
         sections.push(`[The body is over ${Math.round(BODY_CAP / 1024)}KB; only the beginning is shown. For the ` +
             `rest, ask the user for a more specific section URL, or tell them to open the original page.]`);
+    } else if (rawTruncated) {
+        // 原始响应就被主进程的上限截了：正文没到 20KB，但内容确实缺了一截，同样要说
+        sections.push('[The download itself was cut off (the page is larger than the app fetches whole), so the ' +
+            'text above stops early — say so if it matters.]');
     }
     if (!body.trim() && !head) {
         throw new Error('The page was fetched, but no text could be extracted (it may be drawn entirely by scripts).');
     }
 
-    return {content: sections.join('\n\n').trim(), truncated};
+    return {content: sections.join('\n\n').trim(), truncated: bodyTruncated || rawTruncated};
 };
