@@ -54,6 +54,7 @@ const TOOL_LABELS = {
     read_state: '读取状态',
     read_stage: '截取舞台',
     read_skill: '查阅资料',
+    read_fast_docs: '读取文档',
     read_online: '打开网页'
 };
 
@@ -993,7 +994,6 @@ const AIPanel = ({vm}) => {
                 .slice(0, 10),
             modelInfo,
             userPrompt: settings.userPrompt,
-            skills: SKILLS,
             toolNames: tools.map(tool => tool.name)
         });
 

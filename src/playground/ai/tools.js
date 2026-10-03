@@ -232,18 +232,34 @@ export const createTools = ({port, skills = []}) => {
         {
             name: 'read_skill',
             description:
-                'Load one reference document ("skill") by name. The system prompt lists what is available ' +
-                'with a one-line description of each; this tool returns the full text.\n' +
-                'Use it before answering anything about the editor itself, about CaelLab, or about the ' +
-                'sites around them — those facts are deliberately kept out of the prompt so they cost ' +
-                'nothing until they are needed. Do not answer such a question from memory.',
+                'List the reference documents ("skills") that exist for this editor and the team and sites ' +
+                'around it — one line each. Takes no arguments.\n' +
+                'Call this FIRST, before answering anything about the editor itself, CaelLab, or those ' +
+                'sites: the documents are deliberately kept out of the prompt, so this is the only way to ' +
+                'know what is available. Do not answer such questions from memory. To actually read one, ' +
+                'pass its name to read_fast_docs.',
+            readOnly: true,
+            inputSchema: {type: 'object', properties: {}},
+            handler: () => {
+                if (!skills.length) return ok('当前没有可用的资料。');
+                const lines = skills.map(skill => `- \`${skill.name}\` — ${skill.description}`);
+                return ok(`可用的一级能力（用 read_fast_docs 加名字读全文）：\n${lines.join('\n')}`);
+            }
+        },
+
+        {
+            name: 'read_fast_docs',
+            description:
+                'Read one reference document in full, by name (get the names from read_skill).\n' +
+                'Returns the whole document text. One call per document; do not fetch documents you do ' +
+                'not need, and never answer a question the documents cover without reading them first.',
             readOnly: true,
             inputSchema: {
                 type: 'object',
                 properties: {
                     name: {
                         type: 'string',
-                        description: 'Skill name. ' +
+                        description: 'Document name. ' +
                             `One of: ${skills.map(skill => skill.name).join(', ') || '(none loaded)'}`
                     }
                 },
@@ -255,7 +271,7 @@ export const createTools = ({port, skills = []}) => {
                 if (!skill) {
                     return fail(
                         skills.length ?
-                            `没有叫「${wanted}」的资料。可用的有：${skills.map(entry => entry.name).join('、')}` :
+                            `没有叫「${wanted}」的资料。先调 read_skill 看有什么；可用的有：${skills.map(entry => entry.name).join('、')}` :
                             '当前没有可用的资料。'
                     );
                 }
