@@ -10,6 +10,8 @@
  * 「当前对话」由 currentId 指定；每次保存都把这条会话挪到数组末尾（最近使用的在最后），
  * 超过 MAX_CONVERSATIONS 条时丢掉最旧的非当前会话。空会话（一条消息都没有）不入库——
  * 刷新前一个字没说的标签页不该在历史列表里留垃圾。
+ * 但「不入库」不等于「不记位置」：点「新对话」或切到别的会话之后就调 setCurrentConversation
+ * 把位置落下去，否则刷新会弹回上一条（新对话那条空会话存不进，currentId 还停在旧会话上）。
  *
  * 舞台截图**不入库**：一张 base64 图几十到几百 KB，几轮就能把 5MB 配额顶爆，
  * 而顶爆之后是整个存储都写不进去（不是只丢图）。所以存之前把图换成一句标记，
@@ -194,6 +196,21 @@ export const saveConversation = (id, session, items) => {
         currentId: id,
         conversations
     });
+};
+
+// 只把「当前对话」的位置挪一下（不动会话内容）。传 null = 当前是一条还没落库的新对话。
+// 切换 / 新建之后必须落一次，否则刷新时会按旧的 currentId 弹回上一条。
+export const setCurrentConversation = id => {
+    const all = readAll();
+    const next = id || null;
+    if (all.currentId === next) return true;
+    try {
+        writeAll({...all, currentId: next});
+        return true;
+    } catch (e) {
+        // 写不进就只在本次会话里生效（内存里照样切了）
+        return false;
+    }
 };
 
 // 删一条。删的是当前会话时，currentId 落到剩下最近的一条（没有就 null）。

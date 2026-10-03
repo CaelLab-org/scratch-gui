@@ -525,6 +525,15 @@ const reasoningOf = delta => {
 };
 
 /**
+ * onChunk 的返回值约定：`{stop: true}` 表示「这一路别再读了」——循环发现模型打转时这么叫停。
+ * 不返回东西（undefined）就是照常继续，本地脚本模型可以完全不理会这个约定。
+ *
+ * @param {*} verdict onChunk 的返回值
+ * @returns {boolean} 是否要当场掐断
+ */
+const isStop = verdict => verdict === true || !!(verdict && verdict.stop);
+
+/**
  * @param {object} config  {providerId, modelId, apiKey, baseUrl, effort, model}
  * @param {object} opts    {idleTimeoutMs} 读超时（两次事件之间），不是整请求超时
  * @returns {{name, cloud, supportsImage, contextWindow, complete}} 与本地脚本模型同形状
@@ -575,6 +584,9 @@ export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
             let finishReason = null;
             let usage = null;
             let timedOut = false;
+            // onChunk 可以返回 {stop: true} 把这一路流**当场掐断**（循环发现模型在打转时就这么干）。
+            // 掐断不只是停止读：下面还会 cancel 响应体，服务端才会停止生成、不再往上计费。
+            let stopped = false;
 
             let watchdog = null;
             const pulse = () => {
@@ -586,6 +598,7 @@ export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
 
             try {
                 pulse();
+                read:
                 for await (const payload of sseDataLines(response.body)) {
                     pulse();
                     if (payload === '[DONE]') break;
@@ -605,11 +618,17 @@ export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
                     const thought = reasoningOf(delta);
                     if (thought) {
                         reasoning += thought;
-                        onChunk({kind: 'reasoning_delta', delta: thought});
+                        if (isStop(onChunk({kind: 'reasoning_delta', delta: thought}))) {
+                            stopped = true;
+                            break read;
+                        }
                     }
                     if (delta.content) {
                         text += delta.content;
-                        onChunk({kind: 'text_delta', delta: delta.content});
+                        if (isStop(onChunk({kind: 'text_delta', delta: delta.content}))) {
+                            stopped = true;
+                            break read;
+                        }
                     }
                     for (const call of delta.tool_calls || []) {
                         const index = typeof call.index === 'number' ? call.index : 0;
@@ -624,13 +643,22 @@ export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
             } finally {
                 if (watchdog) clearTimeout(watchdog);
             }
+            // 掐断要把连接也放掉，否则服务端还在那头继续生成
+            if (stopped) {
+                try {
+                    await response.body.cancel();
+                } catch (e) {
+                    // 已经流完了就没什么可取消的
+                }
+            }
             if (timedOut) throw new Error('模型太久没有响应（读超时）');
 
             // 收尾才把参数串 parse 成对象；截断或非法的一律丢掉，别拿去执行
             const toolCalls = [];
             for (const slot of partial.values()) {
                 if (!slot.name) continue;
-                if (finishReason === 'length') continue;
+                // 被掐断 / 被 max_tokens 截断时参数串必然是半截的，别 parse 更别执行
+                if (finishReason === 'length' || stopped) continue;
                 let input = {};
                 if (slot.args) {
                     try {
@@ -642,7 +670,7 @@ export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
                 toolCalls.push({id: slot.id || `call_${toolCalls.length}`, name: slot.name, input});
             }
 
-            return {text, reasoning, toolCalls, finishReason, usage};
+            return {text, reasoning, toolCalls, finishReason, usage, stopped};
         }
     };
 };

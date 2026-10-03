@@ -22,7 +22,7 @@ import {createScratchPort} from './port.js';
 import {createTools} from './tools.js';
 import {SKILLS} from './skills.js';
 import {createSession} from './session.js';
-import {runTurn} from './loop.js';
+import {runTurn, maxStepsOf, STEP_LIMITS} from './loop.js';
 import {createScriptedModel, demoSteps} from './model.js';
 import {
     createCloudModel, fetchProviderModels, PROVIDERS, getProvider, resolveModel,
@@ -32,13 +32,13 @@ import {
     loadSettings, saveSettings, clearSettings, describeSettings, hasApiKey,
     loadModelCache, saveModelCache
 } from './settings.js';
-import {buildSystemPrompt} from './prompt.js';
+import {buildSystemPrompt, WARN_AT} from './prompt.js';
 import {maybeCompact, measure} from './compact.js';
 import {buildTurns, formatWorkDuration} from './turns.js';
 import {Markdown} from './markdown.jsx';
 import {
     loadConversation, saveConversation, newConversationId, loadConversationIndex,
-    deleteConversation, DROPPED_NOTE
+    deleteConversation, setCurrentConversation, DROPPED_NOTE
 } from './store.js';
 import {saveProjectNow} from '../project-persistence.jsx';
 import styles from './ai.css';
@@ -686,6 +686,27 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
                 </label>
 
                 <label className={styles.field}>
+                    <span className={styles.fieldLabel}>{'单轮往返上限（次，5~120，推荐 15~60）'}</span>
+                    <input
+                        className={styles.fieldInput}
+                        inputMode="numeric"
+                        max={STEP_LIMITS.max}
+                        min={STEP_LIMITS.min}
+                        onChange={e => {
+                            // React 16 的事件对象是池化的，值必须先取出来
+                            const value = e.target.value;
+                            setDraft(prev => ({...prev, maxSteps: value === '' ? void 0 : Number(value)}));
+                        }}
+                        placeholder={`默认（${STEP_LIMITS.default}）`}
+                        type="number"
+                        value={draft.maxSteps || ''}
+                    />
+                    <span className={styles.fieldNote}>
+                        {`一次提问里我最多能来回几轮（查资料 → 写积木 → 跑 → 查状态算好几轮）。填小了省 token，但复杂任务可能半路停住；剩 ${WARN_AT} 次时我会收到提醒并收尾。`}
+                    </span>
+                </label>
+
+                <label className={styles.field}>
                     <span className={styles.fieldLabel}>自定义提示词（可选）</span>
                     <textarea
                         className={styles.fieldTextarea}
@@ -1140,17 +1161,25 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
 
         try {
             const outcome = await runTurn({
-                session, model, tools, system, signal: controller.signal, onEvent
+                session,
+                model,
+                tools,
+                system,
+                signal: controller.signal,
+                onEvent,
+                maxSteps: maxStepsOf(settings)
             });
             // 「跑着跑着突然停了」的几种原因，都得让用户看得懂、知道下一步怎么办
             const REASONS = {
-                steps: '这轮跑到了步数上限（12 次模型往返），我先停在这里。任务没做完的话，发一句「继续」我接着干。',
+                steps: `这轮跑到了步数上限（${outcome.maxSteps} 次模型往返），我先停在这里。任务没做完的话，发一句「继续」我接着干；也可以去设置里把这个上限调大。`,
                 length: '模型这轮的输出到达了单次上限，被接口掐断了。可以在设置里调大「单次最大输出」，或发「继续」让我接着说。',
-                empty: '模型没有返回内容（连接可能中途断了）。重发一次试试。'
+                empty: '模型没有返回内容（连接可能中途断了）。重发一次试试。',
+                repeat: '我在同一段内容上反复打转，已经被自动打断了 —— 这是模型卡住，不是你的项目有问题。被打断的那段没进对话记录。发「继续」我接着往下做；要是还打转，把要求说得再具体一点。'
             };
+            const STATUS = {steps: '已到步数上限', length: '输出被掐断', empty: '空响应', repeat: '已打断重复输出'};
             if (outcome.reason && REASONS[outcome.reason]) {
                 setItemsState(prev => prev.concat([{kind: 'notice', text: REASONS[outcome.reason]}]));
-                setStatus(outcome.reason === 'steps' ? '已到步数上限' : outcome.reason === 'length' ? '输出被掐断' : '空响应');
+                setStatus(STATUS[outcome.reason]);
             } else {
                 setStatus(useCloud ? `完成（${outcome.steps} 步）` : `本地演示完成（${outcome.steps} 步）`);
             }
@@ -1273,6 +1302,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
         saveConversation(conversationIdRef.current, sessionRef.current, latestRef.current.items);
         // 领一个新 id：旧的那条还留在库里（多会话），只是不再往里写
         conversationIdRef.current = newConversationId();
+        // 新对话是空的、进不了库，但「当前位置」得落盘，不然刷新弹回上一条
+        setCurrentConversation(null);
         sessionRef.current = createSession();
         setItemsState([]);
         setContext(null);
@@ -1311,6 +1342,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
         saveConversation(conversationIdRef.current, sessionRef.current, latestRef.current.items);
         const loaded = loadConversation(id);
         conversationIdRef.current = loaded ? id : newConversationId();
+        // 同上：切到哪条就记住哪条（读不到就按新对话算）
+        setCurrentConversation(loaded ? id : null);
         sessionRef.current = loaded ? loaded.session : createSession();
         setItemsState(loaded ? loaded.items : []);
         setContext(null);

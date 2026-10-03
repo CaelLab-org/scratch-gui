@@ -278,5 +278,76 @@ try {
     globalThis.fetch = originalFetch;
 }
 
+// ---------- 11. 打转被叫停时的「掐断」：停止读流 + 取消响应体 ----------
+// 循环发现模型在复读时会从 onChunk 返回 {stop: true}；只停止读不够 —— 连接不取消，
+// 服务端还在那一头继续生成、继续计费。
+const stopFrames = ['片0', '片1', '片2', '片3', '片4']
+    .map(piece => `data: {"choices":[{"delta":{"content":"${piece}"}}]}\n\n`);
+let stopReads = 0;
+let canceled = false;
+globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    body: {
+        getReader () {
+            let i = 0;
+            return {
+                read: async () => {
+                    stopReads++;
+                    return i < stopFrames.length ?
+                        {done: false, value: enc.encode(stopFrames[i++])} :
+                        {done: true};
+                },
+                releaseLock: () => {}
+            };
+        },
+        cancel: async () => {
+            canceled = true;
+        }
+    }
+});
+try {
+    let chunks = 0;
+    const out = await createCloudModel({providerId: 'deepseek', modelId: 'm', apiKey: 'k', baseUrl: 'https://x'})
+        .complete([{role: 'user', content: 'q'}], [], {
+            onChunk: () => {
+                chunks++;
+                return chunks === 2 ? {stop: true} : null;
+            }
+        });
+    check('叫停后不再往下读流', out.stopped === true && stopReads < stopFrames.length,
+        `读了 ${stopReads} 片 / 共 ${stopFrames.length} 片`);
+    check('取消响应体（服务端才知道该停）', canceled === true);
+    check('叫停前收到的正文照样带回来', out.text === '片0片1', out.text);
+} finally {
+    globalThis.fetch = originalFetch;
+}
+
+// 掐断时工具参数必然是半截的，连带完整的那个也不能拿去执行
+globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    body: mkBody([
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"xce_list_sprites","arguments":"{}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"接着说"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"还在说"}}]}\n\n',
+        'data: [DONE]\n\n'
+    ])
+});
+try {
+    let chunks = 0;
+    const out = await createCloudModel({providerId: 'deepseek', modelId: 'm', apiKey: 'k', baseUrl: 'https://x'})
+        .complete([{role: 'user', content: 'q'}], [], {
+            onChunk: () => {
+                chunks++;
+                return chunks === 2 ? {stop: true} : null;
+            }
+        });
+    check('掐断时工具调用一律不执行', out.stopped === true && out.toolCalls.length === 0,
+        JSON.stringify(out.toolCalls));
+} finally {
+    globalThis.fetch = originalFetch;
+}
+
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

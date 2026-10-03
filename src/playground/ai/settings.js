@@ -9,6 +9,7 @@
  *     cookie 的 4KB 装不下。
  */
 import {getProvider, PROVIDERS, resolveModel, thinkingOf} from './providers.js';
+import {clampMaxSteps} from './loop.js';
 
 const COOKIE_NAME = 'xce_ai_model';
 const MODELS_KEY = 'xce_ai_models';
@@ -166,6 +167,8 @@ export const loadSettings = () => {
             // 用户自定义的限额（数字），没存过就是 undefined = 自动
             contextWindow: Number(parsed.contextWindow) > 0 ? Number(parsed.contextWindow) : void 0,
             maxOutputTokens: Number(parsed.maxOutputTokens) > 0 ? Number(parsed.maxOutputTokens) : void 0,
+            // 单轮往返上限：存过就夹进 5~120，没存过 undefined = 用默认值（见 loop.js 的 maxStepsOf）
+            maxSteps: Number(parsed.maxSteps) > 0 ? clampMaxSteps(parsed.maxSteps) : void 0,
             userPrompt: loadUserPrompt()
         };
     } catch (e) {
@@ -178,6 +181,7 @@ export const saveSettings = settings => {
     const limits = {};
     if (Number(settings.contextWindow) > 0) limits.contextWindow = Number(settings.contextWindow);
     if (Number(settings.maxOutputTokens) > 0) limits.maxOutputTokens = Number(settings.maxOutputTokens);
+    if (Number(settings.maxSteps) > 0) limits.maxSteps = clampMaxSteps(settings.maxSteps);
     writeCookie(COOKIE_NAME, JSON.stringify({
         providerId: settings.providerId,
         baseUrl: settings.baseUrl,
