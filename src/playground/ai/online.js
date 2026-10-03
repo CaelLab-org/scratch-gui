@@ -141,12 +141,12 @@ export const fetchOnline = async (url, {timeoutMs = DEFAULT_TIMEOUT_MS, signal} 
         if (signal && signal.aborted) throw new Error('The fetch was interrupted by the user.');
         if (aborted) throw new Error(`Fetch timed out (no response within ${timeoutMs / 1000}s).`);
         // TypeError + "Failed to fetch" 就是 CORS 拒读（或断网/拒连）——这是浏览器安全模型，
-        // 代码绕不过。把实情报出去，让模型转告用户，绝不编内容。
+        // 代码绕不过。但「读不到」不等于「答不了」：让模型换别的路子，别一失败就把用户支走。
         throw new Error(
-            `Could not fetch this page (${fetchError.message}). The most common cause is CORS: the target ` +
-            `site does not declare that other sites may read it, so the browser blocks the response — that ` +
-            `is not a malfunction. Tell the user honestly that this site does not let the AI read it and let ` +
-            `them open the link themselves; never invent page content from memory.`);
+            `Could not fetch this page (${fetchError.message}). The usual cause is CORS: the site does not ` +
+            `declare that other sites may read it, so the browser blocks the response. Do not stop here — ` +
+            `try another URL, or fall back on what you already know and say that is where it came from. ` +
+            `Mention in one line that this page could not be read; never invent page content from memory.`);
     }
 
     // 粗判 HTML：有标签就算。纯文本接口（.txt、JSON）原样给
