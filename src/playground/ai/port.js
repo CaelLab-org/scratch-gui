@@ -196,6 +196,21 @@ const CORE_PREFIXES = new Set([
     'operator', 'data', 'procedures', 'argument'
 ]);
 
+// —— 项目级 XCEAGENT ——
+// 保留角色：里面挂一条注释，正文每轮随系统提示词发给模型（拼在用户规矩下面，
+// 见 prompt.js）。角色不存在时 xce_write_agent 会自动建 —— 积木必须是注释的锚点，
+// 所以自动建的角色带一段什么都不做的绿旗帽子， purely 当注释的挂点。
+export const AGENT_SPRITE_NAME = 'XCEAGENT';
+// 注入提示词的长度上限（用户定的：取前 20K），超长部分不进提示词
+export const AGENT_NOTE_MAX_CHARS = 20000;
+
+// —— 项目级 XCEMEMORY ——
+// 两条保留角色（学 ZCode 的「索引 + 按名读正文」）：index 挂一条注释，每轮进提示词，
+// 一行一条 `- 名字 — 摘要`；content **每条记忆一条注释**（声明行后第一行是记忆名，其余是正文）。
+// 都由 xce_write_project_memory 自动创建，随项目文件走 —— 这是它们跟全局记忆（memory.js）的区别。
+export const MEMORY_INDEX_SPRITE = 'XCEMEMORY_index';
+export const MEMORY_CONTENT_SPRITE = 'XCEMEMORY_content';
+
 // 影子积木（数字/文本/颜色这些内联的）前缀也不在 CORE_PREFIXES 里，但它们**不是扩展**：
 // math_number 的前缀是 math、colour_picker 是 colour…… 曾把它们当成没加载的扩展，
 // 于是「透明度」这类普通积木被拒，错误里写着「扩展（math）」。
@@ -262,6 +277,10 @@ export const createScratchPort = ({vm, getWorkspace}) => {
     const refreshWorkspace = () => {
         if (vm.emitWorkspaceUpdate) vm.emitWorkspaceUpdate();
     };
+
+    // 这个角色是不是用户当前正在看的那个 —— 工作区只画当前角色的东西，
+    // 给别的角色写注释，用户要切过去才看得见（拿它跟模型说清楚，别假装画面上已经出现了）
+    const isEditing = target => !!(vm.editingTarget && target && vm.editingTarget.id === target.id);
 
     // 报错里用的角色名清单
     const spriteNames = () => realTargets()
@@ -374,6 +393,275 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         return true;
     };
 
+    // —— Scratch 原生注释（xce_note）——
+
+    // 老版本由这边强制加在注释正文开头、标明「AI 写入」的声明行。后来去掉了（用户 2026-10-05 定的：
+    // 来源让 AI 自己写清楚，别硬套格式），这里留着它只做一件事：读回来时兼容老项目里还带这行的注释。
+    const NOTE_HEADER = '[由 XMUER Coding Engine 的 AI 助手写入]';
+
+    // 这个角色最新的一段脚本（顶块 id）——省略锚点时挂到它上面
+    const latestTopBlockId = target => {
+        const scripts = target.blocks && target.blocks.getScripts ? target.blocks.getScripts() : [];
+        return scripts.length ? scripts[scripts.length - 1] : null;
+    };
+
+    /**
+     * 往某块积木上写一条 Scratch 原生注释（编辑器里那个真的注释气泡，用户能改能删）。
+     *
+     * 两个硬事实：
+     *   1. **注释必须挂在积木上** —— VM 的 `blocks.toXML(comments)` 只输出挂在积木上的注释，
+     *      没有锚点的注释在编辑器里根本不显示（scratch-blocks 的 domToWorkspace 虽然能读顶层
+     *      `<comment>`，但 VM 压根不会把它吐进工作区 XML）。所以「没有积木的角色」写不了注释，
+     *      这是 Scratch 本身的限制，不是这里偷懒。
+     *   2. 同一个顶块已经有注释就**改文本**，不再叠一张 —— 工具会被连着调好几次，
+     *      叠出来是一堆注释块，用户得自己一张张删。
+     * @param {string} spriteName 角色名
+     * @param {string} text 正文（声明前缀由这里补）
+     * @param {string} [blockId] 锚点顶块 id；省略 = 这个角色最新的一段脚本
+     * @returns {object|null} {commentId, blockId, text, updated, visible}；写不进去返回 null
+     */
+    const createNote = (spriteName, text, blockId) => {
+        const target = findTarget(spriteName);
+        if (!target) return null;
+        const body = String(text === void 0 || text === null ? '' : text)
+            .trim();
+        if (!body) return null;
+        const anchor = blockId || latestTopBlockId(target);
+        const block = anchor ? target.blocks.getBlock(anchor) : null;
+        if (!block) return null;
+        const full = body;
+        const existingId = block.comment;
+        if (existingId && target.comments[existingId]) {
+            target.comments[existingId].text = full;
+            refreshWorkspace();
+            return {commentId: existingId, blockId: anchor, text: full, updated: true, visible: isEditing(target)};
+        }
+        const id = `note-${Date.now().toString(36)}-${Math.random().toString(36)
+            .slice(2, 7)}`;
+        // 位置：**优先按 Blockly 里那块积木的实际位置量**（摆在它右边一点点）。
+        // 不用 VM 里的 block.x/y 当准：那两个字段只在积木被拖过之后才由工作区同步回来，
+        // 刚写进去的脚本那儿常常是旧的或者干脆没有 —— 拿它算会把注释摆到屏幕外面，
+        // 用户看着像「注释没写进去」。量不到（无头环境没有工作区）才退回估算。
+        let x = (typeof block.x === 'number' ? block.x : 40) + 320;
+        let y = typeof block.y === 'number' ? block.y : 40;
+        try {
+            const workspace = getWorkspace && getWorkspace();
+            const node = workspace && workspace.getBlockById ? workspace.getBlockById(anchor) : null;
+            if (node && node.getRelativeToSurfaceXY) {
+                const at = node.getRelativeToSurfaceXY();
+                const size = node.getHeightWidth ? node.getHeightWidth() : null;
+                x = at.x + (size ? size.width : 0) + 24;
+                y = at.y;
+            }
+        } catch (e) {
+            // 量失败就用估算的位置，功能不受影响
+        }
+        target.createComment(id, anchor, full, Math.round(x), Math.round(y), 200, 130, false);
+        // 走的是 VM 的直接接口，没经过 blockListener 那条路 —— 注释会影响编译缓存
+        // （stage 上那条「配置注释」就是），顺手清一下，别让运行结果读到旧的
+        if (target.blocks.resetCache) target.blocks.resetCache();
+        refreshWorkspace();
+        return {commentId: id, blockId: anchor, text: full, updated: false, visible: isEditing(target)};
+    };
+
+    /**
+     * 删掉一条注释（撤销 xce_note 用）。要连挂它的积木一起解绑，
+     * 否则那块积木还记着一个不存在的 commentId。
+     * @param {string} spriteName 角色名
+     * @param {string} commentId 注释 id（xce_note 的 undo 句柄里那个）
+     * @returns {boolean} 删掉了没有
+     */
+    const deleteNote = (spriteName, commentId) => {
+        const target = findTarget(spriteName);
+        if (!target || !commentId || !target.comments[commentId]) return false;
+        const comment = target.comments[commentId];
+        const block = comment.blockId ? target.blocks.getBlock(comment.blockId) : null;
+        if (block) delete block.comment;
+        delete target.comments[commentId];
+        if (target.blocks.resetCache) target.blocks.resetCache();
+        refreshWorkspace();
+        return true;
+    };
+
+    // 按名字新建一个保留角色（空造型，选中它），返回 target；建不出来返回 null
+    const createReservedSprite = async spriteName => {
+        // 按 id 差集认新角色（跟 addSprite 同一个套路，比按名字靠得住）
+        const before = new Set(realTargets().map(t => t.id));
+        await vm.addSprite(JSON.stringify(blankSpriteJson(spriteName)));
+        const target = realTargets().find(t => !before.has(t.id));
+        if (!target) return null;
+        vm.setEditingTarget(target.id);
+        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+        return target;
+    };
+
+    // 放一段什么都不做的绿旗帽子，纯粹给注释当挂点（Scratch 的注释必须挂在积木上）。
+    // 一块积木只能挂一条注释，所以 content 上每条记忆都要自己的帽子。返回顶块 id。
+    const addHatAnchor = target => {
+        const hat = sb3.deserializeBlocks({
+            [`hat_${Math.random().toString(36)
+                .slice(2, 8)}`]: {
+                opcode: 'event_whenflagclicked',
+                next: null,
+                parent: null,
+                inputs: {},
+                fields: {},
+                shadow: false,
+                topLevel: true,
+                x: 40,
+                y: 40
+            }
+        });
+        const id = Object.keys(hat)[0];
+        target.blocks.createBlock(hat[id]);
+        return id;
+    };
+
+    // 保留角色上「那条」注释（agent / index 都只有一条；用户手加的算第一条）
+    const soleComment = target => {
+        const entries = Object.entries((target && target.comments) || {});
+        return entries.length ? {id: entries[0][0], ...entries[0][1]} : null;
+    };
+
+    // 直接改一条注释的文本（撤销时恢复旧文用；createNote 走不到「指定注释 id」这条路）
+    const setCommentText = (spriteName, commentId, text) => {
+        const target = findTarget(spriteName);
+        if (!target || !target.comments[commentId]) return false;
+        target.comments[commentId].text = text;
+        if (target.blocks.resetCache) target.blocks.resetCache();
+        refreshWorkspace();
+        return true;
+    };
+
+    // XCEMEMORY_content 上的一条记忆 = 一条注释：声明行后第一行是记忆名，其余是正文
+    const memoryEntries = target => Object.entries((target && target.comments) || {})
+        .map(([id, comment]) => {
+            const lines = String((comment && comment.text) || '').split('\n');
+            const bodyLines = lines.filter(line => line.trim() !== NOTE_HEADER);
+            return {
+                id,
+                blockId: (comment && comment.blockId) || null,
+                name: (bodyLines[0] || '').trim(),
+                text: bodyLines.slice(1)
+                    .join('\n')
+                    .trim(),
+                fullText: String((comment && comment.text) || '')
+            };
+        })
+        .filter(entry => entry.name);
+
+    // index 注释的一行 `- 名字 — 摘要` -> 名字（摘要里也可能出现 —，只认第一个）
+    const indexLineName = line => {
+        const found = /^-\s+(.*?)\s+—/.exec(line);
+        return found ? found[1].trim() : '';
+    };
+
+    /**
+     * 写项目级 XCEAGENT 的那条注释（不存在就建角色，注释已挂在该挂点上就改文本）。
+     * 长度不设上限：超长的截断由提示词那侧声明（前 20K），模型可以用 xce_read_agent 读全文。
+     * @param {string} rawText 注释正文（原样写入，不再强加声明行）
+     * @returns {Promise<object>} {ok, reason?, spriteCreated?, commentId?, updated?, visible?}
+     */
+    const writeAgentNote = async rawText => {
+        const text = String(rawText === void 0 || rawText === null ? '' : rawText)
+            .trim();
+        if (!text) return {ok: false, reason: 'empty'};
+        let target = findTarget(AGENT_SPRITE_NAME);
+        let spriteCreated = false;
+        if (!target) {
+            target = await createReservedSprite(AGENT_SPRITE_NAME);
+            if (!target) return {ok: false, reason: 'failed'};
+            spriteCreated = true;
+        }
+        if (!(target.blocks.getScripts ? target.blocks.getScripts() : []).length) {
+            addHatAnchor(target);
+        }
+        const made = createNote(AGENT_SPRITE_NAME, text);
+        if (!made) return {ok: false, reason: 'failed', spriteCreated};
+        return {ok: true, spriteCreated, ...made};
+    };
+
+    /**
+     * 写一条项目记忆：content 上同名覆盖（原注释改文本）或新帽子 + 新注释，
+     * index 上同名替换 / 追加一行摘要。两个保留角色不存在就自动建。
+     * @param {object} input {name, description, body}
+     * @returns {Promise<object>} {ok, reason?, created?, commentId?, createdSprites?, prevContent?, prevIndex?}
+     *   prevContent / prevIndex 是覆盖前的全文快照（含声明行），撤销用；没有就是 null
+     */
+    const writeProjectMemory = async ({name, description, body}) => {
+        const key = String(name || '').trim();
+        if (!key) return {ok: false, reason: 'no-name'};
+        const text = String(body === void 0 || body === null ? '' : body).trim();
+        if (!text) return {ok: false, reason: 'empty'};
+
+        const createdSprites = [];
+        for (const spriteName of [MEMORY_INDEX_SPRITE, MEMORY_CONTENT_SPRITE]) {
+            if (!findTarget(spriteName)) {
+                if (!(await createReservedSprite(spriteName))) return {ok: false, reason: 'failed'};
+                createdSprites.push(spriteName);
+            }
+        }
+        const contentTarget = findTarget(MEMORY_CONTENT_SPRITE);
+        const indexTarget = findTarget(MEMORY_INDEX_SPRITE);
+
+        // 覆盖前的旧状态（撤销要摆回去的东西）
+        const prevEntry = memoryEntries(contentTarget).find(entry => entry.name === key) || null;
+        const prevIndexComment = soleComment(indexTarget);
+        const prevIndex = prevIndexComment ? prevIndexComment.text : null;
+
+        let commentId;
+        if (prevEntry) {
+            const made = createNote(MEMORY_CONTENT_SPRITE, `${key}\n${text}`, prevEntry.blockId);
+            if (!made) return {ok: false, reason: 'failed'};
+            commentId = made.commentId;
+        } else {
+            const hatId = addHatAnchor(contentTarget);
+            const made = createNote(MEMORY_CONTENT_SPRITE, `${key}\n${text}`, hatId);
+            if (!made) return {ok: false, reason: 'failed'};
+            commentId = made.commentId;
+        }
+
+        const lines = prevIndex ?
+            prevIndex.split('\n')
+                .filter(line => line.trim() !== NOTE_HEADER)
+                .map(line => line.trim())
+                .filter(Boolean) : [];
+        const summary = String(description === void 0 || description === null ? '' : description)
+            .trim() || '(no summary)';
+        const line = `- ${key} — ${summary}`;
+        const at = lines.findIndex(existing => indexLineName(existing) === key);
+        if (at === -1) lines.push(line);
+        else lines[at] = line;
+        if (prevIndexComment) {
+            createNote(MEMORY_INDEX_SPRITE, lines.join('\n'), prevIndexComment.blockId);
+        } else {
+            const hatId = addHatAnchor(indexTarget);
+            createNote(MEMORY_INDEX_SPRITE, lines.join('\n'), hatId);
+        }
+        refreshWorkspace();
+        return {
+            ok: true,
+            created: !prevEntry,
+            commentId,
+            createdSprites,
+            prevContent: prevEntry ? {commentId: prevEntry.id, text: prevEntry.fullText} : null,
+            prevIndex
+        };
+    };
+
+    /**
+     * 按名字读一条项目记忆的正文（不带名字行）。
+     * @param {string} rawName 记忆名
+     * @returns {object} {ok, text?} / {ok: false, reason: 'no-memory'}
+     */
+    const readProjectMemory = rawName => {
+        const key = String(rawName || '').trim();
+        const entry = memoryEntries(findTarget(MEMORY_CONTENT_SPRITE))
+            .find(item => item.name === key);
+        if (!entry) return {ok: false, reason: 'no-memory'};
+        return {ok: true, text: entry.text};
+    };
+
     // 给系统提示词用的轻量项目概况：只数脚本段数，不渲染积木文本
     const describeProject = () => realTargets().map(t => ({
         name: t.getName(),
@@ -425,6 +713,41 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         target.blocks.deleteBlock(topBlockId); // 自带级联：子块、输入、子栈一起删
         refreshWorkspace();
         return true;
+    };
+
+    /**
+     * 删一条项目记忆：content 的注释（挂点上没别的注释就连帽子）+ index 那行，一起走。
+     * 放在 deleteScript 之后定义 —— 它要摘掉挂点帽子。
+     * @param {string} rawName 记忆名
+     * @returns {object} {ok, entry: {id, text 全文快照}, prevIndex} / {ok: false, reason: 'no-memory'}
+     */
+    const deleteProjectMemory = rawName => {
+        const key = String(rawName || '').trim();
+        const contentTarget = findTarget(MEMORY_CONTENT_SPRITE);
+        const entry = contentTarget && memoryEntries(contentTarget)
+            .find(item => item.name === key);
+        if (!entry) return {ok: false, reason: 'no-memory'};
+        const indexTarget = findTarget(MEMORY_INDEX_SPRITE);
+        const indexComment = soleComment(indexTarget);
+        const prevIndex = indexComment ? indexComment.text : null;
+
+        deleteNote(MEMORY_CONTENT_SPRITE, entry.id);
+        const block = entry.blockId ? contentTarget.blocks.getBlock(entry.blockId) : null;
+        if (block && !block.comment) deleteScript(MEMORY_CONTENT_SPRITE, entry.blockId);
+
+        if (indexComment) {
+            const lines = prevIndex.split('\n')
+                .filter(line => line.trim() !== NOTE_HEADER)
+                .map(line => line.trim())
+                .filter(Boolean)
+                .filter(line => indexLineName(line) !== key);
+            if (lines.length) {
+                createNote(MEMORY_INDEX_SPRITE, lines.join('\n'), indexComment.blockId);
+            } else {
+                deleteNote(MEMORY_INDEX_SPRITE, indexComment.id);
+            }
+        }
+        return {ok: true, entry: {id: entry.id, text: entry.fullText}, prevIndex};
     };
 
     const restoreScript = (spriteName, blocks) => {
@@ -568,18 +891,175 @@ export const createScratchPort = ({vm, getWorkspace}) => {
 
         restoreScript,
 
+        // 「整理积木」（cleanUp）：xce_edit_script 删旧写新之后调一次，别留个大洞
+        tidy,
+
+        // Scratch 原生注释（xce_note / 撤销）
+        createNote,
+
+        deleteNote,
+
+        // 项目级 XCEAGENT（写那条注释 / 读出来给系统提示词用）
+        writeAgentNote,
+
+        // 全文读出来（**不截断**）：提示词那侧自己取前 20K 并声明截断，xce_read_agent 靠它分页
+        readAgentNote: () => {
+            const target = findTarget(AGENT_SPRITE_NAME);
+            if (!target) return {text: '', totalChars: 0, totalLines: 0};
+            // 全部注释都算上（工具只维护一条，用户手加的也尊重），声明行不进提示词
+            const texts = Object.values(target.comments || {})
+                .map(comment => {
+                    const text = comment && comment.text ? String(comment.text) : '';
+                    return text.split('\n')
+                        .filter(line => line.trim() !== NOTE_HEADER)
+                        .join('\n')
+                        .trim();
+                })
+                .filter(Boolean);
+            const text = texts.join('\n\n');
+            return {text, totalChars: text.length, totalLines: text ? text.split('\n').length : 0};
+        },
+
+        // 某个角色的全部注释（id + 原文 + 挂点），xce_read_notes / read_project 的注释区用。没有这个角色返回 null
+        readNotes: spriteName => {
+            const target = findTarget(spriteName);
+            if (!target) return null;
+            return Object.entries(target.comments || {})
+                .map(([id, comment]) => ({
+                    id,
+                    text: String((comment && comment.text) || ''),
+                    blockId: (comment && comment.blockId) || null
+                }));
+        },
+
+        // 项目级 XCEMEMORY：写/读/删一条记忆 + 读 index 注释全文（给系统提示词用）
+        writeProjectMemory,
+
+        readProjectMemory,
+
+        deleteProjectMemory,
+
+        readMemoryIndex: () => {
+            const comment = soleComment(findTarget(MEMORY_INDEX_SPRITE));
+            if (!comment) return '';
+            return comment.text.split('\n')
+                .filter(line => line.trim() !== NOTE_HEADER)
+                .join('\n')
+                .trim();
+        },
+
         // 按工具留下的 undo 句柄把那一次改动收回去（写入 = 删掉刚加的顶块；删除 = 把快照摆回去；
-        // 新建角色 = 把角色删掉；加造型 = 把造型删掉）。单张卡的「撤销」和整轮的「回退本轮变更」都走这里。
+        // 新建角色 = 把角色删掉；加造型 = 把造型删掉；写注释 = 把注释删掉）。
+        // 单张卡的「撤销」和整轮的「回退本轮变更」都走这里。
         undoAction: action => {
             if (!action) return false;
             if (action.kind === 'del') return restoreScript(action.sprite, action.blocks);
+            if (action.kind === 'edit') {
+                // 撤销替换 = 删掉新写的脚本，再把旧快照原样摆回去（新 id 是随机的，不会撞旧 id）
+                let ok = false;
+                for (const topBlockId of action.topBlockIds || []) {
+                    ok = deleteScript(action.sprite, topBlockId) || ok;
+                }
+                return restoreScript(action.sprite, action.blocks) || ok;
+            }
             if (action.kind === 'sprite') return removeSpriteByName(action.sprite);
             if (action.kind === 'costume') return removeCostumeAt(action.sprite, action.index);
+            if (action.kind === 'note') return deleteNote(action.sprite, action.commentId);
+            if (action.kind === 'memory' && action.phase === 'write') {
+                let ok = true;
+                // 这次顺带建出来的保留角色整只摘掉（里面只有这一次写的东西）
+                for (const spriteName of action.createdSprites || []) {
+                    ok = removeSpriteByName(spriteName) && ok;
+                }
+                const contentLeft = findTarget(MEMORY_CONTENT_SPRITE);
+                if (contentLeft) {
+                    if (action.prevContent) {
+                        // 覆盖过的：把旧全文原样摆回去
+                        ok = setCommentText(MEMORY_CONTENT_SPRITE, action.prevContent.commentId,
+                            action.prevContent.text) && ok;
+                    } else if (action.commentId && contentLeft.comments[action.commentId]) {
+                        // 新建的注释：摘掉，挂点上没别的注释就连帽子
+                        const comment = contentLeft.comments[action.commentId];
+                        const block = comment.blockId ? contentLeft.blocks.getBlock(comment.blockId) : null;
+                        ok = deleteNote(MEMORY_CONTENT_SPRITE, action.commentId) && ok;
+                        if (block && !block.comment) ok = deleteScript(MEMORY_CONTENT_SPRITE, comment.blockId) && ok;
+                    }
+                }
+                const indexLeft = findTarget(MEMORY_INDEX_SPRITE);
+                if (indexLeft) {
+                    const ic = soleComment(indexLeft);
+                    if (action.prevIndex !== null && action.prevIndex !== void 0) {
+                        if (ic) ok = setCommentText(MEMORY_INDEX_SPRITE, ic.id, action.prevIndex) && ok;
+                    } else if (ic) {
+                        ok = deleteNote(MEMORY_INDEX_SPRITE, ic.id) && ok;
+                    }
+                }
+                return ok;
+            }
+            if (action.kind === 'memory' && action.phase === 'delete') {
+                // 摆回被删的记忆（新帽子 + 全文快照），index 全文也恢复
+                const contentTarget = findTarget(MEMORY_CONTENT_SPRITE);
+                if (!contentTarget) return false;
+                const hatId = addHatAnchor(contentTarget);
+                const made = createNote(MEMORY_CONTENT_SPRITE, action.entry.text, hatId);
+                if (!made) return false;
+                let ok = true;
+                const indexTarget = findTarget(MEMORY_INDEX_SPRITE);
+                const ic = indexTarget && soleComment(indexTarget);
+                if (action.prevIndex) {
+                    if (ic) ok = setCommentText(MEMORY_INDEX_SPRITE, ic.id, action.prevIndex) && ok;
+                    else {
+                        const hatId2 = addHatAnchor(indexTarget);
+                        ok = !!createNote(MEMORY_INDEX_SPRITE, action.prevIndex, hatId2) && ok;
+                    }
+                }
+                return ok;
+            }
             let ok = false;
             for (const topBlockId of action.topBlockIds || []) {
                 ok = deleteScript(action.sprite, topBlockId) || ok;
             }
             return ok;
+        },
+
+        // 拉起事件：模拟「用户点了一下 / 项目发了个广播」，不改项目本身。
+        // 广播名认两处：broadcast_msg 变量 + 各角色里「当接收到」帽子的字段值
+        // （write_script 写进来的广播 hat 不一定建了对应变量，按字段值才能都认出来）。
+        triggerEvent: ({type, name, sprite} = {}) => {
+            if (type === 'green-flag') {
+                vm.greenFlag();
+                return {ok: true};
+            }
+            if (type === 'broadcast') {
+                const broadcastName = String(name || '').trim();
+                if (!broadcastName) return {ok: false, reason: 'no-name'};
+                const known = new Set();
+                for (const target of realTargets()) {
+                    for (const variable of Object.values(target.variables || {})) {
+                        if (variable && variable.type === 'broadcast_msg') known.add(variable.name);
+                    }
+                    const blocks = (target.blocks && target.blocks._blocks) || {};
+                    for (const block of Object.values(blocks)) {
+                        if (block && block.opcode === 'event_whenbroadcastreceived') {
+                            const field = block.fields && block.fields.BROADCAST_OPTION;
+                            if (field && field.value) known.add(field.value);
+                        }
+                    }
+                }
+                if (!known.has(broadcastName)) {
+                    return {ok: false, reason: 'unknown-broadcast', broadcasts: [...known].sort()};
+                }
+                const threads = runtime().startHats('event_whenbroadcastreceived',
+                    {BROADCAST_OPTION: broadcastName});
+                return {ok: true, triggered: threads.length};
+            }
+            if (type === 'sprite-clicked') {
+                const target = findTarget(sprite);
+                if (!target) return {ok: false, reason: 'no-sprite', sprites: spriteNames()};
+                const threads = runtime().startHats('event_whenthisspriteclicked', null, target);
+                return {ok: true, triggered: threads.length};
+            }
+            return {ok: false, reason: 'bad-type'};
         },
 
         // 绿旗运行，最多等 timeoutSec 秒；返回 'done' | 'timeout' | 'stopped'
@@ -804,6 +1284,55 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         currentSpriteName: () => {
             const target = vm.editingTarget;
             return target ? target.getName() : null;
+        },
+
+        /**
+         * 一个**矢量**造型的 SVG 源码文本（用户 2026-10-04 要的：造型是矢量图就直接给源码，
+         * 比栅格化成图片省 token，模型还能照着改）。
+         *
+         * 位图造型没有源码 —— 明确回 `bitmap: true`，由工具侧告诉模型「这条拿不到 SVG」，
+         * 而不是让它以为造型是空的。
+         * @param {string} spriteName 角色名
+         * @param {string|number} [which] 造型名或下标；不传 = 当前造型
+         * @returns {Promise<?object>} 没这个角色/造型返回 null；否则
+         *   {bitmap: false, name, index, size, width, height, svg}（svg 读不出来时为空串）
+         *   或 {bitmap: true, name, index, size}
+         */
+        readCostumeSvg: async (spriteName, which) => {
+            const target = findTarget(spriteName);
+            if (!target) return null;
+            const costumes = target.getCostumes();
+            const index = pickCostume(costumes, target.currentCostume, which);
+            const costume = costumes[index];
+            if (!costume) return null;
+            const size = costume.size ? costume.size.map(n => Math.round(n)) : null;
+            if (costume.dataFormat !== 'svg') {
+                return {bitmap: true, name: costume.name, index, size};
+            }
+            const storage = runtime().storage;
+            // 自带 asset 直接用；否则回 storage 取（内置造型、用户存过的项目都走这条）
+            const asset = costume.asset ? costume.asset :
+                (storage && costume.assetId && storage.load ?
+                    await storage.load(storage.AssetType.ImageVector, costume.assetId, costume.dataFormat) :
+                    null);
+            let svg = '';
+            try {
+                if (asset && typeof asset.decodeText === 'function') svg = asset.decodeText();
+                // 兜底：拿到的 asset 只有字节
+                else if (asset && asset.data) svg = new TextDecoder().decode(asset.data);
+            } catch (e) {
+                // 资产是坏的：按「读不出源码」处理，调用方会说清楚
+            }
+            const canvas = svgCanvasSize(svg);
+            return {
+                bitmap: false,
+                name: costume.name,
+                index,
+                size,
+                width: canvas ? canvas.width : null,
+                height: canvas ? canvas.height : null,
+                svg: String(svg || '')
+            };
         }
     };
 

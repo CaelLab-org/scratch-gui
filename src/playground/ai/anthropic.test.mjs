@@ -225,9 +225,10 @@ try {
         result.toolCalls.length === 1 && result.toolCalls[0].name === 'xce_write_script' &&
         result.toolCalls[0].input.sprite === '角色1',
         JSON.stringify(result.toolCalls));
-    check('stop_reason 与 usage 归一化（缓存命中的输入也算进前缀）',
+    check('stop_reason 与 usage 归一化（缓存命中的输入也算进前缀，命中量单独带出）',
         result.finishReason === 'tool_use' && result.usage.prompt_tokens === 120 &&
-        result.usage.completion_tokens === 55 && result.usage.total_tokens === 175,
+        result.usage.completion_tokens === 55 && result.usage.total_tokens === 175 &&
+        result.usage.cached_tokens === 20,
         JSON.stringify(result.usage));
     check('增量事件照旧上报给界面',
         deltas.filter(d => d.kind === 'text_delta').length === 1 &&

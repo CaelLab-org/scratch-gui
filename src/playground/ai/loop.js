@@ -11,6 +11,7 @@
 
 import {createRepeatDetector} from './repeat.js';
 import {buildStepBudget} from './prompt.js';
+import {normalizeUsage} from './providers.js';
 
 // 单轮最多几次模型往返。够干完一个完整的活（看清单 → 读代码 → 写 → 跑 → 查状态），
 // 又不至于让「卡住的一轮」无限烧钱。用户在设置里可以调（推荐 15~60，见 STEP_LIMITS）。
@@ -82,6 +83,47 @@ export const createSkipToken = () => {
     };
 };
 
+/**
+ * 「向用户提问」的令牌：工具拿着 ctx.ask(questions) 把问题送到界面上，等用户回答。
+ * 抄 ZCode 的 pending promise 模式 —— 同一份令牌发给两边，工具在这头等、面板在那头 resolve。
+ * 用户按停止（signal abort）时立刻把挂起的提问收掉，工具拿到 null，
+ * 这样消息历史里就不会留一条「声明了工具调用却没有结果」的记录。
+ * @param {function} onAsk 面板给的通道：(questions) => Promise<answers|null>
+ * @returns {object} 令牌：ask(questions) 与 cancel()
+ */
+export const createAskToken = onAsk => {
+    let pending = null;
+    return {
+        ask: questions => {
+            // 没有通道（无头测试、面板没接）或已经有一个在等 —— 回 null，由工具自己说清楚
+            if (typeof onAsk !== 'function' || pending) return Promise.resolve(null);
+            return new Promise((resolve, reject) => {
+                pending = {resolve, reject};
+                Promise.resolve()
+                    .then(() => onAsk(questions))
+                    .then(answer => {
+                        if (pending) {
+                            pending = null;
+                            resolve(answer);
+                        }
+                    })
+                    .catch(error => {
+                        if (pending) {
+                            pending = null;
+                            reject(error);
+                        }
+                    });
+            });
+        },
+        cancel: () => {
+            if (!pending) return;
+            const {resolve} = pending;
+            pending = null;
+            resolve(null);
+        }
+    };
+};
+
 // 执行一次工具调用。抛出的异常一律包成 isError 结果，不要让循环炸掉
 export const executeTool = async (call, tools, ctx) => {
     const tool = tools.find(t => t.name === call.name);
@@ -126,13 +168,19 @@ export const executeTool = async (call, tools, ctx) => {
  *   tools    工具数组（见 tools.js）
  *   signal   AbortSignal
  *   onEvent  ({type, ...}) => void，给 UI 用
+ *   onAsk    (questions) => Promise<answers|null>，把问题送到界面并等回答（见 createAskToken）；
+ *            不给就表示这个环境没法提问，xce_ask_user 会明说
  *   maxSteps 单轮最多几次模型往返（设置里调的，缺省 STEP_LIMITS.default）
  * @returns {Promise<object>} {text, steps, maxSteps, reason, aborted}
  */
 export const runTurn = async ({
-    session, model, tools, signal, onEvent = () => {}, maxSteps = STEP_LIMITS.default, system
+    session, model, tools, signal, onEvent = () => {}, maxSteps = STEP_LIMITS.default, system, onAsk
 }) => {
     const schemas = tools.map(toolToSchema);
+    // 提问通道：整个一轮共用一份令牌，中止时把它收掉（否则工具会一直等着）
+    const askToken = createAskToken(onAsk);
+    const cancelAsk = () => askToken.cancel();
+    if (signal) signal.addEventListener('abort', cancelAsk, {once: true});
     let steps = 0;
     let finalText = '';
     // 循环为什么结束：正常收尾=null；'steps'=到步数上限；'length'=输出被 max_tokens 掐断；
@@ -190,6 +238,16 @@ export const runTurn = async ({
         /* eslint-disable require-atomic-updates */
         if (reply.usage && typeof reply.usage.prompt_tokens === 'number') {
             session.lastPromptTokens = reply.usage.prompt_tokens;
+            // 会话累计（脚注命中率用）：没报缓存字段的请求不计进命中率的分母（promptCached）
+            const stats = session.usageStats ||
+                (session.usageStats = {requests: 0, prompt: 0, promptCached: 0, cached: 0, completion: 0});
+            stats.requests += 1;
+            stats.prompt += reply.usage.prompt_tokens;
+            stats.completion += reply.usage.completion_tokens || 0;
+            if (typeof reply.usage.cached_tokens === 'number') {
+                stats.cached += reply.usage.cached_tokens;
+                stats.promptCached += reply.usage.prompt_tokens;
+            }
         }
         session.lastUsage = reply.usage || session.lastUsage;
         /* eslint-enable require-atomic-updates */
@@ -204,7 +262,11 @@ export const runTurn = async ({
         // 空回复（思考里打转被切干净、或本来就没内容）不必留一条空消息在历史里
         if (assistantMessage.content || assistantMessage.toolCalls) {
             session.messages.push(assistantMessage);
-            onEvent({type: 'assistant', message: assistantMessage, usage: reply.usage});
+            onEvent({
+                type: 'assistant',
+                message: assistantMessage,
+                usage: normalizeUsage(reply.usage, reply.durationMs)
+            });
         }
         if (looped) break;
 
@@ -229,7 +291,7 @@ export const runTurn = async ({
             const skip = tool && tool.skippable ? createSkipToken() : null;
             onEvent({type: 'tool-start', call, skip});
             const result = await executeTool(call, tools, {
-                signal, session, supportsImage: !!model.supportsImage, skip
+                signal, session, supportsImage: !!model.supportsImage, skip, ask: askToken.ask
             });
             const record = {call, result, duration: Date.now() - startedAt};
             session.toolCalls.push(record);
@@ -251,6 +313,10 @@ export const runTurn = async ({
     if (!finished && !reason && !(signal && signal.aborted)) {
         reason = 'steps';
     }
+
+    // 收掉还没人回答的提问（正常结束时不该有，兜一手）
+    if (signal) signal.removeEventListener('abort', cancelAsk);
+    askToken.cancel();
 
     return {text: finalText, steps, maxSteps, reason, aborted: !!(signal && signal.aborted)};
 };

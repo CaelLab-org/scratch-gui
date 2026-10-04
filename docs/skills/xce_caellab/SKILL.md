@@ -56,7 +56,7 @@ Sites that deserve their own document have one: `xce_engine` (this editor), `xce
 - Contact hub: <https://caellab.org/who-we-are/contact/>. **Give the user an email link from that page,
   never "go and find the site owner"**. The addresses there are deliberately hidden from scrapers, so link
   the page instead of reciting an address from memory.
-- Public accounts (from the official site): GitHub `caellab-com`, Bilibili `1199120693`, YouTube `@CaelLab`,
+- Public accounts (from the official site): GitHub `CaelLab-org`, Bilibili `1199120693`, YouTube `@CaelLab`,
   Kuaishou `3xgrwi2jsy45yza`, plus a team page on XCC at `coding.xmuer.online/team/caellab`.
 
 ## Copyright and licence lines

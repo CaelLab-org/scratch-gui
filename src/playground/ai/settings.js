@@ -143,6 +143,12 @@ export const loadProviderKey = providerId => {
     return typeof key === 'string' ? key : '';
 };
 
+/**
+ * 整张密钥表（导出配置用）
+ * @returns {object<string, string>} {供应商 id: 密钥}
+ */
+export const loadAllProviderKeys = () => ({...readKeys()});
+
 const saveProviderKey = (providerId, apiKey) => {
     if (!providerId) return;
     try {
@@ -154,6 +160,23 @@ const saveProviderKey = (providerId, apiKey) => {
         // 存不下就算了
     }
 };
+
+/**
+ * 把一张密钥表并进来（导入配置用）：**同一家的以传进来的为准**，别的原样留着。
+ * @param {object<string, string>} keys {供应商 id: 密钥}
+ * @returns {number} 并进去了几把
+ */
+export const mergeProviderKeys = keys => {
+    if (!keys || typeof keys !== 'object') return 0;
+    let count = 0;
+    for (const [providerId, apiKey] of Object.entries(keys)) {
+        if (typeof apiKey !== 'string' || !apiKey) continue;
+        saveProviderKey(providerId, apiKey);
+        count++;
+    }
+    return count;
+};
+
 
 // ---------------------------------------------------------------------------
 // 设置本身
