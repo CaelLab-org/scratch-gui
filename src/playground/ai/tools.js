@@ -23,14 +23,18 @@ const listSprites = port =>
     port.listSprites().map(s => s.name)
         .join(', ');
 
-// 一行一个角色的清单（ls）。只给名字/数量/变量名，绝不带代码 —— 代码必须按角色单独读
+// 一行一个角色的清单（ls）。只给名字/脚本数/造型名/变量名，绝不带代码 —— 代码必须按角色单独读
 const listSpritesDetailed = port => port.listSpritesDetailed()
     .map(t => {
         const head = `- ${t.name}${t.isStage ? ' (the stage)' : ''}: ${t.scriptCount} ` +
             `script${t.scriptCount === 1 ? '' : 's'}`;
+        // 造型名要给：加造型（xce_add_costume）和看造型（xce_read_costume）都按名字指认它
+        const costumes = t.costumes && t.costumes.length ?
+            `, costumes: ${t.costumes.map(name =>
+                (name === t.currentCostume ? `${name} (current)` : name)).join(', ')}` : '';
         const vars = t.variables.length ? `, variables: ${t.variables.join(', ')}` : '';
         const lists = t.lists.length ? `, lists: ${t.lists.join(', ')}` : '';
-        return `${head}${vars}${lists}`;
+        return `${head}${costumes}${vars}${lists}`;
     })
     .join('\n');
 
@@ -41,6 +45,22 @@ const MAX_EDGE = 720;
 
 // xce_time 的等待上限：等待烧的是用户真实的墙钟时间，不许模型拿它当「等一等就好了」的挡箭牌
 const MAX_WAIT_SECONDS = 60;
+
+// 非视觉模型调视觉工具（要图片才能干活的那些）时的统一答复 —— 用户要求过：
+// 模型不能傻乎乎地调了视觉、拿不到图还硬编。文案只有这一处，两个视觉工具共用。
+const VISION_SWITCH_HINT =
+    'Tell the user: to let the AI actually see it, switch to a vision-capable model (the ones marked ' +
+    '「看图」 in the model list at the bottom of the panel), then ask again.';
+
+// SVG 缺 width / height 时的说法。这是 AI 画造型最常踩的坑（只写 viewBox 在 Scratch 里 = 0x0）
+const SVG_SIZE_HINT =
+    'The root <svg> element must carry numeric width and height attributes (a viewBox alone is not ' +
+    'enough: the editor would build a 0x0 costume that shows as nothing).';
+
+// 非视觉模型截舞台时的答复（截图已经拿到了，只是不发给模型）
+const stageVisionNote = caption =>
+    `${caption} The current model does not read images, so the picture is not passed on. ` +
+    `Say that once, then judge the result from the numbers in xce_read_state.\n${VISION_SWITCH_HINT}`;
 
 /**
  * 等到点 / 用户点了「跳过」/ 用户按了停止 —— 三个来源谁先来听谁的。
@@ -331,6 +351,7 @@ export const createTools = ({port, skills = []}) => {
                 'Whether you actually receive the picture depends on the model: text-only models get a note ' +
                 'instead, in which case tell the user to switch to a vision model rather than guessing.',
             readOnly: true,
+            vision: true,
             inputSchema: {type: 'object', properties: {}},
             handler: async (input, ctx = {}) => {
                 const dataUrl = await port.snapshotStage();
@@ -342,12 +363,7 @@ export const createTools = ({port, skills = []}) => {
                 const caption = `Stage screenshot (${size.width}x${size.height}, current frame).`;
                 if (!ctx.supportsImage) {
                     // 非视觉模型：不塞图片，改成一句能转述给用户的话
-                    return ok(
-                        `${caption} The current model does not read images, so the picture is not passed on. ` +
-                        `Say that once, then judge the result from the numbers in xce_read_state.\n` +
-                        `Tell the user: to let the AI see the stage, switch to a vision-capable model in the ` +
-                        `panel's Settings → Model (the ones marked 「看图」 in the list).`
-                    );
+                    return ok(stageVisionNote(caption));
                 }
                 return {
                     content: caption,
@@ -355,6 +371,163 @@ export const createTools = ({port, skills = []}) => {
                         url: await shrinkImage(dataUrl),
                         mimeType: 'image/png'
                     }]
+                };
+            }
+        },
+
+        {
+            name: 'xce_add_sprite',
+            description:
+                'Create a NEW sprite (角色) in the project and select it — the user\'s sprite list grows by one.\n' +
+                'Pass `svg` to give it a look you drew yourself: a complete, self-contained SVG document that ' +
+                'becomes the sprite\'s first costume (the blank costume the editor would otherwise make is ' +
+                'removed). **Read the drawing skill before you draw**: xce_read_skill lists it, ' +
+                'xce_read_fast_docs opens it, and it has the rules that make an SVG this editor can show.\n' +
+                'The name must not already be taken — check with xce_list_sprites. Without `svg` you get an ' +
+                'empty sprite for the user to draw in, which is rarely what was asked for.\n' +
+                'After creating it, look at the costume with xce_read_costume (vision models only) before ' +
+                'telling the user it is done.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {type: 'string', description: 'Name for the new sprite. Must not already exist.'},
+                    svg: {
+                        type: 'string',
+                        description: 'The sprite\'s first costume: a complete SVG document. The root <svg> ' +
+                            'must carry width and height; nothing may be loaded from outside the document.'
+                    },
+                    x: {type: 'number', description: 'Stage x position. Default 0 (centre).'},
+                    y: {type: 'number', description: 'Stage y position. Default 0 (centre).'},
+                    size: {type: 'number', description: 'Size in percent. Default 100.'},
+                    direction: {type: 'number', description: 'Direction in degrees. Default 90 (facing right).'},
+                    visible: {type: 'boolean', description: 'Whether it starts visible. Default true.'}
+                },
+                required: ['name']
+            },
+            handler: async ({name, svg, x, y, size, direction, visible}) => {
+                const result = await port.addSprite({name, svg, x, y, size, direction, visible});
+                if (!result.ok) {
+                    if (result.reason === 'duplicate') {
+                        return fail(`A sprite named "${name}" already exists. Sprites: ${result.sprites}. ` +
+                            'Choose a different name, or add the costume to that sprite with xce_add_costume.');
+                    }
+                    if (result.reason === 'no-name') return fail('The name parameter is required and cannot be empty.');
+                    if (result.reason === 'no-storage') {
+                        return fail('The editor is not ready to hold image assets yet — nothing was created.');
+                    }
+                    return fail(`Could not create a sprite named "${name}".`);
+                }
+                const lines = [`Created sprite "${result.name}" and selected it.`];
+                if (result.costume) {
+                    lines.push(`Its costume is your drawing (${result.costume.width}x${result.costume.height}), ` +
+                        'and the editor\'s blank costume was removed.');
+                    if (result.costume.broken) {
+                        lines.push('The editor could not render that SVG, so the sprite shows as a blank shape. ' +
+                            'Fix the drawing (see the drawing skill) and add a corrected costume with ' +
+                            'xce_add_costume.');
+                    }
+                } else if (result.costumeFailed) {
+                    // 角色确实建出来了，只是图没挂上 —— undo 还是要给，不然用户没法把空角色撤掉
+                    return {
+                        content: `Created the sprite "${result.name}", but your SVG was not used. ` +
+                            `${SVG_SIZE_HINT} Fix that and call xce_add_costume to give the sprite its look.`,
+                        isError: true,
+                        undo: {kind: 'sprite', sprite: result.name}
+                    };
+                } else {
+                    lines.push('It starts with the editor\'s blank costume, waiting for the user to draw in it.');
+                }
+                return {content: lines.join('\n'), undo: {kind: 'sprite', sprite: result.name}};
+            }
+        },
+
+        {
+            name: 'xce_add_costume',
+            description:
+                'Add one more costume to an existing sprite, drawn as an SVG document you write. The costume ' +
+                'is appended at the end and becomes the sprite\'s current one, so the sprite\'s look on the ' +
+                'stage changes immediately.\n' +
+                'Same SVG rules as xce_add_sprite — **read the drawing skill first** (xce_read_skill, then ' +
+                'xce_read_fast_docs): the root <svg> needs width and height, and the document must be ' +
+                'self-contained.\n' +
+                'Use it to give a sprite several looks (walk cycles, open/closed states) that the user can ' +
+                'switch between with the 「下一个造型」 block.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name (see xce_list_sprites).'},
+                    svg: {
+                        type: 'string',
+                        description: 'The new costume: a complete SVG document, root <svg> with width and height.'
+                    },
+                    name: {type: 'string', description: 'Name for the costume, e.g. "walking". Default 造型N.'}
+                },
+                required: ['sprite', 'svg']
+            },
+            handler: async ({sprite, svg, name}) => {
+                const result = await port.addCostume(sprite, {svg, name});
+                if (!result.ok) {
+                    if (result.reason === 'missing') {
+                        return fail(`No sprite named "${sprite}". Existing sprites: ${result.sprites}`);
+                    }
+                    if (result.reason === 'bad-size') return fail(SVG_SIZE_HINT);
+                    if (result.reason === 'no-svg') return fail('The svg parameter is required.');
+                    if (result.reason === 'no-storage') {
+                        return fail('The editor is not ready to hold image assets yet — no costume was added.');
+                    }
+                    return fail(`Could not add a costume to "${sprite}".`);
+                }
+                return {
+                    content: `Added costume "${result.costume.name}" (${result.costume.width}x` +
+                        `${result.costume.height}) to "${result.sprite}"; it is now the current costume ` +
+                        `(index ${result.costume.index}).`,
+                    undo: {kind: 'costume', sprite: result.sprite, index: result.costume.index}
+                };
+            }
+        },
+
+        {
+            name: 'xce_read_costume',
+            description:
+                'Look at one costume of one sprite as a picture. Use it right after drawing a costume with ' +
+                'xce_add_sprite or xce_add_costume — that is how you check your own drawing came out right ' +
+                'before you tell the user it is done.\n' +
+                'It shows the costume on its own (not the stage), so it works before the project is even run.\n' +
+                'Whether the picture actually reaches you depends on the model: text-only models get a note ' +
+                'instead, and must not describe a drawing they have not seen.',
+            readOnly: true,
+            vision: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name (see xce_list_sprites).'},
+                    costume: {
+                        type: 'string',
+                        description: 'Costume name or index (0-based). Omit to see the current costume.'
+                    }
+                },
+                required: ['sprite']
+            },
+            handler: async ({sprite, costume}, ctx = {}) => {
+                if (!ctx.supportsImage) {
+                    return ok(
+                        `xce_read_costume returns a picture, but the current model does not read images, so ` +
+                        `nothing was captured. Say that once instead of describing the drawing.\n${VISION_SWITCH_HINT}`
+                    );
+                }
+                const known = port.listCostumes(sprite);
+                if (!known) return fail(`No sprite named "${sprite}". Sprites: ${listSprites(port)}`);
+                const shot = await port.snapshotCostume(sprite, costume);
+                if (!shot) {
+                    const names = known.map(entry => `${entry.index}: ${entry.name}`).join(', ');
+                    return fail(`No costume could be captured for "${sprite}" (asked for ` +
+                        `${costume === void 0 || costume === '' ? 'the current costume' : `"${costume}"`}). ` +
+                        `Its costumes — ${names || 'none'} — and a costume that failed to load cannot be drawn.`);
+                }
+                return {
+                    content: `Costume "${shot.name}" of "${sprite}" (${shot.width}x${shot.height}, ` +
+                        'on a transparent background).',
+                    images: [{url: await shrinkImage(shot.dataUrl), mimeType: 'image/png'}]
                 };
             }
         },

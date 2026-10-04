@@ -27,6 +27,107 @@ const PRIMITIVES = {
 const INTERNAL_TO_SB3 = {};
 for (const [opcode, info] of Object.entries(PRIMITIVES)) INTERNAL_TO_SB3[opcode] = info;
 
+// —— AI 画角色用的两个模块级工具（不依赖 vm 实例，能单独测）——
+
+/**
+ * 从 SVG 根标签上读画布宽高。scratch-svg-renderer 定尺寸看的就是这两个属性：
+ * **只有 viewBox、没有 width / height 的 SVG 会被当成 0x0**，造型放进舞台看不见。
+ * @param {string} svg SVG 文档文本
+ * @returns {?{width: number, height: number}} 读不到（或不是正数）返回 null
+ */
+export const svgCanvasSize = svg => {
+    const tag = /<svg\b[^>]*>/i.exec(String(svg || ''));
+    if (!tag) return null;
+    const read = name => {
+        // 数字后面必须紧跟引号：`100%` 和 `10cm` 都不是这里要的值（会变成 0x0 造型）
+        const found = new RegExp(`${name}\\s*=\\s*["']\\s*([0-9.]+)\\s*["']`, 'i').exec(tag[0]);
+        const value = found ? parseFloat(found[1]) : NaN;
+        return isFinite(value) && value > 0 ? value : null;
+    };
+    const width = read('width');
+    const height = read('height');
+    return width && height ? {width, height} : null;
+};
+
+/**
+ * 项目里所有「非内置」SVG 造型的文本，按 assetId 索引。
+ *
+ * 自动保存的快照走 vm.toJSON()，那是纯 JSON —— 造型资产不在里面，刷新后 loadProject
+ * 只能去 storage 找。AI 画的造型恰好只在内存 storage 里，所以快照必须**另外带上**这些文本
+ * （见 project-persistence.jsx），恢复时先塞回 storage 再 loadProject。
+ * @param {object} vm scratch-vm 实例
+ * @returns {object} assetId -> SVG 文本
+ */
+export const collectSvgAssets = vm => {
+    const out = {};
+    const runtime = vm && vm.runtime;
+    const storage = runtime && runtime.storage;
+    const targets = (runtime && runtime.targets) || [];
+    // 读不到 storage 就不知道哪些是内置资产，宁可不收也不要把内置的那几个抄进去
+    const builtin = storage && storage.defaultAssetId && storage.defaultAssetId.ImageVector;
+    if (!builtin) return out;
+    for (const target of targets) {
+        const costumes = target && target.getCostumes ? target.getCostumes() : [];
+        for (const costume of costumes) {
+            if (!costume || costume.dataFormat !== 'svg' || !costume.asset) continue;
+            if (!costume.assetId || costume.assetId === builtin) continue;
+            try {
+                out[costume.assetId] = costume.asset.decodeText();
+            } catch (e) {
+                // 读不出文本（资产是坏的）就算了，恢复时那个造型照样空着
+            }
+        }
+    }
+    return out;
+};
+
+/**
+ * 把 collectSvgAssets 收上来的造型文本塞回 storage 的缓存。
+ * @param {object} vm scratch-vm 实例
+ * @param {object} assets assetId -> SVG 文本
+ */
+export const cacheSvgAssets = (vm, assets) => {
+    const runtime = vm && vm.runtime;
+    const storage = runtime && runtime.storage;
+    if (!storage || !storage.cache || !assets) return;
+    for (const [assetId, svg] of Object.entries(assets)) {
+        if (typeof svg !== 'string' || !assetId) continue;
+        storage.cache(
+            storage.AssetType.ImageVector,
+            storage.DataFormat.SVG,
+            new TextEncoder().encode(svg),
+            assetId
+        );
+    }
+};
+
+// 新建角色先摆一个空白造型（编辑器自己的「绘制」按钮就是这条路：sb2 形状的空角色 +
+// 内置空白 SVG）。带图的话随后就把这个空白造型换掉。
+const blankSpriteJson = name => ({
+    objName: name,
+    sounds: [],
+    costumes: [{
+        costumeName: '造型1',
+        baseLayerID: -1,
+        baseLayerMD5: 'cd21514d0531fdffb22204e0ec5ed84a.svg',
+        bitmapResolution: 1,
+        rotationCenterX: 0,
+        rotationCenterY: 0
+    }],
+    currentCostumeIndex: 0,
+    scratchX: 0,
+    scratchY: 0,
+    scale: 1,
+    direction: 90,
+    rotationStyle: 'normal',
+    isDraggable: false,
+    visible: true,
+    spriteInfo: {}
+});
+
+// 造型图截出来给模型看的最大边长（和 xce_read_stage 一个口径）
+const COSTUME_SHOT_MAX_EDGE = 720;
+
 // VM 内部形态的一份 blocks 快照 -> sb3 形态（不改动原对象）
 export const internalToSb3 = internalBlocks => {
     const out = {};
@@ -162,6 +263,117 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         if (vm.emitWorkspaceUpdate) vm.emitWorkspaceUpdate();
     };
 
+    // 报错里用的角色名清单
+    const spriteNames = () => realTargets()
+        .map(t => t.getName())
+        .join(', ');
+
+    // —— AI 画角色 ——
+
+    // SVG 文本 -> storage 里的矢量资产，并落进 builtin 缓存：造型编辑器改图、
+    // vm.saveProjectSb3() 导出、快照恢复都是从 storage.load 找回来的，只挂在 costume.asset
+    // 上会在这些地方扑空（assetId 生成了，资产却没人找得到）。
+    const svgAssetOf = svg => {
+        const storage = runtime().storage;
+        const data = new TextEncoder().encode(svg);
+        const asset = storage.createAsset(
+            storage.AssetType.ImageVector,
+            storage.DataFormat.SVG,
+            data,
+            null,
+            true // 生成 md5 当 assetId
+        );
+        if (storage.cache) {
+            storage.cache(storage.AssetType.ImageVector, storage.DataFormat.SVG, data, asset.assetId);
+        }
+        return asset;
+    };
+
+    // 造型对象。md5 / md5ext 必须自己填：loadCostume 在「自带 asset」这条路上不会补，
+    // 而序列化（vm.toJSON、导出 sb3）读的正是它 —— 漏了，别处再打开这个项目就找不到造型。
+    const costumeFromSvg = (svg, name) => {
+        const size = svgCanvasSize(svg);
+        if (!size) return null;
+        const asset = svgAssetOf(svg);
+        const md5ext = `${asset.assetId}.svg`;
+        return {
+            costume: {
+                name,
+                asset,
+                assetId: asset.assetId,
+                dataFormat: 'svg',
+                md5: md5ext,
+                md5ext,
+                rotationCenterX: size.width / 2,
+                rotationCenterY: size.height / 2,
+                bitmapResolution: 1
+            },
+            size
+        };
+    };
+
+    const attachSvgCostume = async (target, svg, name) => {
+        const made = costumeFromSvg(svg, name);
+        if (!made) return null;
+        await vm.addCostume(`${made.costume.assetId}.svg`, made.costume, target.id);
+        return {
+            name: made.costume.name,
+            width: made.size.width,
+            height: made.size.height,
+            index: target.getCostumes().length - 1,
+            broken: !!made.costume.broken
+        };
+    };
+
+    // 造型名跟编辑器一致用「造型N」：用户会在造型标签页里看到它
+    const defaultCostumeName = target => `造型${target.getCostumes().length + 1}`;
+
+    // 造型截图的挑法：不传 = 当前造型；数字当下标，字符串当名字（不分大小写）
+    const pickCostume = (costumes, current, which) => {
+        if (which === void 0 || which === null || which === '') return current;
+        if (typeof which === 'number') return Math.floor(which);
+        const wanted = String(which).trim()
+            .toLowerCase();
+        return costumes.findIndex(entry => String(entry.name).toLowerCase() === wanted);
+    };
+
+    // 造型画到 canvas 上再导 PNG。SVG 没写 width/height 时浏览器给 0，
+    // 退到造型自身尺寸、再退到旋转中心推出来的尺寸，最后才是舞台尺寸。
+    const renderCostumeToPng = (image, costume) => {
+        const known = costume.size || [];
+        const width = Math.round(image.width || known[0] || (costume.rotationCenterX * 2) || 480);
+        const height = Math.round(image.height || known[1] || (costume.rotationCenterY * 2) || 360);
+        if (!(width > 0) || !(height > 0)) return null;
+        const scale = Math.min(1, COSTUME_SHOT_MAX_EDGE / Math.max(width, height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        return {dataUrl: canvas.toDataURL('image/png'), width, height, name: costume.name};
+    };
+
+    // 这两个写成闭包而不是 port 上的方法：undoAction 也要调它们，
+    // 在对象字面量里引用 port 自己会踩 no-use-before-define。
+    const removeSpriteByName = spriteName => {
+        const target = findTarget(spriteName);
+        if (!target) return false;
+        vm.deleteSprite(target.id);
+        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+        return true;
+    };
+
+    const removeCostumeAt = (spriteName, index) => {
+        const target = findTarget(spriteName);
+        if (!target) return false;
+        const costumes = target.getCostumes();
+        // 角色的最后一个造型删不得（删光了角色就没法渲染）
+        if (costumes.length <= 1 || !(index >= 0 && index < costumes.length)) return false;
+        vm.setEditingTarget(target.id);
+        vm.deleteCostume(index);
+        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+        return true;
+    };
+
     // 给系统提示词用的轻量项目概况：只数脚本段数，不渲染积木文本
     const describeProject = () => realTargets().map(t => ({
         name: t.getName(),
@@ -231,13 +443,16 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         listSprites: () =>
             realTargets().map(t => ({name: t.getName(), isStage: t.isStage, id: t.id})),
 
-        // ls 用的轻量清单：名字/脚本数/变量名/列表名，绝不渲染积木文本
+        // ls 用的轻量清单：名字/脚本数/造型名/变量名/列表名，绝不渲染积木文本
         listSpritesDetailed: () => realTargets().map(t => {
             const {variables, lists} = splitVars(t);
             return {
                 name: t.getName(),
                 isStage: !!t.isStage,
                 scriptCount: t.blocks && t.blocks.getScripts ? t.blocks.getScripts().length : 0,
+                costumes: (t.getCostumes ? t.getCostumes() : []).map(costume => costume.name),
+                currentCostume: t.getCostumes && t.getCostumes()[t.currentCostume] ?
+                    t.getCostumes()[t.currentCostume].name : null,
                 variables: Object.keys(variables),
                 lists: Object.keys(lists)
             };
@@ -353,11 +568,13 @@ export const createScratchPort = ({vm, getWorkspace}) => {
 
         restoreScript,
 
-        // 按工具留下的 undo 句柄把那一次改动收回去（写入 = 删掉刚加的顶块；删除 = 把快照摆回去）。
-        // 界面上单张卡的「撤销」和整轮的「回退本轮变更」都走这里。
+        // 按工具留下的 undo 句柄把那一次改动收回去（写入 = 删掉刚加的顶块；删除 = 把快照摆回去；
+        // 新建角色 = 把角色删掉；加造型 = 把造型删掉）。单张卡的「撤销」和整轮的「回退本轮变更」都走这里。
         undoAction: action => {
             if (!action) return false;
             if (action.kind === 'del') return restoreScript(action.sprite, action.blocks);
+            if (action.kind === 'sprite') return removeSpriteByName(action.sprite);
+            if (action.kind === 'costume') return removeCostumeAt(action.sprite, action.index);
             let ok = false;
             for (const topBlockId of action.topBlockIds || []) {
                 ok = deleteScript(action.sprite, topBlockId) || ok;
@@ -454,6 +671,134 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             const rt = runtime();
             return {width: rt.stageWidth || 480, height: rt.stageHeight || 360};
         },
+
+        // —— 角色 / 造型：AI 自己新建角色、画造型 ——
+
+        /**
+         * 新建一个角色。带 svg 就用它当第一个造型（编辑器给的空白造型会被摘掉 —— 那个是
+         * 0x0，放在舞台上看不见），不带就是一个等用户自己画的空角色。
+         * @param {object} input {name, svg?, x?, y?, size?, direction?, visible?}
+         * @returns {Promise<object>} {ok, reason?, name?, costume?} —— 失败时 reason 说明原因
+         */
+        addSprite: async ({name, svg, x, y, size, direction, visible} = {}) => {
+            const wanted = String(name || '').trim();
+            if (!wanted) return {ok: false, reason: 'no-name'};
+            if (findTarget(wanted)) return {ok: false, reason: 'duplicate', sprites: spriteNames()};
+            if (svg && !(runtime().storage && runtime().storage.createAsset)) {
+                return {ok: false, reason: 'no-storage'};
+            }
+
+            // 新角色 = 「加进来那一个」：按 id 差集认，比按名字靠得住
+            const before = new Set(realTargets().map(t => t.id));
+            await vm.addSprite(JSON.stringify(blankSpriteJson(wanted)));
+            const target = realTargets().find(t => !before.has(t.id));
+            if (!target) return {ok: false, reason: 'failed'};
+
+            if (Number.isFinite(Number(x)) && Number.isFinite(Number(y))) {
+                target.setXY(Number(x), Number(y));
+            }
+            if (Number.isFinite(Number(direction))) target.setDirection(Number(direction));
+            if (size !== void 0 && size !== null && size !== '' && Number.isFinite(Number(size))) {
+                target.setSize(Number(size));
+            }
+            if (typeof visible === 'boolean') target.setVisible(visible);
+
+            let costume = null;
+            if (svg) {
+                costume = await attachSvgCostume(target, svg, defaultCostumeName(target));
+                if (costume) {
+                    // 摘掉编辑器给的空白造型：留着它，用户点开造型页第一个看到的是张白纸
+                    vm.setEditingTarget(target.id);
+                    vm.deleteCostume(0);
+                } else {
+                    // 造型没画成（多半是 SVG 缺 width/height），角色仍然建出来了
+                    return {ok: true, name: target.getName(), costume: null, costumeFailed: true};
+                }
+            }
+            // 跟编辑器的「绘制」按钮一样，新建完就选中它
+            vm.setEditingTarget(target.id);
+            if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+            return {ok: true, name: target.getName(), costume};
+        },
+
+        /**
+         * 给已有角色加一个 SVG 造型（加在最后，并成为当前造型）。
+         * @param {string} spriteName 角色名
+         * @param {object} input {svg, name?}
+         * @returns {Promise<object>} {ok, reason?, sprite?, costume?}
+         */
+        addCostume: async (spriteName, {svg, name} = {}) => {
+            const target = findTarget(spriteName);
+            if (!target) return {ok: false, reason: 'missing', sprites: spriteNames()};
+            if (!svg) return {ok: false, reason: 'no-svg'};
+            if (!(runtime().storage && runtime().storage.createAsset)) {
+                return {ok: false, reason: 'no-storage'};
+            }
+            const wanted = String(name || '').trim() || defaultCostumeName(target);
+            const costume = await attachSvgCostume(target, svg, wanted);
+            if (!costume) return {ok: false, reason: 'bad-size'};
+            if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+            return {ok: true, sprite: target.getName(), costume, current: target.currentCostume};
+        },
+
+        // 删角色（撤销「新建角色」用）
+        removeSprite: removeSpriteByName,
+
+        // 删造型（撤销「加造型」用）。角色的最后一个造型删不得，返回 false 让调用方知道了。
+        removeCostume: removeCostumeAt,
+
+        listCostumes: spriteName => {
+            const target = findTarget(spriteName);
+            if (!target) return null;
+            return target.getCostumes().map((costume, index) => ({
+                name: costume.name,
+                index,
+                format: costume.dataFormat,
+                size: costume.size ? costume.size.map(n => Math.round(n)) : null,
+                current: index === target.currentCostume
+            }));
+        },
+
+        /**
+         * 一个造型的画面（给 AI 看自己画得对不对）。跟 snapshotStage 一样是浏览器专有：
+         * 无头环境没有 Image / canvas，返回 null 由调用方报失败。
+         * @param {string} spriteName 角色名
+         * @param {string|number} [which] 造型名或下标；不传 = 当前造型
+         * @returns {Promise<object>} {dataUrl, width, height, name}；抓不到（没有 canvas、没这个造型）返回 null
+         */
+        snapshotCostume: (spriteName, which) => new Promise(resolve => {
+            const target = findTarget(spriteName);
+            if (!target || typeof document === 'undefined') {
+                resolve(null);
+                return;
+            }
+            const costumes = target.getCostumes();
+            const costume = costumes[pickCostume(costumes, target.currentCostume, which)];
+            if (!costume) {
+                resolve(null);
+                return;
+            }
+            const storage = runtime().storage;
+            // 自带 asset 直接用；否则回 storage 取（内置造型、别人存的项目都走这条）
+            const pending = costume.asset ? Promise.resolve(costume.asset) :
+                (storage && costume.assetId ?
+                    storage.load(
+                        costume.dataFormat === 'svg' ?
+                            storage.AssetType.ImageVector : storage.AssetType.ImageBitmap,
+                        costume.assetId,
+                        costume.dataFormat
+                    ) : Promise.resolve(null));
+            pending.then(asset => {
+                if (!asset || typeof asset.encodeDataURI !== 'function') {
+                    resolve(null);
+                    return;
+                }
+                const image = new Image();
+                image.onload = () => resolve(renderCostumeToPng(image, costume));
+                image.onerror = () => resolve(null);
+                image.src = asset.encodeDataURI();
+            }).catch(() => resolve(null));
+        }),
 
         // 当前编辑的角色名（UI 用它做默认值）
         currentSpriteName: () => {
