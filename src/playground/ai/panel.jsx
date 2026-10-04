@@ -7,7 +7,7 @@
  *   full  —— 全屏铺满（学 ZCode）
  *
  * 面板宽度只有 ~310px（就是积木选择框的宽度），所以这里的每一行都按「不许换行」来写：
- * 头部只留图标按钮，模型/状态走单行省略，工具输出默认折叠。
+ * 头部只留图标按钮，模型/状态走单行省略；工具输出在干活期间摊开、整轮结束后跟着收起。
  *
  * 干活的是 loop / tools / port / providers / markdown —— 渲染层只负责把事件画出来。
  */
@@ -34,7 +34,7 @@ import {
 } from './settings.js';
 import {buildSystemPrompt, WARN_AT} from './prompt.js';
 import {maybeCompact, measure} from './compact.js';
-import {buildTurns, formatWorkDuration} from './turns.js';
+import {buildTurns, formatWorkDuration, undoActionOf} from './turns.js';
 import {Markdown} from './markdown.jsx';
 import {
     loadConversation, saveConversation, newConversationId, loadConversationIndex,
@@ -85,6 +85,21 @@ const argOf = input => {
     return null;
 };
 
+// 当前供应商能选的模型：预设在前（人工挑过、带说明），拉回来的在后（可能几十上百条），按 id 去重。
+// 调用方传进来的清单为空就现读缓存（输入区的快捷面板没有自己的一份 state）。
+const modelsOf = (providerId, baseUrl, cached) => {
+    const provider = getProvider(providerId);
+    const fetched = cached && cached.length ? cached : loadModelCache(providerId, provider.baseUrl);
+    const seen = new Set();
+    const out = [];
+    for (const model of provider.models.concat(fetched)) {
+        if (seen.has(model.id)) continue;
+        seen.add(model.id);
+        out.push(model);
+    }
+    return out;
+};
+
 // ---------------------------------------------------------------------------
 // 图标
 //
@@ -99,6 +114,10 @@ const ICON_PATHS = {
     expand: ['M6.5 2.5h-4v4', 'M9.5 2.5h4v4', 'M13.5 9.5v4h-4', 'M2.5 9.5v4h4'],
     shrink: ['M2.5 6.5h4v-4', 'M13.5 6.5h-4v-4', 'M13.5 9.5h-4v4', 'M2.5 9.5h4v4'],
     chevron: ['M6 3.5L10.5 8 6 12.5'],
+    // 发送（上箭头）/ 停止（实心方块）：照 ZCode 输入区那两个图标，主按钮和运行中的按钮各一个。
+    // 方块走 fill —— 细边的方框在这个尺寸上会被看成复选框
+    send: ['M8 13V3.5', 'M4.2 7.3L8 3.5l3.8 3.8'],
+    stop: [{d: 'M5 5h6v6H5z', fill: true}],
     check: ['M3 8.5l3.5 3.5L13 4.5'],
     refresh: ['M13 6.5A5 5 0 1 0 4.2 11.6', 'M13 2.5v4h-4'],
     // 时钟（历史对话）：圆用两段弧拼，Icon 只画 path，纯直线段拼不出圆
@@ -119,12 +138,17 @@ const Icon = ({name, size = 16}) => (
         viewBox="0 0 16 16"
         width={size}
     >
-        {(ICON_PATHS[name] || []).map((d, i) => (
-            <path
-                d={d}
-                key={i}
-            />
-        ))}
+        {(ICON_PATHS[name] || []).map((shape, i) => {
+            // 一条 path 可以是字符串（只描边），也可以是 {d, fill} —— 少数图标要实心
+            const path = typeof shape === 'string' ? {d: shape} : shape;
+            return (
+                <path
+                    d={path.d}
+                    fill={path.fill ? 'currentColor' : 'none'}
+                    key={i}
+                />
+            );
+        })}
         {name === 'sliders' ? ICON_PATHS.slidersDots.map(([cx, cy], i) => (
             <circle
                 cx={cx}
@@ -217,13 +241,21 @@ const usePaletteDock = enabled => {
 // 思考过程
 // ---------------------------------------------------------------------------
 
-const Thinking = ({text, streaming, ms}) => {
+// 思考行了多少秒：想着的时候按当前时间走（收起状态也看得见它在变），结束后定格成总数。
+// 取整、最少 1 秒 —— 学 ZCode 桌面版的 `Thought · N seconds`（它也不用分钟格式）。
+const thinkSeconds = ({streaming, ms, startedAt, now}) => {
+    if (streaming) return startedAt ? Math.max(1, Math.ceil((now - startedAt) / 1000)) : 1;
+    return Math.max(1, Math.ceil((ms || 0) / 1000));
+};
+
+const Thinking = ({text, streaming, ms, startedAt, now}) => {
     // 默认**折叠**（学 ZCode / Codex）：只在标题行报「想了多久」，想看再点开。
     // 别在流式期间自动摊开 —— 那样答案还没出来就先刷一大片灰字，反而挡着正文。
     const [open, setOpen] = useState(false);
-    const seconds = ms ? `${(ms / 1000).toFixed(1)}s` : '';
-    const label = streaming ? '思考中…' : `思考过程${seconds ? ` · ${seconds}` : ''}`;
-    // 一步只想了两个字的那种就别占地方了（多步往返时会冒出好几条「思考过程 · 0.1s」，很吵）
+    const label = streaming ?
+        `思考中 · ${thinkSeconds({streaming, startedAt, now})}s` :
+        (ms ? `思考过程 · 共 ${thinkSeconds({ms})}s` : '思考过程');
+    // 一步只想了两个字的那种就别占地方了（多步往返时会冒出好几条「思考过程 · 1s」，很吵）
     if (!streaming && String(text).trim().length < 12) return null;
     return (
         <div className={styles.think}>
@@ -238,6 +270,8 @@ const Thinking = ({text, streaming, ms}) => {
                         size={11}
                     />
                 </span>
+                {/* 想着的时候行首转个小圈 + 秒数在跳：收起来也看得出它还在干 */}
+                {streaming ? <span className={styles.spinner} /> : null}
                 <span className={`${styles.thinkLabel} ${streaming ? styles.thinkLive : ''}`}>{label}</span>
             </button>
             {open ? <div className={styles.thinkBody}>{text}</div> : null}
@@ -247,6 +281,8 @@ const Thinking = ({text, streaming, ms}) => {
 
 Thinking.propTypes = {
     ms: PropTypes.number,
+    now: PropTypes.number,
+    startedAt: PropTypes.number,
     streaming: PropTypes.bool,
     text: PropTypes.string
 };
@@ -261,16 +297,20 @@ Thinking.propTypes = {
 // 几条硬规矩：
 //   - **不显示耗时**（用户明确要求去掉）；
 //   - 成功不画对勾、不写「完成」，行本身安静下来就是成功（只有失败要留颜色）；
-//   - 默认收起，**失败自动摊开**（错误必须被看见）；跑的时候行首转一个小圈 + 「执行中」。
+//   - **干活期间一律摊开**（live：这一轮还在跑）—— AI 写积木的过程要看得见，
+//     整轮结束了才跟着「已工作」那条一起收起来（学 ZCode 的 autoOpen / autoCollapseOnComplete）；
+//   - 失败自动摊开（错误必须被看见）；跑的时候行首转一个小圈。
 // 撤消按钮**放在行上**而不是藏在展开区里 —— 藏起来等于没有。
-const ToolCard = ({item, onUndo, onSkip}) => {
+const ToolCard = ({item, live, onUndo, onSkip}) => {
     const failed = item.status === 'failed';
     const running = item.status === 'running';
-    const [open, setOpen] = useState(false);
+    // 用户自己点开过就一直开着（defaultOpen 不变时下面的 effect 不会去动它）
+    const defaultOpen = failed || live;
+    const [open, setOpen] = useState(defaultOpen);
     const [showRequest, setShowRequest] = useState(false);
     useEffect(() => {
-        if (failed) setOpen(true);
-    }, [failed]);
+        setOpen(defaultOpen);
+    }, [defaultOpen]);
     // 旧对话（改名前存的）里工具名没有 xce_ 前缀，补一次映射，别让界面露出裸英文名
     const label = TOOL_LABELS[item.name] || TOOL_LABELS[`xce_${item.name}`] || item.name;
     // 「查看 Agent 的请求」：用户展开后可以点开看这次调用真正发出去的参数。
@@ -350,6 +390,7 @@ const ToolCard = ({item, onUndo, onSkip}) => {
 
 ToolCard.propTypes = {
     item: PropTypes.object,
+    live: PropTypes.bool,
     onUndo: PropTypes.func,
     onSkip: PropTypes.func
 };
@@ -397,6 +438,165 @@ WorkGroup.propTypes = {
 };
 
 // ---------------------------------------------------------------------------
+// 本轮变更（+N / −M 积木 · 回退本轮变更）
+// ---------------------------------------------------------------------------
+
+// 一轮干完，在答复下面挂一行「这轮动了哪些角色的几块积木」（学 ZCode 的每轮变更卡片：
+// 只在真有改动时出现，加用绿、减用红，其余一律灰）。
+//
+// 「回退本轮变更」删的是积木，误点一下整轮的活儿就没了 —— 所以沿用历史列表那套两段式确认：
+// 点一下只是进入待确认（按钮变红），两三秒没人理就自己退回去。
+const TurnChanges = ({changes, onRevert}) => {
+    const [armed, setArmed] = useState(false);
+    const timerRef = useRef(0);
+    useEffect(() => () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+    }, []);
+    return (
+        <div className={styles.changes}>
+            <span className={styles.changesTitle}>本轮变更</span>
+            {changes.map(change => (
+                <span
+                    className={styles.change}
+                    key={change.sprite}
+                >
+                    <span className={styles.changeSprite}>{change.sprite}</span>
+                    {change.added ? <span className={styles.changePlus}>{`+${change.added}`}</span> : null}
+                    {change.removed ? <span className={styles.changeMinus}>{`\u2212${change.removed}`}</span> : null}
+                    <span className={styles.changeUnit}>积木</span>
+                </span>
+            ))}
+            <button
+                className={`${styles.changesUndo} ${armed ? styles.changesUndoArmed : ''}`}
+                onClick={() => {
+                    if (armed) {
+                        if (timerRef.current) clearTimeout(timerRef.current);
+                        setArmed(false);
+                        onRevert();
+                        return;
+                    }
+                    setArmed(true);
+                    timerRef.current = setTimeout(() => setArmed(false), 2500);
+                }}
+                type="button"
+            >{armed ? '确认回退？' : '回退本轮变更'}</button>
+        </div>
+    );
+};
+
+TurnChanges.propTypes = {
+    changes: PropTypes.array.isRequired,
+    onRevert: PropTypes.func.isRequired
+};
+
+// ---------------------------------------------------------------------------
+// 模型 / 思考强度快捷面板
+// ---------------------------------------------------------------------------
+
+// 输入区那行模型名点开的就地面板（学 ZCode 的 composer 工具栏：模型和思考档位就地切换，
+// 不用进设置页 —— 那个页面留给密钥 / 限额 / 提示词）。
+// 只列**当前供应商**的模型：换供应商要另配密钥和 base_url，那是设置页的事。
+const ModelMenu = ({settings, onClose, onEffort, onModel, onOpenSettings}) => {
+    const provider = getProvider(settings.providerId);
+    const [query, setQuery] = useState('');
+    const all = modelsOf(settings.providerId, settings.baseUrl, settings.models);
+    const needle = query.trim().toLowerCase();
+    const shown = needle ? all.filter(model => {
+        const name = String(model.name || '').toLowerCase();
+        return model.id.toLowerCase().includes(needle) || name.includes(needle);
+    }) : all;
+    const thinking = thinkingOf(settings.providerId, settings.modelId);
+    const level = thinking && (thinking.levels.find(item => item.value === settings.effort) ||
+        thinking.levels[thinking.levels.length - 1]);
+    return (
+        <div className={styles.modelMenu}>
+            <div className={styles.modelMenuHead}>
+                <span className={styles.modelMenuTitle}>{`模型 · ${provider.name}`}</span>
+                <button
+                    aria-label="关闭"
+                    className={styles.iconBtn}
+                    onClick={onClose}
+                    type="button"
+                >{'\u00d7'}</button>
+            </div>
+            {hasApiKey(settings) ? null : (
+                <div className={styles.modelMenuNote}>
+                    还没填密钥，现在用的是本地演示模型（固定脚本）。先去设置里填上密钥，选的模型才会真的生效。
+                </div>
+            )}
+            {all.length > 6 ? (
+                <input
+                    className={styles.modelMenuSearch}
+                    onChange={e => setQuery(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Escape') onClose();
+                    }}
+                    placeholder="按名字筛一下…"
+                    value={query}
+                />
+            ) : null}
+            <div className={styles.modelMenuList}>
+                {shown.length === 0 ? (
+                    <div className={styles.modelsEmpty}>没有匹配的模型。</div>
+                ) : null}
+                {shown.map(model => (
+                    <button
+                        className={`${styles.modelRow} ${
+                            model.id === settings.modelId ? styles.modelRowOn : ''}`}
+                        key={model.id}
+                        onClick={() => onModel(model)}
+                        type="button"
+                    >
+                        <span className={styles.modelTick}>
+                            {model.id === settings.modelId ? <Icon
+                                name="check"
+                                size={12}
+                            /> : null}
+                        </span>
+                        <span className={styles.modelText}>
+                            <span className={styles.modelName}>{model.name || model.id}</span>
+                            <span className={styles.modelId}>{model.id}</span>
+                        </span>
+                        {model.supportsImage ?
+                            <span className={`${styles.tag} ${styles.tagImg}`}>看图</span> : null}
+                        {model.contextWindow ?
+                            <span className={styles.tag}>{Math.round(model.contextWindow / 1024)}k</span> : null}
+                    </button>
+                ))}
+            </div>
+            {thinking && level ? (
+                <div className={styles.modelMenuEffort}>
+                    <span className={styles.fieldLabel}>思考强度</span>
+                    <div className={styles.efforts}>
+                        {thinking.levels.map(item => (
+                            <button
+                                className={`${styles.effort} ${item.value === level.value ? styles.effortOn : ''}`}
+                                key={item.value}
+                                onClick={() => onEffort(item)}
+                                type="button"
+                            >{item.label}</button>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+            <button
+                className={styles.modelMenuMore}
+                onClick={onOpenSettings}
+                type="button"
+            >更多设置（密钥 / 上下文限额 / 提示词）</button>
+        </div>
+    );
+};
+
+ModelMenu.propTypes = {
+    onClose: PropTypes.func.isRequired,
+    onEffort: PropTypes.func.isRequired,
+    onModel: PropTypes.func.isRequired,
+    onOpenSettings: PropTypes.func.isRequired,
+    settings: PropTypes.object.isRequired
+};
+
+// ---------------------------------------------------------------------------
 // 设置页
 // ---------------------------------------------------------------------------
 
@@ -418,13 +618,7 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
     const [query, setQuery] = useState('');
 
     // 一份清单：预设在前（人工挑过、带说明），拉回来的在后（可能有几十上百条）
-    const seen = new Set();
-    const all = [];
-    for (const model of provider.models.concat(models)) {
-        if (seen.has(model.id)) continue;
-        seen.add(model.id);
-        all.push(model);
-    }
+    const all = modelsOf(draft.providerId, draft.baseUrl, models);
     const needle = query.trim().toLowerCase();
     const matches = model => {
         const name = String(model.name || '').toLowerCase();
@@ -871,6 +1065,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     const [statusError, setStatusError] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    // 输入区那行模型名点开的快捷面板（换模型 / 调思考档位，不用进设置页）
+    const [showModelMenu, setShowModelMenu] = useState(false);
     // 打开历史列表那一刻的库内快照（列表是静态的，切换/删除后由对应 handler 刷新）
     const [convIndex, setConvIndex] = useState(null);
     const [settings, setSettings] = useState(() => loadSettings());
@@ -975,11 +1171,23 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
             const last = copy[copy.length - 1];
             if (last && last.kind === 'agent' && last.streaming) {
                 copy[copy.length - 1] = kind === 'reasoning_delta' ?
-                    {...last, reasoning: (last.reasoning || '') + delta} :
+                    {
+                        ...last,
+                        reasoning: (last.reasoning || '') + delta,
+                        // 想着呢：记下起点，「思考中 · Ns」的秒数从这里开始走
+                        reasoningAt: last.reasoningAt || Date.now()
+                    } :
                     {...last, text: last.text + delta};
             } else {
                 copy.push(kind === 'reasoning_delta' ?
-                    {kind: 'agent', text: '', reasoning: delta, streaming: true, at: Date.now()} :
+                    {
+                        kind: 'agent',
+                        text: '',
+                        reasoning: delta,
+                        reasoningAt: Date.now(),
+                        streaming: true,
+                        at: Date.now()
+                    } :
                     {kind: 'agent', text: delta, reasoning: '', streaming: true, at: Date.now()});
             }
             return copy;
@@ -1089,6 +1297,7 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
         // 自己发的话必须跟到底部，哪怕刚才在往上翻
         stickRef.current = true;
         setShowJump(false);
+        setShowModelMenu(false);
         setBusy(true);
         setStatus('思考中…');
         setStatusError(false);
@@ -1235,18 +1444,51 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     }, []);
 
     const handleUndo = useCallback(async item => {
-        if (!item.undo || !item.sprite || !portRef.current) return;
-        for (const blockId of item.undo) {
-            // eslint-disable-next-line no-await-in-loop
-            await portRef.current.deleteScript(item.sprite, blockId);
-        }
+        const action = undoActionOf(item);
+        if (!action || !portRef.current) return;
+        await portRef.current.undoAction(action);
         setItemsState(prev => prev.map(entry => (entry === item ? {...entry, undo: null} : entry)));
         saveProjectNow();
         setStatus('已撤销');
     }, []);
 
+    // 回退整轮：把这一轮里每个改过积木的动作**倒着**收回去（先写后删的那种，得先恢复再删，
+    // 净效果才对），然后清掉全部句柄 —— 摘要行和卡片上的「撤销」跟着一起消失。
+    const handleRevertTurn = useCallback(async turn => {
+        const port = portRef.current;
+        if (!port) return;
+        const turnItems = turn.segments.reduce((all, segment) => all.concat(segment.items), []);
+        const actions = turnItems.map(undoActionOf).filter(Boolean);
+        if (!actions.length) return;
+        for (const action of actions.slice().reverse()) {
+            // eslint-disable-next-line no-await-in-loop
+            await port.undoAction(action);
+        }
+        const done = new Set(turnItems);
+        const summary = turn.changes.map(change => {
+            const parts = [];
+            if (change.added) parts.push(`+${change.added}`);
+            if (change.removed) parts.push(`\u2212${change.removed}`);
+            return `${change.sprite} ${parts.join(' ')} 积木`;
+        }).join('，');
+        setItemsState(prev => prev
+            .map(entry => (done.has(entry) ? {...entry, undo: null} : entry))
+            .concat([{kind: 'notice', text: `已回退本轮变更：${summary}。`}]));
+        saveProjectNow();
+        setStatus('已回退本轮变更');
+        // 模型那边还记着「我写过这些积木」（工具返回里写着 Wrote …）。不告诉它已经删了，
+        // 下一轮它会当成还在，用户说「继续」就什么都不做了 —— 插一句话把事实对齐。
+        sessionRef.current.messages.push({
+            role: 'user',
+            content: '[The user reverted the changes made in the previous turn: those scripts were ' +
+                'removed from the project. Treat them as not existing. If the user asks for them ' +
+                'again, write them again instead of assuming they are still there.]'
+        });
+    }, []);
+
     // 渲染一条转录条目。用户消息不经过这里 —— 它挂在「轮」上，由分组那层画。
-    const renderItem = (item, key) => {
+    // live = 这条属于还在跑的那一轮：工具行据此在干活期间摊开（见 ToolCard）。
+    const renderItem = (item, key, live) => {
         if (item.kind === 'notice') {
             return (<div
                 className={styles.notice}
@@ -1262,6 +1504,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                     {item.reasoning ? (
                         <Thinking
                             ms={item.reasoningMs}
+                            now={now}
+                            startedAt={item.reasoningAt}
                             streaming={item.streaming}
                             text={item.reasoning}
                         />
@@ -1279,6 +1523,7 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
             <ToolCard
                 item={item}
                 key={key}
+                live={live}
                 onSkip={handleSkip}
                 onUndo={handleUndo}
             />
@@ -1319,6 +1564,25 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
         setSettingsDraft(cleared);
         setStatus('已清除');
     }, []);
+
+    // 快捷换模型：立刻落盘（cookie / 桌面版 settings.json），**下一轮**生效 ——
+    // 正在跑的那一轮用的是发车时那份设置，不受影响（跟 ZCode 一样）。
+    // 档位优先沿用用户当前选的这一档，新模型没有这档才退回它的默认档。
+    const handlePickModel = useCallback(model => {
+        const thinking = thinkingOf(settings.providerId, model.id);
+        const keep = thinking && thinking.levels.some(item => item.value === settings.effort);
+        const effort = keep ? settings.effort : defaultEffortOf(settings.providerId, model.id);
+        setSettings(saveSettings({...settings, modelId: model.id, effort}));
+        setShowModelMenu(false);
+        setStatus(`已切到 ${model.name || model.id}`);
+        setStatusError(false);
+    }, [settings]);
+
+    const handlePickEffort = useCallback(level => {
+        setSettings(saveSettings({...settings, effort: level.value}));
+        setStatus(`思考强度：${level.label}`);
+        setStatusError(false);
+    }, [settings]);
 
     const openSettings = useCallback(() => {
         setSettingsDraft({...settings});
@@ -1399,6 +1663,11 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     // 底栏只有 ~310px 宽，「供应商 · 模型」这种全称一定被截断，只留模型名
     const modelLabel = hasApiKey(settings) ?
         ((resolveModel(settings) || {}).name || settings.modelId) : '本地演示模型';
+    // 思考档位跟着模型一起显示（进面板前就知道现在是哪一档）
+    const effortLevels = thinkingOf(settings.providerId, settings.modelId);
+    const effortLabel = effortLevels ?
+        ((effortLevels.levels.find(item => item.value === settings.effort) ||
+            effortLevels.levels[effortLevels.levels.length - 1]) || {}).label : '';
     // 用量照 ZCode 的写法收成 `12.3K (6%)`，完整数字放 title 里 —— 面板太窄，别把两行数字都摊开
     const usedK = context ? (context.tokens / 1000).toFixed(1).replace(/\.0$/, '') : '';
     const windowK = Math.round(contextWindowOf(settings) / 1000);
@@ -1418,7 +1687,6 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
             >
                 <div className={styles.header}>
                     <span className={`${styles.dot} ${busy ? styles.dotBusy : ''}`} />
-                    <span className={styles.title}>AI 终端</span>
                     <button
                         aria-label="收起面板，显示积木选择框"
                         className={styles.iconBtn}
@@ -1516,7 +1784,7 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                                         {turn.segments.map((segment, segmentIndex) => {
                                             const key = `${turn.key}-${segmentIndex}`;
                                             const body = segment.items
-                                                .map((item, i) => renderItem(item, `${key}-${i}`));
+                                                .map((item, i) => renderItem(item, `${key}-${i}`, turn.running));
                                             if (segment.type !== 'work') {
                                                 return <React.Fragment key={key}>{body}</React.Fragment>;
                                             }
@@ -1535,6 +1803,14 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                                                 </WorkGroup>
                                             );
                                         })}
+                                        {/* 这轮动了积木才出现；还在跑的时候不显示（数字会一直跳），
+                                            干完了才落一条定稿的出来 */}
+                                        {turn.changes.length && !turn.running ? (
+                                            <TurnChanges
+                                                changes={turn.changes}
+                                                onRevert={() => handleRevertTurn(turn)}
+                                            />
+                                        ) : null}
                                     </React.Fragment>
                                 ))}
                             </div>
@@ -1547,6 +1823,25 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                             ) : null}
                         </div>
                         <div className={styles.composer}>
+                            {/* 换模型 / 调思考档位的快捷面板（点面板外面就收起） */}
+                            {showModelMenu ? (
+                                <React.Fragment>
+                                    <div
+                                        className={styles.menuBackdrop}
+                                        onClick={() => setShowModelMenu(false)}
+                                    />
+                                    <ModelMenu
+                                        onClose={() => setShowModelMenu(false)}
+                                        onEffort={handlePickEffort}
+                                        onModel={handlePickModel}
+                                        onOpenSettings={() => {
+                                            setShowModelMenu(false);
+                                            openSettings();
+                                        }}
+                                        settings={settings}
+                                    />
+                                </React.Fragment>
+                            ) : null}
                             {/* 输入框是一个描边的圆角盒子（学 ZCode）：聚焦时边框转强调色，
                                 模型 / 用量 / 发送都收进盒子里；状态那行挂在盒子**外面**下方，
                                 免得它一变化就把输入框顶上去。 */}
@@ -1561,11 +1856,14 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                                 <div className={styles.bar}>
                                     <button
                                         className={styles.modelBtn}
-                                        onClick={openSettings}
-                                        title="换模型"
+                                        onClick={() => setShowModelMenu(v => !v)}
+                                        title="换模型 / 思考强度"
                                         type="button"
                                     >
                                         <span className={styles.modelBtnText}>{modelLabel}</span>
+                                        {effortLabel ? (
+                                            <span className={styles.effortBadge}>{effortLabel}</span>
+                                        ) : null}
                                         <Icon
                                             name="chevron"
                                             size={11}
@@ -1581,17 +1879,21 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
                                     ) : null}
                                     {busy ? (
                                         <button
-                                            className={styles.send}
+                                            aria-label="停止"
+                                            className={`${styles.send} ${styles.sendStop}`}
                                             onClick={handleStop}
+                                            title="停止（Esc）"
                                             type="button"
-                                        >停止</button>
+                                        ><Icon name="stop" /></button>
                                     ) : (
                                         <button
+                                            aria-label="发送"
                                             className={styles.send}
                                             disabled={!draft.trim() || !portRef.current}
                                             onClick={handleSend}
+                                            title="发送（Enter）"
                                             type="button"
-                                        >发送</button>
+                                        ><Icon name="send" /></button>
                                     )}
                                 </div>
                             </div>

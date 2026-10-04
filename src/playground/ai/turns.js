@@ -28,13 +28,58 @@ export const formatWorkDuration = ms => {
 const isWorkItem = item => item.kind === 'tool' || (item.kind === 'agent' && !!item.hasTools);
 
 /**
+ * 把一个工具留下的 undo 句柄读成规范化动作：
+ *   {kind: 'add', sprite, topBlockIds, added}   这次往某个角色里写了几块
+ *   {kind: 'del', sprite, topBlockId, blocks, removed}  这次删掉了某个角色的哪段
+ * 旧对话里 undo 是裸的顶块 id 数组（那时只能撤销写入）—— 补成 add，只是数不出块数（added 为 null）。
+ * @param {object} item 一条条目（工具行）
+ * @returns {object|null} 没有句柄（没改过积木的工具）就返回 null
+ */
+export const undoActionOf = item => {
+    const undo = item && item.undo;
+    if (!undo) return null;
+    if (Array.isArray(undo)) return {kind: 'add', sprite: item.sprite, topBlockIds: undo, added: null};
+    return undo;
+};
+
+/**
+ * 一轮的变更汇总：按角色把「加了几块 / 删了几块」加起来，给界面上的「本轮变更」那一行用。
+ *
+ * 只统计**还留着手柄**的动作：单张卡撤销过的、整轮回退过的（undo 已清空）都不该再算进去，
+ * 所以这一行会跟着撤销实时缩水，而不是永远记着「这轮本来改了多少」。
+ * 数不出块数的（旧数据）整条丢掉 —— 宁可这一行不出现，也不显示一个骗人的 +0。
+ * @param {Array} items 本轮的条目（含工具行）
+ * @returns {Array<{sprite, added, removed}>} 按角色一条，全是 0 的角色不出现
+ */
+export const summarizeChanges = items => {
+    const bySprite = new Map();
+    for (const action of items.map(undoActionOf)) {
+        if (!action || !action.sprite) continue;
+        const entry = bySprite.get(action.sprite) || {sprite: action.sprite, added: 0, removed: 0, known: true};
+        if (action.kind === 'del') {
+            if (typeof action.removed === 'number') entry.removed += action.removed;
+            else entry.known = false;
+        } else if (typeof action.added === 'number') {
+            entry.added += action.added;
+        } else {
+            entry.known = false;
+        }
+        bySprite.set(action.sprite, entry);
+    }
+    return [...bySprite.values()]
+        .filter(entry => entry.known && (entry.added || entry.removed))
+        .map(({sprite, added, removed}) => ({sprite, added, removed}));
+};
+
+/**
  * @param {Array} items  面板的 items 数组（见 store.js）
  * @param {object} opts
  *   now     当前时间戳；只在 active 时用来给「工作中 Ns」计时
  *   active  最后一轮是否还在跑
- * @returns {Array<{key, user, segments, startedAt, endedAt, durationMs, running, hasAnswer}>}
+ * @returns {Array<{key, user, segments, startedAt, endedAt, durationMs, running, hasAnswer, changes}>}
  *   segments 是**保序**的 `{type: 'work' | 'final', items: []}` 段：
  *   work 段渲染成折叠标题行，final 段原样铺开。
+ *   changes 是这一轮的积木变更汇总（见 summarizeChanges），没改动就是空数组。
  */
 export const buildTurns = (items, {now = 0, active = false} = {}) => {
     const turns = [];
@@ -75,6 +120,7 @@ export const buildTurns = (items, {now = 0, active = false} = {}) => {
         // 有收尾答复 = 这轮真的说完了，标题行该安静下来（收起）
         entry.hasAnswer = entry.segments.some(segment =>
             segment.type === 'final' && segment.items.some(it => it.kind === 'agent' && it.text));
+        entry.changes = summarizeChanges(entry.segments.reduce((all, segment) => all.concat(segment.items), []));
     }
 
     // 正在跑的那一轮：耗时跟着当前时间走，否则「工作中」会停在上一轮的数字上

@@ -12,6 +12,12 @@ $z-index-tooltip: 47; /* tooltips should go over add buttons if they overlap */
 $z-index-monitor: 48; /* monitors go over add buttons */
 $z-index-stage-question: 49; /* "ask" block text input goes above monitors */
 
+/* AI 面板停靠在积木选择框那一格：要盖住选择框（40~50），但**必须让开菜单栏**（491）——
+   菜单栏展开的下拉正好落在面板那一格上，面板压住它的话「文件 / 编辑」就点不了了 */
+$z-index-ai-panel: 100;
+/* 全屏形态是「接管整屏」：要盖住菜单栏（491）和舞台头部（500），拖拽层（1000）仍在它之上 */
+$z-index-ai-panel-full: 600;
+
 $z-index-card: 480;
 $z-index-alerts: 490;
 $z-index-menu-bar: 491; /* menu-bar should go over monitors, alerts and tutorials */

@@ -239,8 +239,8 @@ export const createTools = ({port, skills = []}) => {
                 if (!result.blockIds.length) return fail(lines.join('\n'));
                 return {
                     content: lines.join('\n'),
-                    // 交给 UI 做一键撤销
-                    undo: result.topBlockIds
+                    // 交给 UI 做一键撤销 / 整轮回退：动作类型 + 涉及的角色 + 加了几块积木
+                    undo: {kind: 'add', sprite, topBlockIds: result.topBlockIds, added: result.blockCount}
                 };
             }
         },
@@ -262,10 +262,14 @@ export const createTools = ({port, skills = []}) => {
                 required: ['sprite', 'topBlockId']
             },
             handler: async ({sprite, topBlockId}) => {
-                const removed = await port.deleteScript(sprite, topBlockId);
-                return removed ?
-                    ok(`Deleted script ${topBlockId} from "${sprite}".`) :
-                    fail(`No script ${topBlockId} was found.`);
+                // 先抓快照再删：删掉的东西没快照就摆不回来，卡上的「撤销」也就没得撤销
+                const snapshot = port.captureScript(sprite, topBlockId);
+                if (!snapshot) return fail(`No script ${topBlockId} was found.`);
+                await port.deleteScript(sprite, topBlockId);
+                return {
+                    content: `Deleted script ${topBlockId} from "${sprite}".`,
+                    undo: {kind: 'del', sprite, topBlockId, blocks: snapshot.blocks, removed: snapshot.count}
+                };
             }
         },
 

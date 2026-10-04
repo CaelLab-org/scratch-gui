@@ -143,6 +143,30 @@ console.log(JSON.stringify(state, null, 1));
 check('x = 10', state.variables.x === 10, `实际 ${JSON.stringify(state.variables.x)}`);
 check('log = [10]', JSON.stringify(state.lists.log) === '[10]', `实际 ${JSON.stringify(state.lists.log)}`);
 
+// === 变更摘要 + 整轮回退的底座（真 VM 上跑一遍：计数 → 抓快照 → 删 → 摆回来）===
+// 界面上的「角色 +N 积木 / 回退本轮变更」全压在这几个返回值和 sb3 往返上，必须真跑。
+const writeTool = tools.find(t => t.name === 'xce_write_script');
+const deleteTool = tools.find(t => t.name === 'xce_delete_script');
+const added = await writeTool.handler({sprite: 'Sprite1', text: 'when green flag clicked\nsay [hi]'}, {});
+check('写入句柄带块数（帽子 + say = 2 块，字面量不算）',
+    added.undo && added.undo.kind === 'add' && added.undo.added === 2 &&
+    added.undo.sprite === 'Sprite1', JSON.stringify(added.undo));
+const countBefore = port.readTarget('Sprite1').blockIds.length;
+const topId = added.undo.topBlockIds[0];
+const removed = await deleteTool.handler({sprite: 'Sprite1', topBlockId: topId}, {});
+check('删除句柄带快照和块数',
+    removed.undo && removed.undo.kind === 'del' && removed.undo.removed === 2 &&
+    Object.keys(removed.undo.blocks).length === 2, JSON.stringify(removed.undo && removed.undo.removed));
+check('脚本真的删掉了', port.readTarget('Sprite1').blockIds.length < countBefore,
+    `${countBefore} -> ${port.readTarget('Sprite1').blockIds.length}`);
+check('回退删除 = 把快照摆回来', port.undoAction(removed.undo) === true &&
+    port.readTarget('Sprite1').text.includes('say'), JSON.stringify(port.readTarget('Sprite1').text));
+const countRestored = port.readTarget('Sprite1').blockIds.length;
+check('摆回来之后块数跟删之前一样', countRestored === countBefore, `${countBefore} vs ${countRestored}`);
+check('回退写入 = 删掉刚加的顶块', port.undoAction(added.undo) === true &&
+    port.readTarget('Sprite1').blockIds.length === countBefore - 2,
+    `${countBefore} -> ${port.readTarget('Sprite1').blockIds.length}`);
+
 // === 克隆体不能污染角色列表（用假 VM 精确验，真 VM 造克隆体在无头环境不稳）===
 // 用户实际踩到：跑一次星空之后，角色清单里冒出上百个同名「角色1」（全是克隆体）。
 const fakeTarget = (name, opts = {}) => {
