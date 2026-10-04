@@ -160,6 +160,8 @@ max-output-per-reply: ${(modelInfo && modelInfo.maxOutputTokens) || 'unknown'} t
 <loaded-extensions>${extensions && extensions.length ? extensions.join(', ') : 'none'}</loaded-extensions>
 <project note="Contents deliberately not included — discover them yourself.">
 Use xce_list_sprites to see what exists, xce_read_project to read one sprite's code (line ranges supported). Nothing about the sprites or their blocks is in this prompt.
+
+A project the user has not touched yet starts from the XCE template: one sprite (「角色1」/ "Sprite1") whose only costume is a blue hexagon, and one variable on the stage named exactly \`XCE_default_variable\`. That name is deliberately not translated — it is the template's own marker, so seeing it means the project is still fresh and that variable is not something the user made. Everything else you find belongs to the user.
 </project>
 </environment>
 `.trim();

@@ -4908,8 +4908,8 @@
         "tw.geolocate.title": "此作品希望知道您的位置。",
         "tw.gui.crashMessage.description": "抱歉，页面似乎已经崩溃。请刷新页面以重试。",
         "tw.gui.defaultProjectTitle": "作品",
-        "tw.guiDefaultTitle": "让 Scratch 作品快如闪电",
-        "tw.hero.subtitle": "一款将作品编译为 JavaScript 的 Scratch 修改版，带来极致性能体验。暗色模式、插件系统等你探索。",
+        "tw.guiDefaultTitle": "AI 积木编程",
+        "tw.hero.subtitle": "虚舟实验室（CaelLab）旗下的在线积木编程编辑器。内置 AI 终端，用对话就能生成和修改积木；作品编译为 JavaScript，运行更快。",
         "tw.home.credit": "备注与鸣谢",
         "tw.home.description": "{APP_NAME} 是一款可以将作品编译成 JavaScript，使其运行速度快如闪电的 Scratch 的修改版。不妨在上面输入一个 Scratch 官网的作品 ID 或网页链接，或者在下面选择一个特色作品。",
         "tw.home.instructions": "操作说明",
@@ -5065,7 +5065,10 @@
         "tw.usesCloudVariables2": "{APP_NAME} 的云变量与 Scratch 的云变量没有关联。任何人都可以把 {changeTheirUsername} 改成任何东西，所以请小心冒名顶替。",
         "tw.usesCloudVariables2.change": "自己的用户名",
         "tw.viewFeaturedProjects": "点击以查看特色作品。",
-        "tw.viewOnScratch": "在 Scratch 网站上查看作品"
+        "tw.viewOnScratch": "在 Scratch 网站上查看作品",
+        "tw.feature.ai": "AI 终端",
+        "tw.feature.ai.desc": "内置 AI 终端，对话就能生成和修改积木、绘制造型、读懂你的项目 —— 它直接动手，不只是给建议。",
+        "tw.footer.caelab": "{APP_NAME} 是 {caelab} 旗下的开源项目。"
     },
     "zh-tw": {
         "tw.alerts.lostPeripheralConnection": "與{extensionName}的連線中斷了。",
@@ -5105,8 +5108,8 @@
         "tw.footer.embed": "嵌入",
         "tw.footer.parameters": "網址參數",
         "tw.gui.crashMessage.description": "我們非常抱歉，但是頁面似乎崩潰了。請刷新你的頁面試試看。",
-        "tw.guiDefaultTitle": "使 Scratch 專案跑得更快",
-        "tw.hero.subtitle": "一款將專案編譯為 JavaScript 的 Scratch 修改版，帶來極致效能體驗。深色模式、擴充功能等你探索。",
+        "tw.guiDefaultTitle": "AI 積木程式設計",
+        "tw.hero.subtitle": "虛舟實驗室（CaelLab）旗下的線上積木程式編輯器。內建 AI 終端，用對話就能生成與修改積木；作品編譯為 JavaScript，執行更快。",
         "tw.home.credit": "備註與謝誌",
         "tw.home.instructions": "操作說明",
         "tw.input.tooltip": "把 Scratch 專案連結貼在這裡！",
@@ -5176,6 +5179,9 @@
         "tw.usernameModal.reset": "重設",
         "tw.usernameModal.title": "更改用戶名稱",
         "tw.viewFeaturedProjects": "瀏覽精選專案",
-        "tw.viewOnScratch": "在 Scratch 查看該作品"
+        "tw.viewOnScratch": "在 Scratch 查看該作品",
+        "tw.feature.ai": "AI 終端",
+        "tw.feature.ai.desc": "內建 AI 終端，對話就能生成與修改積木、繪製造型、讀懂你的專案 —— 它直接動手，不只是給建議。",
+        "tw.footer.caelab": "{APP_NAME} 是 {caelab} 旗下的開源專案。"
     }
 }

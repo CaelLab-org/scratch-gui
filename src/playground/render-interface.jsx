@@ -69,7 +69,7 @@ const handleClickAddonSettings = addonId => {
 
 const messages = defineMessages({
     defaultTitle: {
-        defaultMessage: 'Run Scratch projects faster',
+        defaultMessage: 'AI block coding editor',
         description: 'Title of homepage',
         id: 'tw.guiDefaultTitle'
     }
@@ -178,6 +178,23 @@ const Footer = () => (
                         turbowarp: (
                             <a href="https://turbowarp.org/" target="_blank" rel="noreferrer">
                                 {'TurboWarp'}
+                            </a>
+                        )
+                    }}
+                />
+            </div>
+
+            <div className={styles.footerText}>
+                <FormattedMessage
+                    // eslint-disable-next-line max-len
+                    defaultMessage="{APP_NAME} is an open source project by {caelab}."
+                    description="CaelLab attribution in footer"
+                    id="tw.footer.caelab"
+                    values={{
+                        APP_NAME,
+                        caelab: (
+                            <a href="https://www.caellab.com/" target="_blank" rel="noreferrer">
+                                {'CaelLab'}
                             </a>
                         )
                     }}
@@ -301,7 +318,7 @@ class Interface extends React.Component {
                                 <h1 className={styles.heroTitle}>{APP_NAME}</h1>
                                 <p className={styles.heroSubtitle}>
                                     <FormattedMessage
-                                        defaultMessage="A Scratch mod that compiles projects to JavaScript for blazing fast performance. Dark mode, addons, and more."
+                                        defaultMessage="An online block coding editor from CaelLab, with a built-in AI terminal that writes and edits blocks for you. Projects compile to JavaScript and run faster."
                                         description="Hero subtitle on homepage"
                                         id="tw.hero.subtitle"
                                     />
@@ -390,6 +407,24 @@ class Interface extends React.Component {
                             {/* Features Section */}
                             <div className={styles.featuresSection}>
                                 <div className={styles.featureCard}>
+                                    <div className={styles.featureIcon}>{'\uD83E\uDD16'}</div>
+                                    <div className={styles.featureTitle}>
+                                        <FormattedMessage
+                                            defaultMessage="AI Terminal"
+                                            description="Feature card title"
+                                            id="tw.feature.ai"
+                                        />
+                                    </div>
+                                    <div className={styles.featureDesc}>
+                                        {/* eslint-disable-next-line max-len */}
+                                        <FormattedMessage
+                                            defaultMessage="Chat with the built-in AI and it makes the change for you — writing blocks, drawing costumes, reading your project — not just handing out advice."
+                                            description="Feature card description"
+                                            id="tw.feature.ai.desc"
+                                        />
+                                    </div>
+                                </div>
+                                <div className={styles.featureCard}>
                                     <div className={styles.featureIcon}>{'\u26A1'}</div>
                                     <div className={styles.featureTitle}>
                                         <FormattedMessage
@@ -403,23 +438,6 @@ class Interface extends React.Component {
                                             defaultMessage="Compiles Scratch projects to JavaScript for 10-100x faster execution."
                                             description="Feature card description"
                                             id="tw.feature.fast.desc"
-                                        />
-                                    </div>
-                                </div>
-                                <div className={styles.featureCard}>
-                                    <div className={styles.featureIcon}>{'\uD83C\uDF19'}</div>
-                                    <div className={styles.featureTitle}>
-                                        <FormattedMessage
-                                            defaultMessage="Dark Mode"
-                                            description="Feature card title"
-                                            id="tw.feature.dark"
-                                        />
-                                    </div>
-                                    <div className={styles.featureDesc}>
-                                        <FormattedMessage
-                                            defaultMessage="Easy on your eyes with a built-in dark theme and customizable accents."
-                                            description="Feature card description"
-                                            id="tw.feature.dark.desc"
                                         />
                                     </div>
                                 </div>

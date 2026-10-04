@@ -219,7 +219,7 @@ module.exports = [
                 chunks: ['player'],
                 template: 'src/playground/index.ejs',
                 filename: 'index.html',
-                title: `${APP_NAME} - 在线积木编程`,
+                title: `${APP_NAME} - AI 积木编程`,
                 ...htmlWebpackPluginCommon
             }),
             // 为每种语言生成 HTML 文件
@@ -228,7 +228,7 @@ module.exports = [
                     chunks: ['player'],
                     template: 'src/playground/index.ejs',
                     filename: `${locale}/index.html`,
-                    title: `${APP_NAME} - 在线积木编程`,
+                    title: `${APP_NAME} - AI 积木编程`,
                     currentLocale: locale,
                     ...htmlWebpackPluginCommon
                 }),
@@ -236,7 +236,7 @@ module.exports = [
                     chunks: ['editor'],
                     template: 'src/playground/index.ejs',
                     filename: `${locale}/editor.html`,
-                    title: `${APP_NAME} - 在线积木编程`,
+                    title: `${APP_NAME} - AI 积木编程`,
                     isEditor: true,
                     currentLocale: locale,
                     ...htmlWebpackPluginCommon
@@ -245,7 +245,7 @@ module.exports = [
                     chunks: ['fullscreen'],
                     template: 'src/playground/index.ejs',
                     filename: `${locale}/fullscreen.html`,
-                    title: `${APP_NAME} - 在线积木编程`,
+                    title: `${APP_NAME} - AI 积木编程`,
                     currentLocale: locale,
                     ...htmlWebpackPluginCommon
                 }),
