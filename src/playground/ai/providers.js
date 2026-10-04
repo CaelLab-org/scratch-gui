@@ -535,16 +535,18 @@ export const contextWindowOf = (settings, fallback = 262144) => {
 };
 
 /**
- * 当前生效的单次最大输出。优先级同上（模型元数据的 max_output_tokens > 8192 兜底）。
+ * 当前生效的单次最大输出。用户没设就用默认 32768（32K）；
+ * 无论哪来的值都夹在模型声明的 max_output_tokens 以内（声明的更小时硬发大值会被网关 400）。
  * 用来在请求里带 max_tokens，防止模型一口气输出到失控（烧钱也烧上下文）。
  * @param {object} settings 当前设置
- * @param {number} fallback 元数据也没写时的兜底
+ * @param {number} fallback 用户没设时的默认值
  * @returns {number} 最大输出（token）
  */
-export const maxOutputTokensOf = (settings, fallback = 8192) => {
+export const maxOutputTokensOf = (settings, fallback = 32768) => {
     const userSet = settings && Number(settings.maxOutputTokens);
-    if (userSet > 0) return userSet;
-    return (resolveModel(settings) || {}).maxOutputTokens || fallback;
+    const declared = (resolveModel(settings) || {}).maxOutputTokens;
+    if (declared > 0) return Math.min(userSet > 0 ? userSet : fallback, declared);
+    return userSet > 0 ? userSet : fallback;
 };
 
 /**
@@ -736,6 +738,28 @@ const reasoningOf = delta => {
 const isStop = verdict => verdict === true || !!(verdict && verdict.stop);
 
 /**
+ * 把各家网关的 usage 收敛成统一形状 {promptTokens, completionTokens, cachedTokens, durationMs}。
+ * 缓存命中字段有两个来源：OpenAI 兼容线是 prompt_tokens_details.cached_tokens（也有网关直接放
+ * 顶上的），Anthropic 适配器统一成 cached_tokens；拿不到就是 null —— 界面对 null 显示「未知」，
+ * 别当 0% 算命中率（小网关经常不回这个字段）。
+ * @param {object} usage 网关回的 usage（OpenAI 形状；Anthropic 适配器已归一化成这个形状）
+ * @param {number|null} durationMs 本轮流式耗时（毫秒），providers 掐表得的
+ * @returns {object|null} 归一化的用量；usage 缺 prompt_tokens（没开的网关 / 本地模型）就是 null
+ */
+export const normalizeUsage = (usage, durationMs = null) => {
+    if (!usage || typeof usage.prompt_tokens !== 'number') return null;
+    const details = usage.prompt_tokens_details || {};
+    const cached = typeof details.cached_tokens === 'number' ? details.cached_tokens :
+        typeof usage.cached_tokens === 'number' ? usage.cached_tokens : null;
+    return {
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens || 0,
+        cachedTokens: cached,
+        durationMs: typeof durationMs === 'number' ? durationMs : null
+    };
+};
+
+/**
  * OpenAI 兼容那条线（`POST {baseUrl}/chat/completions`）。
  * @param {object} config {providerId, modelId, apiKey, baseUrl, effort, model}
  * @param {object} options {idleTimeoutMs} 读超时
@@ -758,6 +782,8 @@ const createOpenAICompatibleModel = (config, {idleTimeoutMs = 120000}, provider)
         async complete (messages, tools, {signal, onChunk = () => {}} = {}) {
             if (!baseUrl) throw new Error('没填 base_url');
             if (!apiKey && keyRequired(provider, baseUrl)) throw new Error('没填 API 密钥');
+            // 掐表给 tok/s 用：从发请求到流读完（算上网络，是「体验速度」不是纯解码速度）
+            const startedAt = Date.now();
 
             const requestBody = buildRequestBody({
                 model: modelId,
@@ -873,7 +899,7 @@ const createOpenAICompatibleModel = (config, {idleTimeoutMs = 120000}, provider)
                 toolCalls.push({id: slot.id || `call_${toolCalls.length}`, name: slot.name, input});
             }
 
-            return {text, reasoning, toolCalls, finishReason, usage, stopped};
+            return {text, reasoning, toolCalls, finishReason, usage, stopped, durationMs: Date.now() - startedAt};
         }
     };
 };

@@ -55,6 +55,36 @@
     color: var(--text-1);
 }
 
+/* 编辑器切到深色主题时，面板跟着走 —— 否则 310px 宽的一块白贴在深色画布上，
+ * 像贴了张膏药（这是用户早就提过的悬案）。取值对齐编辑器深色主题那一套
+ * （src/lib/themes/gui/dark.js：ui-primary #111 / ui-secondary #1e1e1e / ui-tertiary #2e2e2e），
+ * 这样两边的灰阶是同一个台阶，不会一边冷一边暖。
+ * 类名由 panel.jsx 按 redux 里的 theme.isDark() 挂上，跟 .ai-root 同元素、写在后面所以盖得住。 */
+.aiDark {
+    --bg-base: #111111;
+    --bg-layer1: #1e1e1e;
+    --bg-layer2: #2e2e2e;
+    --bg-user: #16202c;
+    --border-l1: #2e2e2e;
+    --border-l2: #3d3d3d;
+    --border-l3: #565656;
+    --text-1: #eeeeee;
+    --text-2: #b6b6b6;
+    --text-3: #8a8a8a;
+    --accent: #6fa8ff;
+    --accent-solid: #3b7ff0;
+    --success: #3dc46b;
+    --warning: #f0a44a;
+    --error: #f56c6c;
+    --shadow-float: 0 4px 14px rgba(0, 0, 0, 0.5);
+    --shadow-panel: 0 0 0 1px var(--border-l1), 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+
+/* 这一头是浅色底 + 琥珀字，深色下白底会闪眼睛 */
+.aiDark .emptyWarn {
+    background: rgba(240, 164, 74, 0.14);
+}
+
 .mono {
     font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
@@ -200,6 +230,174 @@
     min-height: 0;
     padding: 12px;
     overflow-y: auto;
+}
+
+/* ---------------------------------------------------------------- 设置分区列表
+ *
+ * 设置项太多（模型 / 记忆 / 技能 / 提示词 / 迁移），一长条竖着堆在 310px 里没法看。
+ * 学 ZCode 的设置页：先给一张分类列表，点进去只看一个分区。一行 = 标题 + 一行说明。
+ */
+.sectionList {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.sectionRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--border-l1);
+    background: var(--bg-base);
+    color: var(--text-3);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sectionRow:last-child {
+    border-bottom: 0;
+}
+
+.sectionRow:hover {
+    background: var(--bg-layer1);
+}
+
+.sectionBody {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.sectionLabel {
+    color: var(--text-1);
+    font-size: 14px;
+    line-height: 20px;
+}
+
+.sectionNote {
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 17px;
+}
+
+/* 记忆 / 技能 一行：点开编辑，右边一个两段式删除 */
+.memoryRow {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
+    background: var(--bg-base);
+    margin-bottom: 6px;
+}
+
+.memoryRow:hover {
+    border-color: var(--border-l2);
+}
+
+.memoryMain {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    gap: 2px;
+    padding: 8px 4px 8px 10px;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.memoryName {
+    overflow: hidden;
+    color: var(--text-1);
+    font-size: 13px;
+    line-height: 18px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.memoryDesc {
+    overflow: hidden;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.memoryType {
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 1px 6px;
+    border: 1px solid var(--border-l1);
+    border-radius: 4px;
+    color: var(--text-2);
+    font-size: 11px;
+    line-height: 15px;
+}
+
+/* 内置技能：只读，所以整块是灰底，跟「我的技能」区分开 */
+.skillList {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
+    background: var(--bg-layer1);
+}
+
+.skillRow {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 导出 / 导入：勾选框 + 导入结果那份清单 */
+.checkRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 8px;
+    color: var(--text-2);
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.checkRow input {
+    margin: 3px 0 0;
+}
+
+.importSummary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
+    background: var(--bg-layer1);
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 17px;
+}
+
+.importTitle {
+    color: var(--text-1);
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.importWarn {
+    color: var(--warning);
 }
 
 .field {
@@ -387,7 +585,7 @@
 
 .historyMain {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
     flex: 1;
     min-width: 0;
@@ -397,6 +595,32 @@
     font-family: inherit;
     text-align: left;
     cursor: pointer;
+}
+
+/* 标题 + 模型两行（模型那行很小、灰的），右边留时间 */
+.historyItemBody {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.historyItemModel {
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 16px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.historyItemFork {
+    overflow: hidden;
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .historyItemTitle {
@@ -442,6 +666,33 @@
 .historyDeleteArm {
     background: var(--bg-layer2);
     color: var(--error);
+}
+
+/* 每条历史上加个「导出」（.chat.xce）：跟删按钮同款，但 hover 是中性色不是红 */
+.historyExport {
+    flex: 0 0 auto;
+    align-self: center;
+    height: 22px;
+    margin-left: 4px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    visibility: hidden;
+}
+
+.historyItem:hover .historyExport,
+.historyItem:hover .historyDelete {
+    visibility: visible;
+}
+
+.historyExport:hover {
+    background: var(--bg-layer2);
+    color: var(--text-1);
 }
 
 .historyEmpty {
@@ -609,17 +860,38 @@
 }
 
 /* 空状态：别留一片黑洞，但也别摆一堆盒子（学 ZCode：空状态只留最少的元素） */
+/* 空状态（学 ZCode 的 ConversationDraftEmptyState）：整体居中、底影是品牌六边形、
+   问候语按时段变，下面才是那三条能点的示例。310px 下标题 20px，全屏形态放宽到 30px。 */
 .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 4px 0;
     color: var(--text-2);
     font-size: 13px;
     line-height: 20px;
+    text-align: center;
+}
+
+.emptyMark {
+    color: var(--accent-solid);
+    opacity: 0.5;
 }
 
 .emptyTitle {
-    margin: 0 0 6px;
+    margin: 10px 0 6px;
     color: var(--text-1);
-    font-size: 14px;
+    font-size: 20px;
     font-weight: 600;
+    line-height: 1.3;
+}
+
+.emptyTitleWide {
+    font-size: 30px;
+}
+
+.emptySub {
+    margin: 0 0 8px;
 }
 
 .empty p {
@@ -627,9 +899,11 @@
 }
 
 .emptyHints {
-    margin: 10px 0 0;
+    margin: 12px 0 0;
     padding: 0;
+    width: 100%;
     list-style: none;
+    text-align: left;
 }
 
 .emptyHints li {
@@ -689,6 +963,138 @@
     white-space: pre-wrap;
 }
 
+/* ---------------------------------------------------------------- 一轮的容器
+ *
+ * 一轮包一层，就为了让「动作条」只在 hover 这一轮的时候露出来（学 ZCode 的
+ * `opacity-0 → group-hover:opacity-100`）：转录区平时的样子要保持干净 ——
+ * 铅笔和分叉是「你想动它的时候才出现」的东西，不能每一轮都挂两行按钮。
+ * 唯一例外是**最后一轮默认半亮**（见 .turn:last-child）：那是你最可能点的两个动作，
+ * 藏到看不见等于没有。
+ */
+
+.turn {
+    position: relative;
+}
+
+/* 回合脚注：这轮烧了多少 token（学 ZCode 的元信息行，灰化、小字、不抢眼） */
+.turnUsage {
+    margin: 2px 2px 10px;
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 16px;
+    user-select: text;
+}
+
+/* 提问那一行：气泡靠右，动作条在它左边 */
+.userRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 4px;
+    margin: 0 0 10px;
+}
+
+/* 下边距归 .userRow 管，别跟 .user 自己的叠加 */
+.userRow .user {
+    margin: 0;
+}
+
+.userActions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-top: 2px;
+    /* 藏起来时不能只是 opacity:0 —— 那样照样吃点击，得把指针也一起关掉 */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s;
+}
+
+.turn:hover .userActions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.turn:last-child .userActions {
+    opacity: 0.45;
+    pointer-events: auto;
+}
+
+.turn:last-child .userActions:hover {
+    opacity: 1;
+}
+
+/* 铅笔 / 分叉：一个只有图标的小按钮，平时是灰的，hover 才浮出来 */
+.msgAction {
+    box-sizing: border-box;
+    height: 24px;
+    min-width: 24px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 22px;
+    cursor: pointer;
+}
+
+.msgAction:hover {
+    border-color: var(--border-l1);
+    background: var(--bg-layer1);
+    color: var(--text-1);
+}
+
+/* 「重发」是这条路上唯一的推进动作，给它强调色（学 ZCode 的 variant 分工） */
+.msgActionGo {
+    color: var(--accent-solid);
+}
+
+.msgActionGo:hover {
+    color: var(--accent-solid);
+    border-color: var(--accent-solid);
+}
+
+/* 就地改这条提问：输入框铺满宽度（跟底部那个输入区一个观感）＋ 一行提示与动作 */
+.userEdit {
+    margin: 0 0 10px;
+}
+
+.userEditInput {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    max-height: 180px;
+    padding: 7px 10px;
+    border: 1px solid var(--accent-solid);
+    border-radius: 8px;
+    background: var(--bg-base);
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 20px;
+    resize: vertical;
+}
+
+.userEditInput:focus {
+    outline: none;
+}
+
+.userEditActions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.userEditHint {
+    margin-right: auto;
+    color: var(--text-3);
+    font-size: 12px;
+}
+
 .agent {
     margin: 0 0 10px;
     color: var(--text-1);
@@ -741,6 +1147,16 @@
 
 .workLive {
     color: var(--accent);
+}
+
+/* 这一轮用的模型：贴着右边灰着写，占不下就省略（标题优先） */
+.workMeta {
+    flex: 0 1 auto;
+    max-width: 52%;
+    overflow: hidden;
+    color: var(--text-3);
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .workChevron {
@@ -859,11 +1275,22 @@
 }
 
 .thinkLabel {
-    flex: 1;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* 右边那条「正在想什么」：永远只有一行，右边对齐、左边淡出（看着像从右边滑进来）。
+   内容在 JS 里已经取过尾部，这里只需截断。 */
+.thinkPeek {
+    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
+    color: var(--text-3);
     white-space: nowrap;
+    text-align: right;
+    text-overflow: ellipsis;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px);
+    mask-image: linear-gradient(to right, transparent 0, #000 14px);
 }
 
 .thinkLive {
@@ -1301,6 +1728,47 @@
     color: var(--warning);
 }
 
+/* 上下文用量的悬停浮层（学 ZCode 的展开）：默认藏着，hover 才出来。
+   锚在用量旁边、弹到输入盒上方；pointer-events:none 免得浮层自己把 hover 顶掉 */
+.ctxWrap {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.ctxPop {
+    display: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 8px);
+    z-index: 30;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-l2);
+    border-radius: 8px;
+    background: var(--bg-layer1);
+    box-shadow: 0 4px 16px rgba(16, 24, 40, 0.16);
+    white-space: nowrap;
+    pointer-events: none;
+    cursor: default;
+}
+
+.ctxWrap:hover .ctxPop {
+    display: flex;
+}
+
+.ctxPopTitle {
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.ctxPopRow {
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 16px;
+}
+
 /* 输入区那行模型名后面的档位小标（模型 + 思考强度一眼都看得见） */
 .effortBadge {
     flex: 0 0 auto;
@@ -1379,6 +1847,53 @@
 .modelMenuList {
     max-height: min(208px, 26vh);
     overflow-y: auto;
+}
+
+/* 供应商分组头：点一下展开/收起。当前那家默认展开，别的收着（列表短了才看得清） */
+.modelGroup {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--bg-layer1);
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.modelGroup:hover {
+    background: var(--bg-layer2);
+}
+
+.modelGroupChevron {
+    flex: 0 0 auto;
+    color: var(--text-3);
+    transition: transform 0.15s ease;
+}
+
+.modelGroupChevronOpen {
+    transform: rotate(90deg);
+}
+
+.modelGroupName {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-weight: 600;
+    text-overflow: ellipsis;
+}
+
+.modelGroupCount {
+    flex: 0 0 auto;
+    color: var(--text-3);
+    font-size: 11px;
 }
 
 /* 思考档位：一排小片，点一下就生效（跟 ZCode 的 effort 控件一样不用再确认） */
@@ -1489,4 +2004,174 @@
     color: var(--warning);
     font-size: 12px;
     line-height: 18px;
+}
+
+/* ---------------------------------------------------------------- 提问卡片（xce_ask_user）
+
+   模型要用户拿主意时弹出来的那块。形状照 ZCode 的 ElicitationDialog：
+   题头一行小标签、题目一行、下面竖排选项（单选画序号、多选画方框），最后永远有一个
+   界面自己补的自由输入框，以及一个整组的提交键。
+   面板只有 ~310px 宽：所有文字都要能换行，但标签与说明各自成行，不并排挤。 */
+
+.ask {
+    margin: 0 0 10px;
+    padding: 10px;
+    border: 1px solid var(--border-l2);
+    border-left: 3px solid var(--accent-solid);
+    border-radius: 8px;
+    background: var(--bg-layer1);
+}
+
+.askQ {
+    margin-bottom: 10px;
+}
+
+.askQ:last-of-type {
+    margin-bottom: 8px;
+}
+
+.askHeader {
+    display: inline-block;
+    margin-bottom: 4px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--bg-layer2);
+    color: var(--text-2);
+    font-size: 11px;
+    line-height: 16px;
+}
+
+.askText {
+    color: var(--text-1);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 19px;
+    white-space: pre-wrap;
+}
+
+.askOptions {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.askOption {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid var(--border-l1);
+    border-radius: 6px;
+    background: var(--bg-base);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.askOption:hover {
+    border-color: var(--border-l3);
+}
+
+.askOptionOn {
+    border-color: var(--accent-solid);
+    background: var(--bg-user);
+}
+
+.askNum,
+.askBox {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    border-radius: 4px;
+    background: var(--bg-layer2);
+    color: var(--text-2);
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+}
+
+.askNum {
+    border-radius: 50%;
+}
+
+.askOptionOn .askNum,
+.askOptionOn .askBox {
+    background: var(--accent-solid);
+    color: #fff;
+}
+
+.askOptionText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.askLabel {
+    color: var(--text-1);
+    font-size: 13px;
+    line-height: 18px;
+    overflow-wrap: anywhere;
+}
+
+.askDesc {
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 17px;
+    overflow-wrap: anywhere;
+}
+
+.askOther {
+    margin-top: 6px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid var(--border-l1);
+    border-radius: 6px;
+    background: var(--bg-base);
+    color: var(--text-1);
+    font: inherit;
+    font-size: 12px;
+}
+
+.askOther::placeholder {
+    color: var(--text-3);
+}
+
+.askSubmit {
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent-solid);
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.askSubmit:hover:enabled {
+    background: var(--accent);
+}
+
+.askSubmit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 回答过（或被停掉）的卡片：只留题面与答案，安静下来 */
+.askAnswer {
+    margin-top: 4px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--bg-base);
+    color: var(--text-1);
+    font-size: 13px;
+    line-height: 18px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }

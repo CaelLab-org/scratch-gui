@@ -37,6 +37,10 @@
         justify-content: center;
         text-align: center;
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        /* 必须压在 #app 上面：SplashEnd 是「React 已经渲染」那一刻才调的，那会儿编辑器
+           已经在底下画出来了 —— 没有这个 z-index，淡出那一帧会被编辑器盖住，看起来就是
+           「啪」一下没了；报错时那张错误面板也会被编辑器挡住、点不到「重置缓存」。 */
+        z-index: 2147483647;
       }
       .splash-screen[hidden] {
         display: none;
@@ -86,6 +90,137 @@
       .splash-reset:disabled {
         opacity: 0.8;
       }
+
+      /* ---- 编辑器那张加载页：品牌版（用户 2026-10-04 要求跟桌面版启动画面同一套）
+         桌面客户端「当天第二次启动」会跳过启动画面，直接把主窗口显示出来 —— 露出来的就是这张。
+         视觉跟桌面仓库 src-main/splash.html 一致：深色品牌蓝渐变 + 点阵网格 + 圆角 logo 块弹入 +
+         呼吸光晕 + 不定态进度条。纯 CSS，不引外部资源。 */
+      .splash-screen[data-brand="1"] {
+        background:
+          radial-gradient(circle at 50% 36%, rgba(43, 111, 236, 0.42) 0%, rgba(43, 111, 236, 0) 60%),
+          linear-gradient(135deg, #08122a 0%, #1b3d82 50%, #0c1b36 100%);
+        color: #fff;
+        font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        gap: 0;
+      }
+      /* 收场：淡出之后才撤掉 —— 别在眼前「啪」一下没了（ZCode 的退场是 0.16s）。
+         淡出期间不许挡住底下的编辑器点按。 */
+      .splash-screen.splash-gone {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .splash-screen[data-brand="1"] {
+        transition: opacity 0.16s ease;
+      }
+      .splash-screen[data-brand="1"]::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(rgba(255, 255, 255, 0.10) 1px, transparent 1px);
+        background-size: 18px 18px;
+        -webkit-mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 70%);
+        mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 70%);
+      }
+      .splash-screen[data-brand="1"].splash-gone {
+        opacity: 0;
+      }
+      .splash-brand > * {
+        position: relative;
+        max-width: none;
+      }
+      .splash-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 84px;
+        height: 84px;
+        margin: 0 auto;
+        border-radius: 22px;
+        background: linear-gradient(160deg, rgba(76, 151, 255, 0.26), rgba(43, 111, 236, 0.10));
+        color: #9cc2ff;
+        opacity: 0;
+        transform: scale(0.72);
+        /* 抄 ZCode 的弹入（0.72s cubic-bezier(.22,1,.36,1)，先冲过一点再收回） */
+        animation: splash-pop 0.66s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+          splash-glow 2.6s ease-in-out 0.66s infinite;
+      }
+      @keyframes splash-pop {
+        0% { opacity: 0; transform: scale(0.72); }
+        38% { opacity: 1; transform: scale(1.045); }
+        58% { transform: scale(0.985); }
+        76% { transform: scale(1.008); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      @keyframes splash-glow {
+        0%, 100% { box-shadow: 0 0 22px rgba(43, 111, 236, 0.45); }
+        50% { box-shadow: 0 0 40px rgba(76, 151, 255, 0.70); }
+      }
+      .splash-title {
+        margin-top: 18px;
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        opacity: 0;
+        animation: splash-rise 0.5s ease-out 0.16s forwards;
+      }
+      .splash-title span {
+        color: #7fb0ff;
+        font-weight: 700;
+      }
+      .splash-note {
+        margin-top: 7px;
+        color: rgba(255, 255, 255, 0.66);
+        font-size: 12px;
+        opacity: 0;
+        animation: splash-rise 0.5s ease-out 0.24s forwards;
+      }
+      @keyframes splash-rise {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      /* 不定态进度条：不写百分比，免得假装知道还要多久 */
+      .splash-progress {
+        position: absolute;
+        left: 50%;
+        bottom: 30px;
+        width: 164px;
+        height: 3px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.13);
+        transform: translateX(-50%);
+      }
+      .splash-progress::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 42%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(43, 111, 236, 0), #4c97ff, rgba(43, 111, 236, 0));
+        animation: splash-slide 1.35s ease-in-out infinite;
+      }
+      @keyframes splash-slide {
+        0% { transform: translateX(-105%); }
+        100% { transform: translateX(340%); }
+      }
+      /* 系统设了「减少动态效果」就全关，静止的界面照样看得懂 */
+      @media (prefers-reduced-motion: reduce) {
+        .splash-logo, .splash-title, .splash-note {
+          animation: none;
+          opacity: 1;
+          transform: none;
+        }
+        .splash-progress::after {
+          animation: none;
+          left: 29%;
+        }
+      }
+      /* 报错那几行在深底上也得看得清 */
+      .splash-screen[data-brand="1"] .splash-error-title a {
+        color: #9cc2ff;
+      }
     </style>
   </head>
   <body>
@@ -112,8 +247,26 @@
       </div>
     </noscript>
 
-    <div class="splash-screen spash-waiting-for-js" hidden>
+    <div class="splash-screen splash-waiting-for-js" hidden>
+      <% if (htmlWebpackPlugin.options.isEditor) { %>
+      <!-- 编辑器：品牌版加载页（跟桌面版启动画面同一套视觉）。非编辑器（查看器 / 首页）仍旧走转圈。
+           改这个文件注意：这是 lodash 模板，正文里不能出现任何 EJS 的尖括号百分号标记，
+           连注释里都不行 —— 写字面量会把模板编译搞挂（html-webpack-plugin 报 SyntaxError）。 -->
+      <div class="splash-brand">
+        <div class="splash-logo">
+          <svg aria-hidden="true" height="50" viewBox="0 0 24 24" width="50">
+            <path d="M12 2.2 20.7 7.1v9.8L12 21.8 3.3 16.9V7.1z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="0.9"/>
+            <path d="M12 7.1 16.7 9.8v5.4L12 17.9 7.3 15.2V9.8z" fill="currentColor" opacity="0.32"/>
+            <path d="M12 9.4l3.1 1.8v3.5L12 16.5l-3.1-1.8V11.2z" fill="currentColor" opacity="0.55"/>
+          </svg>
+        </div>
+        <div class="splash-title"><%= htmlWebpackPlugin.options.APP_NAME %></div>
+        <div class="splash-note">正在载入编辑器…</div>
+      </div>
+      <div class="splash-progress"></div>
+      <% } else { %>
       <div class="splash-spinner"></div>
+      <% } %>
 
       <div class="splash-error-title" hidden>Something went wrong. <a href="https://forum.xmuer.online/t/problem" target="_blank" rel="noreferrer">Please report</a> with the information below.</div>
       <div class="splash-errors" hidden></div>
@@ -156,16 +309,17 @@
           theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
 
-        var splash = document.querySelector('.spash-waiting-for-js');
+        var splash = document.querySelector('.splash-waiting-for-js');
+        <% if (htmlWebpackPlugin.options.isEditor) { %>
+        // 编辑器那张加载页是品牌版：渐变和前景色都在 CSS 里，不按主题改底色
+        // （深色品牌蓝在两个主题下都成立，也跟桌面版的启动画面一模一样）。
+        splash.setAttribute('data-brand', '1');
+        <% } else { %>
         splash.setAttribute('data-theme', theme);
         if (theme !== 'dark') {
-          <% if (htmlWebpackPlugin.options.isEditor) { %>
-            splash.style.backgroundColor = accent;
-            splash.style.color = 'white';
-          <% } else { %>
-            splash.style.color = accent;
-          <% } %>
+          splash.style.color = accent;
         }
+        <% } %>
         splash.hidden = false;
 
         var splashErrorTitle = document.querySelector('.splash-error-title');
@@ -207,8 +361,12 @@
         };
 
         window.SplashEnd = () => {
-          splash.hidden = true;
           window.onerror = null;
+          // 先淡出再撤（0.16s），跟桌面版启动画面的退场一个节奏
+          splash.classList.add('splash-gone');
+          setTimeout(function () {
+            splash.hidden = true;
+          }, 170);
         };
       })();
     </script>

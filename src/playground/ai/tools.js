@@ -13,6 +13,8 @@
 
 import {fetchOnline, isDesktopMode} from './online.js';
 import {searchCaelLab, MAX_RESULTS, TITLE_CAP, DESC_CAP} from './search.js';
+import {MEMORY_LIMITS, MEMORY_TYPES, memoryIndexText, findMemory, saveMemory, deleteMemory} from './memory.js';
+import {AGENT_SPRITE_NAME, AGENT_NOTE_MAX_CHARS, MEMORY_INDEX_SPRITE, MEMORY_CONTENT_SPRITE} from './port.js';
 
 const ok = content => ({content});
 const fail = content => ({content, isError: true});
@@ -42,6 +44,43 @@ const listSpritesDetailed = port => port.listSpritesDetailed()
 // PNG 原图能到几百 KB，白烧 token。只缩尺寸，仍存 PNG（舞台可能是透明底，JPEG 会变黑）。
 const MAX_IMAGE_CHARS = 300 * 1024;
 const MAX_EDGE = 720;
+
+// 矢量造型的源码直接发给模型的长度上限（用户 2026-10-04 要的：是矢量就给 SVG，太长才退回图片）。
+// 必须留在 loop.js 的 MAX_TOOL_CHARS（20KB）以下 —— 超了会被截断，半个 SVG 文档对模型没有用。
+const MAX_SVG_CHARS = 16 * 1024;
+
+// ---- xce_ask_user 的入参整形 ----
+// 模型给的题先过一遍：最多 4 题、每题 2-4 个选项，题目或选项不合规就丢掉（页面不会为它画卡片）。
+// 界面那边一律自己补一个「自己写」的输入框，所以模型不该再塞一条「其他」进去。
+export const ASK_LIMITS = {questions: {min: 1, max: 4}, options: {min: 2, max: 4}};
+
+export const normalizeQuestions = raw => {
+    const out = [];
+    for (const entry of Array.isArray(raw) ? raw : []) {
+        if (!entry || typeof entry !== 'object') continue;
+        const question = String(entry.question || '').trim();
+        if (!question) continue;
+        const options = (Array.isArray(entry.options) ? entry.options : [])
+            .map(option => (typeof option === 'string' ? {label: option} : option))
+            .filter(option => option && String(option.label || '').trim())
+            .slice(0, ASK_LIMITS.options.max)
+            .map(option => ({
+                label: String(option.label).trim(),
+                description: String(option.description || '').trim()
+            }));
+        if (options.length < ASK_LIMITS.options.min) continue;
+        out.push({
+            question,
+            // 题头是给界面当小标签用的，太长会把一行撑开
+            header: String(entry.header || '').trim()
+                .slice(0, 12),
+            multiSelect: !!entry.multiSelect,
+            options
+        });
+        if (out.length >= ASK_LIMITS.questions.max) break;
+    }
+    return out;
+};
 
 // xce_time 的等待上限：等待烧的是用户真实的墙钟时间，不许模型拿它当「等一等就好了」的挡箭牌
 const MAX_WAIT_SECONDS = 60;
@@ -106,6 +145,55 @@ const shrinkImage = dataUrl => new Promise(resolve => {
     image.src = dataUrl;
 });
 
+// ---- xce_read_env 的取数 ----
+// 机器细节刻意**不进系统提示词**（用户 2026-10-04 定的）：提示词里只有「桌面客户端 / 网页」两态，
+// 要系统、版本、窗口大小就现取一次。无头环境（单测）没有 window / navigator，每一项都必须能缺。
+
+// UA 里的系统：能识别的就识别，认不出就留空（不猜）
+const UA_OS = [
+    [/Windows NT 10\.0/i, 'Windows 10 or 11'],
+    [/Windows NT 6\.3/i, 'Windows 8.1'],
+    [/Windows NT 6\.1/i, 'Windows 7'],
+    [/Windows Phone/i, 'Windows Phone'],
+    [/Android[ /](\d+(?:\.\d+)*)/i, found => `Android ${found[1]}`],
+    [/iPhone OS (\d+)[_.](\d+)/i, found => `iOS ${found[1]}.${found[2]}`],
+    [/iPad;.*OS (\d+)[_.](\d+)/i, found => `iPadOS ${found[1]}.${found[2]}`],
+    [/Mac OS X (\d+)[_.](\d+)/i, found => `macOS ${found[1]}.${found[2]}`],
+    [/CrOS/i, 'ChromeOS'],
+    [/Linux/i, 'Linux']
+];
+
+export const osFromUserAgent = ua => {
+    for (const [pattern, name] of UA_OS) {
+        const found = pattern.exec(ua);
+        if (found) return typeof name === 'function' ? name(found) : name;
+    }
+    return '';
+};
+
+// 浏览器 / 壳的名字与版本。桌面版的 UA 里一定有 Electron —— 先认它，
+// 再认 UAData 的品牌表（Chromium 会在里面掺 "Chromium" / "Not_A Brand"，要挑掉），最后退回 UA 关键字。
+export const engineFromUserAgent = ua => {
+    const nav = typeof navigator === 'undefined' ? null : navigator;
+    const chromium = (/Chrome\/([\d.]+)/i.exec(ua) || [])[1];
+    const electron = (/Electron\/([\d.]+)/i.exec(ua) || [])[1];
+    if (electron) {
+        return `Electron ${electron}${chromium ? ` (Chromium ${chromium})` : ''}`;
+    }
+    const brands = nav && nav.userAgentData && nav.userAgentData.brands;
+    if (Array.isArray(brands)) {
+        const real = brands.find(brand => !/^(Chromium|Not.?A.?Brand)$/i.test(brand.brand));
+        if (real) return `${real.brand} ${real.version}`;
+    }
+    const named = /(Firefox|Edg|OPR|Chrome)\/([\d.]+)/i.exec(ua);
+    if (named) {
+        const label = {Edg: 'Edge', OPR: 'Opera'}[named[1]] || named[1];
+        return `${label} ${named[2]}`;
+    }
+    const safari = /Version\/([\d.]+)[^)]*Safari/i.exec(ua);
+    return safari ? `Safari ${safari[1]}` : '';
+};
+
 /**
  * @param {object} opts
  *   port    ScratchPort
@@ -121,20 +209,20 @@ export const createTools = ({port, skills = []}) => {
         'page: cross-origin rules do not apply and ordinary public pages come back readable — assume a URL ' +
         'will work and try it. A page behind a login, or one drawn entirely by JavaScript, still comes back ' +
         'empty or partial; the error says which.' :
-        'Most websites block a browser page from reading them (CORS), and a page behind a login or drawn ' +
-        'entirely by JavaScript comes back empty or partial, so a fetch fails more often than it succeeds; ' +
-        'the error says why.';
+        'On the web, most sites block a browser page from reading them (CORS), and pages behind a login or ' +
+        'drawn entirely by JavaScript come back empty — failed fetches are normal here, not a sign that ' +
+        'something was done wrong. The desktop app fetches pages itself and has no such restriction ' +
+        '(engine.xmuer.online/engine); no need to bring that up unprompted, it becomes relevant only when a ' +
+        'page the user actually needs cannot be read.';
     // 逐段拼成一篇，段间换行；「哪一级环境」那句是变量，拼在数组里而不是串接，免得踩 prefer-template
     const readOnlineDescription = [
         'Fetch one public web page by URL and return it as readable text (not HTML): page title first, then ' +
         'the body text, hidden content stripped.',
-        'Hard limits: 5 second timeout, at most 20KB of text, head summary capped at 2KB — if the body was ' +
-        'truncated the result says so, and you must pass that on instead of treating the excerpt as the ' +
-        'whole page.',
+        'Limits: 5 second timeout, at most 20KB of body text, head summary capped at 2KB. If the result says ' +
+        'it was truncated, it is an excerpt — use it as one, not as the whole page.',
         fetchReach,
-        'When a fetch does fail, find another way instead of stopping: try a different URL, then fall back on ' +
-        'what you already know and say that is where it came from. Never invent page content for a page you ' +
-        'did not fetch; never reconstruct a page from memory.',
+        'A failed fetch is information, not a dead end: try another URL, or answer from what you already know ' +
+        'and say where it came from. Just do not pass remembered content off as something you read on the page.',
         'Use it to back up claims about the outside world (docs, help pages, a site the user mentions).'
     ].join('\n');
 
@@ -156,6 +244,13 @@ export const createTools = ({port, skills = []}) => {
             description:
                 'Read ONE sprite\'s blocks as block text (scratchblocks notation). One sprite per call — ' +
                 'this is deliberate, so a big project cannot blow up your context.\n' +
+                'Each script is preceded by a line like `:: script a1b2c3d4 (5 blocks)` — that id identifies ' +
+                'the script for xce_edit_script, xce_delete_script and the blockId of xce_note. ' +
+                'Never copy a `:: script` line into new block text; it is a label, and it is stripped ' +
+                'automatically if you do.\n' +
+                'Scratch comments on the sprite are listed after the block text, each preceded by its own ' +
+                '`:: note <id>` line (read a single one with xce_read_notes). Comments are not blocks — ' +
+                'never write them back as block text.\n' +
                 'In the returned text, `[name v]` stands for a variable or list dropdown; copy it ' +
                 'verbatim when writing back.\n' +
                 'Long code is truncated at 20KB; to see a specific part, call again with lineStart/lineEnd ' +
@@ -205,7 +300,16 @@ export const createTools = ({port, skills = []}) => {
                 if (Object.keys(target.lists).length) {
                     header.push(`Lists: ${Object.keys(target.lists).join(', ')}`);
                 }
-                return ok(`${header.join('\n')}\n${lines.join('\n') || '(this sprite has no blocks yet)'}`);
+                let body = `${header.join('\n')}\n${lines.join('\n') || '(this sprite has no blocks yet)'}`;
+                // 注释区：每条带 `:: note <id>` 标注行（学 `:: script` 的老规矩），列在积木文本后面
+                const notes = port.readNotes(sprite) || [];
+                if (notes.length) {
+                    body += `
+# Comments (注释 — real comment bubbles, not blocks)
+
+${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
+                }
+                return ok(body);
             }
         },
 
@@ -269,15 +373,17 @@ export const createTools = ({port, skills = []}) => {
             name: 'xce_delete_script',
             description:
                 'Delete one whole script (its top block and everything stacked or nested under it) from a sprite.\n' +
-                'Get the top block id from a previous xce_read_project or xce_write_script result; ' +
-                'xce_read_project never prints ids, so ask for the script text first and identify it ' +
-                'from the user\'s description.',
+                'The top block id is on the `:: script <id>` line that xce_read_project prints above each ' +
+                'script. Read the sprite first and pick the id of the script the user means — never guess an id.',
             destructive: true,
             inputSchema: {
                 type: 'object',
                 properties: {
                     sprite: {type: 'string', description: 'Sprite name.'},
-                    topBlockId: {type: 'string', description: 'Id of the script\'s top block.'}
+                    topBlockId: {
+                        type: 'string',
+                        description: 'Id of the script\'s top block (from a `:: script <id>` line in xce_read_project).'
+                    }
                 },
                 required: ['sprite', 'topBlockId']
             },
@@ -290,6 +396,271 @@ export const createTools = ({port, skills = []}) => {
                     content: `Deleted script ${topBlockId} from "${sprite}".`,
                     undo: {kind: 'del', sprite, topBlockId, blocks: snapshot.blocks, removed: snapshot.count}
                 };
+            }
+        },
+
+        {
+            name: 'xce_edit_script',
+            description:
+                'Replace one whole script in place: pass the top block id (from a `:: script <id>` line in ' +
+                'xce_read_project) and the new scratchblocks text. The old script is deleted and the new one ' +
+                'takes its place; everything else on the sprite stays put.\n' +
+                'Prefer this over delete-then-write: if the new text does not parse or needs an extension that ' +
+                'is not loaded, nothing changes at all — the old script stays untouched.\n' +
+                'Same format rules as xce_write_script: ONE complete script starting with a hat block. ' +
+                'To change several scripts, call this once per script.',
+            destructive: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name.'},
+                    topBlockId: {
+                        type: 'string',
+                        description: 'Id of the script\'s top block (from a `:: script <id>` line in xce_read_project).'
+                    },
+                    text: {type: 'string', description: 'The replacement script: one complete scratchblocks script.'}
+                },
+                required: ['sprite', 'topBlockId', 'text']
+            },
+            handler: async ({sprite, topBlockId, text}) => {
+                // 先抓快照：替换失败时旧脚本必须原样还在，撤销也要靠它摆回去
+                const snapshot = port.captureScript(sprite, topBlockId);
+                if (!snapshot) {
+                    return fail(`No script ${topBlockId} was found in "${sprite}". Top block ids come from the ` +
+                        '`:: script <id>` lines of xce_read_project — read the sprite again; the project may ' +
+                        'have changed since you last looked.');
+                }
+                // 先写新的再删旧的：新文本解析不过 / 缺扩展时在写入这步就失败返回，
+                // 旧脚本一动不动 —— 这正是这个工具比「先删后写」安全的地方
+                const result = await port.writeScript(sprite, text);
+                if (result.unrecognized) {
+                    return fail(
+                        `Nothing was changed: the new text uses block syntax the tool does **not recognize**. ` +
+                        `Its warnings were:\n- ` +
+                        `${result.warnings.map(w => String(w)).join('\n- ')}\n` +
+                        `Rewrite it with the real names from the block palette (common mistakes: inventing a ` +
+                        `block name, or mixing in a translated name). The old script is exactly as it was.`
+                    );
+                }
+                if (result.missingExtensions && result.missingExtensions.length) {
+                    return fail(
+                        `Nothing was changed: the new text needs an extension the project has **not loaded** ` +
+                        `(${result.missingExtensions.join(', ')}). You must not load an extension yourself — ` +
+                        `that would modify the user's project. Tell the user to do this: click the leftmost ` +
+                        `button under the block palette (添加扩展), add ${result.missingExtensions.join(', ')}, ` +
+                        `then ask you to try again. The old script is exactly as it was.`
+                    );
+                }
+                if (!result.topBlockIds.length) {
+                    return fail('Nothing was changed: the new text parsed to no blocks. The old script is ' +
+                        'exactly as it was.');
+                }
+                port.deleteScript(sprite, topBlockId);
+                port.tidy();
+                return {
+                    content: `Replaced script ${topBlockId} in "${sprite}" ` +
+                        `(${snapshot.count} block${snapshot.count === 1 ? '' : 's'} -> ` +
+                        `${result.blockCount}).`,
+                    undo: {
+                        kind: 'edit',
+                        sprite,
+                        blocks: snapshot.blocks, // 旧脚本快照，撤销时摆回去
+                        topBlockIds: result.topBlockIds, // 新脚本顶块，撤销时删掉
+                        added: result.blockCount,
+                        removed: snapshot.count
+                    }
+                };
+            }
+        },
+
+        {
+            name: 'xce_note',
+            description:
+                'Write ONE Scratch comment (「注释」) onto a block of a sprite — the real comment bubble the user ' +
+                'opens, reads, edits and deletes in the editor, and the same kind they make themselves by ' +
+                'right-clicking a block. It exists so you can explain your work where the user will see it later: ' +
+                'what a script does, which number to change to make it harder, what still needs doing.\n' +
+                'Give `sprite` (an existing name) and `text`. `blockId` is optional: leave it out and the comment ' +
+                'lands on that sprite\'s newest script.\n' +
+                '**A comment must hang on a block** — that is how Scratch itself works, so a sprite with no blocks ' +
+                'cannot take one. If that is what you hit, write or choose a script instead of retrying.\n' +
+                'House style, a suggestion rather than a rule: write in XCE\'s voice, mention XCE things ' +
+                'when they fit naturally (CaelLabSearch, CaelLabID, the CaelLab sites), stamp the date ' +
+                'when it will matter later — and otherwise follow your own creativity. Calling this again ' +
+                'on the same block REWRITES that comment rather than adding a second one — so update it ' +
+                'when the script changes, instead of leaving stale notes around.\n' +
+                'Write for the user, in the user\'s language: short, concrete, no jargon, no notes to yourself.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name. Must already exist.'},
+                    text: {type: 'string', description: 'The comment text, in the language the user writes in.'},
+                    blockId: {
+                        type: 'string',
+                        description: 'Top block id to hang the comment on. Omit for the sprite\'s newest script.'
+                    }
+                },
+                required: ['sprite', 'text']
+            },
+            handler: ({sprite, text, blockId}) => {
+                if (!sprite) return fail('A sprite name is required.');
+                if (!text || !String(text).trim()) return fail('The comment text is empty.');
+                const target = port.readTarget(sprite);
+                if (!target) return fail(`No sprite named "${sprite}". Existing sprites: ${listSprites(port)}`);
+                const made = port.createNote(sprite, text, blockId);
+                if (!made) {
+                    // 两种可能：这个角色一块积木都没有，或者给的 blockId 不存在
+                    const why = blockId ?
+                        ` (blockId "${blockId}" was not found either)` : '';
+                    return fail(
+                        `Could not attach a comment in "${sprite}": a Scratch comment has to hang on a block, ` +
+                        `and that sprite has no block to attach it to${why}. Write a script into it first ` +
+                        `(xce_write_script), then add the note — or put the explanation in your reply ` +
+                        `instead. Do not retry the same call.`
+                    );
+                }
+                const where = made.visible ?
+                    'The user can see it right away (this is the sprite their workspace is showing).' :
+                    `The workspace is showing another sprite, so the user has to click "${sprite}" to see it — ` +
+                    'tell them that instead of implying it is on screen already.';
+                return {
+                    content: `${made.updated ? 'Updated the existing comment' : 'Added a comment'} in ` +
+                        `"${sprite}", on its ${made.updated ? 'script' : 'newest script'}. ${where}`,
+                    // 撤销 / 回退本轮：把这条注释删掉（积木不动）
+                    undo: {kind: 'note', sprite, commentId: made.commentId}
+                };
+            }
+        },
+
+        {
+            name: 'xce_read_notes',
+            description:
+                'Read ONE sprite\'s Scratch comments — the real comment bubbles — each preceded by its own ' +
+                '`:: note <id>` line. Pass `noteId` (from that line) to read a single one, e.g. one memory ' +
+                `entry inside 「${MEMORY_CONTENT_SPRITE}」; leave it out to read all of them. ` +
+                'xce_read_project lists the same comments after the block text.',
+            readOnly: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name (see xce_list_sprites).'},
+                    noteId: {
+                        type: 'string',
+                        description: 'Id of one note (from a `:: note <id>` line). Omit to read every comment.'
+                    }
+                },
+                required: ['sprite']
+            },
+            handler: ({sprite, noteId}) => {
+                if (!sprite) return fail('A sprite name is required.');
+                const notes = port.readNotes(sprite);
+                if (!notes) return fail(`No sprite named "${sprite}". Existing sprites: ${listSprites(port)}`);
+                const wanted = noteId ? notes.filter(note => note.id === noteId) : notes;
+                if (noteId && !wanted.length) {
+                    return fail(`No note "${noteId}" in "${sprite}". Its note ids are on the ` +
+                        `\`:: note <id>\` lines — call again without noteId to list every comment.`);
+                }
+                if (!wanted.length) return ok(`"${sprite}" has no comments.`);
+                return ok(wanted.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n'));
+            }
+        },
+
+        {
+            name: 'xce_write_agent',
+            description:
+                'Write the project-level agent note: ONE Scratch comment inside the reserved sprite ' +
+                `「${AGENT_SPRITE_NAME}」. Its full text is delivered to you in the system prompt of every ` +
+                `turn (first ${AGENT_NOTE_MAX_CHARS} characters), so this is how standing instructions for ` +
+                'THIS project survive across conversations and reloads — conventions, naming, how this ' +
+                'project should behave, anything worth always knowing here.\n' +
+                'Calling it again REPLACES the whole comment: pass the complete new text, not a diff. ' +
+                `If the 「${AGENT_SPRITE_NAME}」 sprite does not exist yet it is created for you, with one ` +
+                'script that does nothing (just an anchor for the comment) — do not put working code there.\n' +
+                'Write it in the user\'s language, short and factual; no passwords, keys or other secrets. ' +
+                'Long notes are accepted — the prompt carries their first 20,000 characters and ' +
+                'xce_read_agent reads the rest — but that first slice rides along every turn, so keep it ' +
+                'as tight as the job allows.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    text: {
+                        type: 'string',
+                        description: 'The full note text. Replaces whatever the comment said before.'
+                    }
+                },
+                required: ['text']
+            },
+            handler: async ({text}) => {
+                const made = await port.writeAgentNote(text);
+                if (!made.ok) {
+                    if (made.reason === 'empty') return fail('The note text is empty.');
+                    return fail('Could not write the project-level note.');
+                }
+                const where = made.visible ?
+                    'The user can see it right away (this is the sprite their workspace is showing).' :
+                    `The workspace is showing another sprite, so the user has to click ` +
+                    `"${AGENT_SPRITE_NAME}" to see it — tell them that instead of implying it is on screen already.`;
+                const head = made.spriteCreated ?
+                    `Created the sprite "${AGENT_SPRITE_NAME}" with the project-level note ` +
+                    `(${made.text.length} characters).` :
+                    `Updated the project-level note in "${AGENT_SPRITE_NAME}" ` +
+                        `(${made.text.length} characters).`;
+                return {
+                    content: `${head} ${where} It starts reaching you in the system prompt from the next turn on.`,
+                    // 这次顺带建出来的角色，整轮回退时连角色一起撤；老角色就只撤注释
+                    undo: made.spriteCreated ?
+                        {kind: 'sprite', sprite: AGENT_SPRITE_NAME} :
+                        {kind: 'note', sprite: AGENT_SPRITE_NAME, commentId: made.commentId}
+                };
+            }
+        },
+
+        {
+            name: 'xce_read_agent',
+            description:
+                `Read the project-level agent note (the one comment in the 「${AGENT_SPRITE_NAME}」 ` +
+                'sprite) in full. The system prompt carries only its first 20,000 characters — when ' +
+                'that section says the note was truncated, call this to read the rest: it pages by lines ' +
+                '(lineStart/lineEnd, 1-based, inclusive), like xce_read_project.\n' +
+                'Also use it when the user says they edited the note by hand and you need the current text. ' +
+                'A note long enough to be truncated sends its first 20,000 characters here every turn — ' +
+                'when most of it rarely matters, suggesting the user trim it with xce_write_agent is a ' +
+                'kindness to the context window.',
+            readOnly: true,
+            paged: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    lineStart: {type: 'number', description: 'First line to show (1-based). Omit to start at 1.'},
+                    lineEnd: {type: 'number', description: 'Last line to show (inclusive). Omit to read to the end.'}
+                }
+            },
+            handler: ({lineStart, lineEnd}) => {
+                const note = port.readAgentNote();
+                if (!note.text) {
+                    return fail(`There is no project-level note to read: this project has no ` +
+                        `「${AGENT_SPRITE_NAME}」 sprite (or its comment is empty). Write one with ` +
+                        'xce_write_agent.');
+                }
+                const allLines = note.text.split('\n');
+                const total = allLines.length;
+                let lines = allLines;
+                let shown = `lines 1-${total}`;
+                const start = Number(lineStart);
+                const end = Number(lineEnd);
+                if (start > 0 || end > 0) {
+                    const s = Math.max(1, Math.floor(start || 1));
+                    const e = Math.min(total, Math.floor(end || total));
+                    if (s > e) {
+                        return fail(`Bad line range: ${s}-${e}. Lines are 1-based, and lineEnd must be ` +
+                            'greater than or equal to lineStart.');
+                    }
+                    lines = allLines.slice(s - 1, e);
+                    shown = `lines ${s}-${e}`;
+                }
+                const header = `# ${AGENT_SPRITE_NAME} note (${shown} of ` +
+                    `${total} line${total === 1 ? '' : 's'}, ${note.totalChars} characters total)`;
+                return ok(`${header}\n${lines.join('\n')}`);
             }
         },
 
@@ -310,6 +681,78 @@ export const createTools = ({port, skills = []}) => {
                 if (outcome === 'timeout') return ok('The project is still running (the wait limit was reached).');
                 if (outcome === 'stopped') return ok('The project was stopped.');
                 return ok('The project finished running.');
+            }
+        },
+
+        {
+            name: 'xce_trigger_event',
+            description:
+                'Fire an event yourself, as if the user had done it: scripts wake up and run on their own. ' +
+                'The project is not modified, and this returns immediately without waiting — check the ' +
+                'effect afterwards with xce_read_state (numbers) or xce_read_stage (picture).\n' +
+                'Three types:\n' +
+                '- "broadcast": send a 广播 by name (pass `name`). Every 「当接收到 [name v]」 script in the ' +
+                'project starts. If the broadcast does not exist at all, the result lists the names that do — ' +
+                'and note that firing it only helps when some script is listening for it.\n' +
+                '- "green-flag": click the green flag without waiting. xce_run_project is usually better: ' +
+                'same effect but it also waits for the project to finish, so prefer that one unless you ' +
+                'specifically want a fire-and-forget start.\n' +
+                '- "sprite-clicked": simulate the user clicking a sprite (pass `sprite`). Every ' +
+                '「当角色被点击」 script of that sprite starts. That click event is the only sprite event ' +
+                'this can fire — there is no real event for "the mouse touched a sprite"; for anything like ' +
+                'that, read the sprite\'s position with xce_read_state and judge from the numbers.\n' +
+                'The result states how many scripts woke up. Zero means nothing in the project listens to ' +
+                'that event, so nothing will happen — look at the project (xce_read_project) and fire ' +
+                'something that exists instead of retrying.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    type: {
+                        type: 'string',
+                        enum: ['broadcast', 'green-flag', 'sprite-clicked'],
+                        description: 'Which event to fire.'
+                    },
+                    name: {
+                        type: 'string',
+                        description: 'Broadcast name — required for type "broadcast".'
+                    },
+                    sprite: {
+                        type: 'string',
+                        description: 'Sprite name — required for type "sprite-clicked".'
+                    }
+                },
+                required: ['type']
+            },
+            handler: async ({type, name, sprite}) => {
+                const made = await port.triggerEvent({type, name, sprite});
+                if (!made.ok) {
+                    if (made.reason === 'no-name') {
+                        return fail('A broadcast name is required: pass `name` for type "broadcast".');
+                    }
+                    if (made.reason === 'unknown-broadcast') {
+                        const list = made.broadcasts.length ? made.broadcasts.join(', ') : '(none)';
+                        return fail(`No broadcast named "${name}" exists in this project, so nothing can ` +
+                            `hear it. Broadcasts that do exist: ${list}.`);
+                    }
+                    if (made.reason === 'no-sprite') {
+                        return fail(`No sprite named "${sprite}". Existing sprites: ${made.sprites}`);
+                    }
+                    return fail('type must be "broadcast", "green-flag" or "sprite-clicked".');
+                }
+                if (type === 'green-flag') {
+                    return ok('Green flag clicked: the project started. This returned immediately without ' +
+                        'waiting — xce_run_project waits, so use it (or xce_read_state / xce_read_stage) to ' +
+                        'check what happened.');
+                }
+                const what = type === 'broadcast' ?
+                    `Broadcast "${name}" went out` :
+                    `Simulated a click on "${sprite}"`;
+                if (!made.triggered) {
+                    return ok(`${what}, but no script is listening to that event, so nothing will happen. ` +
+                        'Read the project (xce_read_project) to see which events actually have scripts.');
+                }
+                return ok(`${what}: ${made.triggered} script${made.triggered === 1 ? '' : 's'} started. ` +
+                    'They run on their own — check the effect with xce_read_state or xce_read_stage.');
             }
         },
 
@@ -356,6 +799,18 @@ export const createTools = ({port, skills = []}) => {
             handler: async (input, ctx = {}) => {
                 const dataUrl = await port.snapshotStage();
                 if (!dataUrl) {
+                    // 网页版标签页在后台时浏览器会挂起渲染（rAF 不跑，requestSnapshot 等不到帧），
+                    // 桌面壳关了后台节流（backgroundThrottling: false）没有这回事 —— 所以这句只给网页版。
+                    const tabHidden = !isDesktopMode() &&
+                        typeof document !== 'undefined' && document.hidden;
+                    if (tabHidden) {
+                        return fail('Screenshot failed: the renderer produced no frame before the timeout, ' +
+                            'and the tab is currently in the background — the browser suspends rendering while ' +
+                            'the user is away, so this is most likely the cause. You can put a question to the ' +
+                            'user with xce_ask_user: it sends a notification that brings them back, and then a ' +
+                            'retry should work. If this keeps happening, it is fine to mention once, plainly, ' +
+                            'that the desktop app keeps rendering in the background (engine.xmuer.online/engine).');
+                    }
                     return fail('Screenshot failed: the renderer produced no frame before the timeout. The ' +
                         'project may not have rendered a single frame yet — call xce_run_project first, then retry.');
                 }
@@ -489,12 +944,19 @@ export const createTools = ({port, skills = []}) => {
         {
             name: 'xce_read_costume',
             description:
-                'Look at one costume of one sprite as a picture. Use it right after drawing a costume with ' +
-                'xce_add_sprite or xce_add_costume — that is how you check your own drawing came out right ' +
-                'before you tell the user it is done.\n' +
-                'It shows the costume on its own (not the stage), so it works before the project is even run.\n' +
-                'Whether the picture actually reaches you depends on the model: text-only models get a note ' +
-                'instead, and must not describe a drawing they have not seen.',
+                'Look at one costume of one sprite. Two forms, chosen by the format parameter:\n' +
+                '- A **vector** costume (one drawn as SVG) comes back as the **SVG source text** — that is the ' +
+                `default, unless it is longer than ${MAX_SVG_CHARS / 1024}KB, in which case the picture is ` +
+                'sent instead. Source text is cheaper than a picture and lets you copy and repair the ' +
+                'drawing; the picture is what you want when judging how it actually looks.\n' +
+                '- A **bitmap** costume (a PNG or JPG imported from somewhere) has no source, so you get the ' +
+                'picture.\n' +
+                'Use it right after drawing a costume with xce_add_sprite or xce_add_costume — that is how you ' +
+                'check your own drawing came out right before you tell the user it is done. It shows the ' +
+                'costume on its own (not the stage), so it works before the project is even run.\n' +
+                'Whether a picture actually reaches you depends on the model: on a text-only model the picture ' +
+                'is not passed on and the result says so — never describe a drawing you have not seen. Vector ' +
+                'source, on the other hand, reaches every model.',
             readOnly: true,
             vision: true,
             inputSchema: {
@@ -504,19 +966,55 @@ export const createTools = ({port, skills = []}) => {
                     costume: {
                         type: 'string',
                         description: 'Costume name or index (0-based). Omit to see the current costume.'
+                    },
+                    format: {
+                        type: 'string',
+                        enum: ['auto', 'svg', 'image'],
+                        description: 'What you want back. "auto" (the default) sends SVG source for a vector ' +
+                            'costume and a picture otherwise. "svg" insists on source — a bitmap costume then ' +
+                            'comes back as an error saying there is none. "image" always sends the picture.'
                     }
                 },
                 required: ['sprite']
             },
-            handler: async ({sprite, costume}, ctx = {}) => {
+            handler: async ({sprite, costume, format}, ctx = {}) => {
+                const known = port.listCostumes(sprite);
+                if (!known) return fail(`No sprite named "${sprite}". Sprites: ${listSprites(port)}`);
+                const mode = format === 'svg' || format === 'image' ? format : 'auto';
+
+                // 矢量造型优先给源码（比图片省 token，而且能照着改）；太长才退回图片。
+                if (mode !== 'image') {
+                    const source = await port.readCostumeSvg(sprite, costume);
+                    if (source && source.bitmap && mode === 'svg') {
+                        return fail(`Costume "${source.name}" of "${sprite}" is a bitmap image` +
+                            `${source.size ? ` (${source.size.join('x')})` : ''}, not a vector drawing, so ` +
+                            'there is no SVG source to read. Call again with format "image" to look at it.');
+                    }
+                    if (source && !source.bitmap) {
+                        const head = `Costume "${source.name}" of "${sprite}" is a vector drawing` +
+                            `${source.width && source.height ? `, ${source.width}x${source.height}` : ''}.`;
+                        if (!source.svg) {
+                            return fail(`${head} Its SVG source could not be read out of the project file, so ` +
+                                'there is nothing to show. Call again with format "image" to look at it instead.');
+                        }
+                        if (source.svg.length <= MAX_SVG_CHARS) {
+                            return ok(`${head} Its SVG source follows.\n${source.svg}`);
+                        }
+                        if (mode === 'svg') {
+                            return ok(`${head} Its SVG source is ${Math.ceil(source.svg.length / 1024)}KB, over ` +
+                                `the ${MAX_SVG_CHARS / 1024}KB limit for source text, so it was not sent. Call ` +
+                                'again with format "image" to see the picture instead.');
+                        }
+                        // auto 且过长：往下走图片那条
+                    }
+                }
+
                 if (!ctx.supportsImage) {
                     return ok(
                         `xce_read_costume returns a picture, but the current model does not read images, so ` +
                         `nothing was captured. Say that once instead of describing the drawing.\n${VISION_SWITCH_HINT}`
                     );
                 }
-                const known = port.listCostumes(sprite);
-                if (!known) return fail(`No sprite named "${sprite}". Sprites: ${listSprites(port)}`);
                 const shot = await port.snapshotCostume(sprite, costume);
                 if (!shot) {
                     const names = known.map(entry => `${entry.index}: ${entry.name}`).join(', ');
@@ -528,6 +1026,248 @@ export const createTools = ({port, skills = []}) => {
                     content: `Costume "${shot.name}" of "${sprite}" (${shot.width}x${shot.height}, ` +
                         'on a transparent background).',
                     images: [{url: await shrinkImage(shot.dataUrl), mimeType: 'image/png'}]
+                };
+            }
+        },
+
+        {
+            name: 'xce_save_memory',
+            description:
+                `Save ONE lasting fact so a later conversation still knows it. Your memory index is in your ` +
+                `prompt every turn, so this is how you remember across days.\n` +
+                `Save when the user tells you something durable: what to call them, how they like their work ` +
+                `explained, a correction you must not repeat, what their project is really for. Do NOT save ` +
+                `what is only true right now (what a variable holds, what you were just doing), and never save ` +
+                `a password, key or other secret.\n` +
+                `\`name\` is the handle — a few words, e.g. "what to call the user". **The same name overwrites ` +
+                `that memory**, so reuse the name when a fact changes instead of inventing a near-duplicate; ` +
+                `check the index in your prompt first.\n` +
+                `\`description\` is what you will actually see next time: one line saying what this memory ` +
+                `holds, worded so you can tell whether to read it.\n` +
+                `\`body\` is the fact itself, in the user's language, complete enough to be useful on its own ` +
+                `(it is the only part not shown to you automatically — read it back with xce_read_memory).\n` +
+                `\`type\` is one of: user (who they are, what they prefer), feedback (how you should work), ` +
+                `project (what they are building), reference (where something lives).\n` +
+                `The editor keeps at most ${MEMORY_LIMITS.max} memories: when it is full you get an error ` +
+                `— overwrite an existing one or delete one instead of piling up duplicates.`,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {
+                        type: 'string',
+                        description: 'Short handle for this fact (same name = update that memory).'
+                    },
+                    description: {
+                        type: 'string',
+                        description: 'One line saying what this memory holds — this is all you see later.'
+                    },
+                    type: {
+                        type: 'string',
+                        enum: MEMORY_TYPES.map(kind => kind.value),
+                        description: 'Which kind of fact this is.'
+                    },
+                    body: {
+                        type: 'string',
+                        description: 'The fact itself, in the user\'s language. Stamping a date ' +
+                            '(e.g. 2026-10-05) is a good habit — later reads can tell how fresh it is — ' +
+                            'but a suggestion, not a rule.'
+                    }
+                },
+                required: ['name', 'description', 'type', 'body']
+            },
+            handler: ({name, description, type, body}) => {
+                const result = saveMemory({name, description, type, body});
+                if (!result.memory) {
+                    if (result.error && result.error.includes('memories')) {
+                        return fail(
+                            `Your memory store is full (${MEMORY_LIMITS.max}). Read the index in your prompt, ` +
+                            'then overwrite one with xce_save_memory under its own name, or drop one with ' +
+                            'xce_delete_memory — do not save a near-duplicate.'
+                        );
+                    }
+                    return fail('A memory needs a name.');
+                }
+                const verb = result.created ? 'Saved a new memory' : 'Updated the memory';
+                const clipped = result.clipped && result.clipped.length ?
+                    ` (${result.clipped.join(' and ')} was longer than the limit and got shortened)` : '';
+                return ok(`${verb} named "${result.memory.name}" (type: ${result.memory.type})${clipped}. ` +
+                    'It shows up in your memory index from the next turn on.');
+            }
+        },
+
+        {
+            name: 'xce_read_memory',
+            description:
+                'Read one saved memory in full, by name. Your prompt carries the memory index — names and ' +
+                'one-line descriptions only — so call this when one of them matters for the work in front of ' +
+                'you and the description is not enough. Nothing here is needed to use the editor: skip it ' +
+                'when the description already tells you what you need.',
+            readOnly: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {type: 'string', description: 'Name of the memory, as it appears in the index.'}
+                },
+                required: ['name']
+            },
+            handler: ({name}) => {
+                const memory = findMemory(name);
+                if (!memory) {
+                    const known = memoryIndexText();
+                    const hint = known ? ` What you have:\n${known}` : ' You have no memories saved yet.';
+                    return fail(`No memory named "${name}".${hint}`);
+                }
+                return ok(`# ${memory.name} (${memory.type})\n${memory.description}\n\n${memory.body}`);
+            }
+        },
+
+        {
+            name: 'xce_delete_memory',
+            description:
+                'Delete one saved memory by name. Do it when the user says the memory is wrong or no longer ' +
+                'true, or when two memories say the same thing. If the fact CHANGED rather than stopped being ' +
+                'true, overwrite it with xce_save_memory under the same name instead of deleting and re-adding.',
+            destructive: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {type: 'string', description: 'Name of the memory to delete.'}
+                },
+                required: ['name']
+            },
+            handler: ({name}) => {
+                const memory = findMemory(name);
+                if (!memory) {
+                    const known = memoryIndexText();
+                    const hint = known ? ` What you have:\n${known}` : ' You have no memories saved yet.';
+                    return fail(`No memory named "${name}"; nothing was deleted.${hint}`);
+                }
+                deleteMemory(memory.id);
+                return ok(`Deleted the memory "${memory.name}". It is gone from the next turn's index on.`);
+            }
+        },
+
+        {
+            name: 'xce_write_project_memory',
+            description:
+                'Save ONE project-level memory — a named fact that belongs to THIS project, not to you ' +
+                'personally: how its login works, its naming conventions, what its controls do, what is ' +
+                'still TODO. Unlike your personal memory (xce_save_memory) it rides inside the project ' +
+                `file itself, so anyone opening this project's AI gets it.\n` +
+                `Mechanics, handled for you: the fact becomes one comment in 「${MEMORY_CONTENT_SPRITE}」 ` +
+                '(full text), and a one-line summary "- name — description" lands in the ' +
+                `「${MEMORY_INDEX_SPRITE}」 comment whose index reaches you in the system prompt every ` +
+                'turn. The reserved sprites are created automatically on the first save.\n' +
+                '**The same name overwrites that memory** — check the index in your prompt first and reuse ' +
+                'names instead of piling up near-duplicates. Write the body in the user\'s language, ' +
+                'complete enough to stand on its own; never store secrets.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {
+                        type: 'string',
+                        description: 'Short handle for this fact (same name = update that memory).'
+                    },
+                    description: {
+                        type: 'string',
+                        description: 'One-line summary for the index — worded so you can later tell ' +
+                            'whether to read the full text.'
+                    },
+                    body: {
+                        type: 'string',
+                        description: 'The fact itself, in the user\'s language. Stamping a date ' +
+                            '(e.g. 2026-10-05) is a good habit — later reads can tell how fresh it is — ' +
+                            'but a suggestion, not a rule.'
+                    }
+                },
+                required: ['name', 'description', 'body']
+            },
+            handler: async ({name, description, body}) => {
+                const made = await port.writeProjectMemory({name, description, body});
+                if (!made.ok) {
+                    if (made.reason === 'no-name') return fail('A memory needs a name.');
+                    if (made.reason === 'empty') {
+                        return fail('The memory body is empty — write the actual fact, not just the summary.');
+                    }
+                    return fail('Could not write the project memory.');
+                }
+                const head = made.created ? 'Saved a new project memory' : 'Updated the project memory';
+                const spritesNote = made.createdSprites.length ?
+                    ` (this also created the reserved sprite${made.createdSprites.length === 1 ? '' : 's'} ` +
+                    `${made.createdSprites.map(spriteName => `「${spriteName}」`).join(' and ')})` : '';
+                return {
+                    content: `${head} "${name}"${spritesNote}. Its summary is in the index comment that ` +
+                        'reaches you every turn; read the full text back with xce_read_project_memory.',
+                    undo: {
+                        kind: 'memory',
+                        phase: 'write',
+                        name,
+                        commentId: made.commentId,
+                        createdSprites: made.createdSprites,
+                        prevContent: made.prevContent,
+                        prevIndex: made.prevIndex
+                    }
+                };
+            }
+        },
+
+        {
+            name: 'xce_read_project_memory',
+            description:
+                'Read one project-level memory in full, by name — the index in your prompt only carries ' +
+                'names and one-line summaries. Skip it when the summary already tells you what you need.',
+            readOnly: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {type: 'string', description: 'Name of the memory, as it appears in the index.'}
+                },
+                required: ['name']
+            },
+            handler: ({name}) => {
+                const made = port.readProjectMemory(name);
+                if (!made.ok) {
+                    const index = port.readMemoryIndex();
+                    const hint = index ? ` What this project remembers:\n${index}` :
+                        ' This project has no memories yet.';
+                    return fail(`No project memory named "${name}".${hint}`);
+                }
+                return ok(`# ${name}\n${made.text}`);
+            }
+        },
+
+        {
+            name: 'xce_delete_project_memory',
+            description:
+                'Delete one project-level memory by name — when the user says it is wrong or no longer ' +
+                'true, or two entries say the same thing. If the fact CHANGED rather than stopped being ' +
+                'true, overwrite it with xce_write_project_memory under the same name instead.',
+            destructive: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {type: 'string', description: 'Name of the memory to delete.'}
+                },
+                required: ['name']
+            },
+            handler: ({name}) => {
+                const made = port.deleteProjectMemory(name);
+                if (!made.ok) {
+                    const index = port.readMemoryIndex();
+                    const hint = index ? ` What this project remembers:\n${index}` :
+                        ' This project has no memories yet.';
+                    return fail(`No project memory named "${name}"; nothing was deleted.${hint}`);
+                }
+                return {
+                    content: `Deleted the project memory "${name}". Its line is gone from the index ` +
+                        'from the next turn on.',
+                    undo: {
+                        kind: 'memory',
+                        phase: 'delete',
+                        name,
+                        entry: made.entry,
+                        prevIndex: made.prevIndex
+                    }
                 };
             }
         },
@@ -642,6 +1382,54 @@ export const createTools = ({port, skills = []}) => {
         },
 
         {
+            name: 'xce_read_env',
+            description:
+                'Where this editor is running, and the machine around it: which build (the desktop client or ' +
+                'the web page), operating system, app or browser version, window size, whether the user is on ' +
+                'a touch screen, and the interface language.\n' +
+                'The system prompt only says which of the two builds this is. Call this when the difference ' +
+                'actually matters for what you are about to say or write — for example before you tell the ' +
+                'user how to open a file, or when a layout has to work in a small window.\n' +
+                'It says nothing about the project; use xce_list_sprites for that.',
+            readOnly: true,
+            inputSchema: {type: 'object', properties: {}},
+            handler: () => {
+                const nav = typeof navigator === 'undefined' ? null : navigator;
+                const win = typeof window === 'undefined' ? null : window;
+                const ua = (nav && nav.userAgent) || '';
+                const desktop = isDesktopMode();
+                const lines = [`Runtime: ${desktop ?
+                    'XCE Desktop — the installed desktop client (an Electron app in its own window), not a ' +
+                        'browser page. Reading a web page with xce_read_online is done by the app itself, so ' +
+                        'cross-origin rules do not apply.' :
+                    'the web version of XCE, running inside a browser page. Reading a web page with ' +
+                        'xce_read_online is done from the page, so most sites block it (CORS).'}`];
+                const os = osFromUserAgent(ua);
+                if (os) lines.push(`Operating system: ${os}`);
+                const engine = engineFromUserAgent(ua);
+                if (engine) lines.push(`Browser or app engine: ${engine}`);
+                if (win && win.innerWidth) {
+                    lines.push(`Window: ${win.innerWidth}x${win.innerHeight} CSS pixels` +
+                        `, device pixel ratio ${win.devicePixelRatio || 1}`);
+                }
+                if (typeof screen !== 'undefined' && screen.width) {
+                    lines.push(`Screen: ${screen.width}x${screen.height} CSS pixels`);
+                }
+                if (win && typeof win.matchMedia === 'function') {
+                    const coarse = win.matchMedia('(pointer: coarse)').matches;
+                    lines.push(`Touch input: ${coarse ?
+                        'yes — a finger is the main pointer, so this is probably a phone or a tablet' :
+                        'no — a mouse or a trackpad'}`);
+                }
+                if (nav && nav.language) lines.push(`Interface language: ${nav.language}`);
+                lines.push('[Note] This is a snapshot taken now; the window size can change later. When the ' +
+                    'runtime is the desktop client, do not tell the user to do things in a browser — they are ' +
+                    'already in the app.');
+                return ok(lines.join('\n'));
+            }
+        },
+
+        {
             name: 'xce_time',
             description:
                 'Wait a number of seconds, then continue — for the cases where something really does need ' +
@@ -689,6 +1477,99 @@ export const createTools = ({port, skills = []}) => {
                     );
                 }
                 return ok(`Waited about ${total}s.${clamped}`);
+            }
+        },
+
+        {
+            name: 'xce_ask_user',
+            description:
+                'Put a question to the user and wait for their answer; the answer comes back as this tool\'s ' +
+                'result, so the turn carries on by itself.\n' +
+                'Use it when you genuinely need a decision before you can continue and the answer is a ' +
+                'choice — which of two designs, a name for something, whether to remove work. Do not use it ' +
+                'to make conversation, and do not ask for permission to do what you were already asked to ' +
+                'do: keep going unless you are actually stuck.\n' +
+                'The editor enforces these: 1 to 4 questions per call, each with 2 to 4 options; a "write my ' +
+                'own answer" box is added by the editor, so never add an option for that. Put the option you ' +
+                'recommend FIRST and end its label with the user\'s word for "recommended" (in Chinese: ' +
+                '（推荐）) — the editor adds no marker of its own.\n' +
+                'Write the question, the header and every label in the user\'s language, in words a 10-15 ' +
+                'year old reads easily.\n' +
+                'If the user stops the turn or dismisses the question instead of answering, the result says ' +
+                'so: finish what you can, say plainly what is still unknown, and do not ask it again. The ' +
+                'question also closes by itself when no reply comes for a couple of minutes, so an ask is ' +
+                'not a way to pause for a long time.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    questions: {
+                        type: 'array',
+                        description: `One to ${ASK_LIMITS.questions.max} questions.`,
+                        items: {
+                            type: 'object',
+                            properties: {
+                                question: {
+                                    type: 'string',
+                                    description: 'The question itself, one sentence, in the user\'s language.'
+                                },
+                                header: {
+                                    type: 'string',
+                                    description: 'Very short label (max 12 characters) shown as a chip above ' +
+                                        'the question.'
+                                },
+                                multiSelect: {
+                                    type: 'boolean',
+                                    description: 'Let the user pick more than one option. Default false.'
+                                },
+                                options: {
+                                    type: 'array',
+                                    description: `The ${ASK_LIMITS.options.min} to ${ASK_LIMITS.options.max} ` +
+                                        'answers to choose between, the recommended one first.',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            label: {
+                                                type: 'string',
+                                                description: 'The answer itself (1-5 words).'
+                                            },
+                                            description: {
+                                                type: 'string',
+                                                description: 'One sentence on what this choice means.'
+                                            }
+                                        },
+                                        required: ['label']
+                                    }
+                                }
+                            },
+                            required: ['question', 'options']
+                        }
+                    }
+                },
+                required: ['questions']
+            },
+            validate: input => {
+                if (normalizeQuestions(input && input.questions).length) return null;
+                return 'questions must be an array of 1-4 items, and every item needs a "question" string ' +
+                    'plus an "options" array of 2-4 objects shaped {label, description}. Nothing usable was ' +
+                    'passed, so the user was not asked anything.';
+            },
+            handler: async ({questions}, ctx = {}) => {
+                const list = normalizeQuestions(questions);
+                if (typeof ctx.ask !== 'function') {
+                    return fail('This environment cannot put a question to the user. Ask in your reply ' +
+                        'instead: write the question out and say which option you recommend.');
+                }
+                const answers = await ctx.ask(list);
+                if (!answers) {
+                    return ok('The user did not answer — the turn was stopped, the question was dismissed, ' +
+                        'or a couple of minutes went by with no reply. Do not ask it again: finish what you can, ' +
+                        'and say plainly what is still unknown.');
+                }
+                const lines = list.map((entry, index) => {
+                    const answer = String(answers[index] || '').trim() || '(no answer)';
+                    return `${index + 1}. ${entry.question}\n   The user chose: ${answer}`;
+                });
+                return ok(`The user answered:\n${lines.join('\n')}`);
             }
         },
 

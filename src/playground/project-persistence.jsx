@@ -168,6 +168,13 @@ const ProjectPersistence = ({vm, projectId, isPlayerOnly, isShowingProject, load
         }
     }, [loadingState, isShowingProject, isPlayerOnly, projectId, vm]);
 
+    // 提示条 3 秒后自动收起，别一直挂着碍事
+    useEffect(() => {
+        if (!banner) return;
+        const timer = setTimeout(() => setBanner(null), 3000);
+        return () => clearTimeout(timer);
+    }, [banner]);
+
     if (!banner) return null;
     const handleDiscard = () => {
         clearSnapshot();

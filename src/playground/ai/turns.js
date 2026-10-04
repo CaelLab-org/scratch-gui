@@ -31,6 +31,7 @@ const isWorkItem = item => item.kind === 'tool' || (item.kind === 'agent' && !!i
  * 把一个工具留下的 undo 句柄读成规范化动作：
  *   {kind: 'add', sprite, topBlockIds, added}   这次往某个角色里写了几块
  *   {kind: 'del', sprite, topBlockId, blocks, removed}  这次删掉了某个角色的哪段
+ *   {kind: 'edit', sprite, blocks, topBlockIds, added, removed}  这次把某段脚本替换成了新的
  * 旧对话里 undo 是裸的顶块 id 数组（那时只能撤销写入）—— 补成 add，只是数不出块数（added 为 null）。
  * @param {object} item 一条条目（工具行）
  * @returns {object|null} 没有句柄（没改过积木的工具）就返回 null
@@ -57,15 +58,26 @@ export const summarizeChanges = items => {
     for (const action of items.map(undoActionOf)) {
         if (!action || !action.sprite) continue;
         const entry = bySprite.get(action.sprite) ||
-            {sprite: action.sprite, added: 0, removed: 0, sprites: 0, costumes: 0, known: true};
+            {sprite: action.sprite, added: 0, removed: 0, sprites: 0, costumes: 0, notes: 0, known: true};
         if (action.kind === 'sprite') {
             // 新建角色：这条手柄的数就是「多了一个角色」，名字就是新角色的名字
             entry.sprites += 1;
         } else if (action.kind === 'costume') {
             entry.costumes += 1;
+        } else if (action.kind === 'note') {
+            // 写注释：Scratch 原生注释（xce_note），数量上跟造型同理
+            entry.notes += 1;
         } else if (action.kind === 'del') {
             if (typeof action.removed === 'number') entry.removed += action.removed;
             else entry.known = false;
+        } else if (action.kind === 'edit') {
+            // 替换 = 同一段脚本上删旧 + 写新，两边数字都算
+            if (typeof action.added === 'number' && typeof action.removed === 'number') {
+                entry.added += action.added;
+                entry.removed += action.removed;
+            } else {
+                entry.known = false;
+            }
         } else if (typeof action.added === 'number') {
             entry.added += action.added;
         } else {
@@ -75,8 +87,31 @@ export const summarizeChanges = items => {
     }
     return [...bySprite.values()]
         .filter(entry => entry.known &&
-            (entry.added || entry.removed || entry.sprites || entry.costumes))
-        .map(({sprite, added, removed, sprites, costumes}) => ({sprite, added, removed, sprites, costumes}));
+            (entry.added || entry.removed || entry.sprites || entry.costumes || entry.notes))
+        .map(({sprite, added, removed, sprites, costumes, notes}) =>
+            ({sprite, added, removed, sprites, costumes, notes}));
+};
+/**
+ * 一轮的用量汇总：把这一轮里各条 AI 回复（含中间的工具调用步）带回来的 usage 加起来。
+ * cachedTokens 只要有一个请求没报（null），整轮就按「未知」处理 —— 别拿半截数据算命中率。
+ * @param {Array<object>} items 这轮的全部条目
+ * @returns {object|null} {requests, prompt, completion, cached, cachedKnown, durationMs}；一条 usage 都没有就是 null
+ */
+export const summarizeTurnUsage = items => {
+    let usage = null;
+    for (const item of items) {
+        if (!item.usage) continue;
+        if (!usage) {
+            usage = {requests: 0, prompt: 0, completion: 0, cached: 0, cachedKnown: true, durationMs: 0};
+        }
+        usage.requests += 1;
+        usage.prompt += item.usage.promptTokens || 0;
+        usage.completion += item.usage.completionTokens || 0;
+        usage.durationMs += item.usage.durationMs || 0;
+        if (typeof item.usage.cachedTokens === 'number') usage.cached += item.usage.cachedTokens;
+        else usage.cachedKnown = false;
+    }
+    return usage;
 };
 
 /**
@@ -84,10 +119,13 @@ export const summarizeChanges = items => {
  * @param {object} opts
  *   now     当前时间戳；只在 active 时用来给「工作中 Ns」计时
  *   active  最后一轮是否还在跑
- * @returns {Array<{key, user, segments, startedAt, endedAt, durationMs, running, hasAnswer, changes}>}
+ * @returns {Array<object>} 每一轮：{key, user, userIndex, endIndex, segments, startedAt,
+ *   endedAt, durationMs, running, hasAnswer, changes, usage}
  *   segments 是**保序**的 `{type: 'work' | 'final', items: []}` 段：
  *   work 段渲染成折叠标题行，final 段原样铺开。
  *   changes 是这一轮的积木变更汇总（见 summarizeChanges），没改动就是空数组。
+ *   userIndex = 这轮提问在 items 里的下标；endIndex = 这轮最后一条 item 的下标 +1
+ *   （两者配合 `itemsBeforeTurn` / `itemsUpToTurn` 做「改这一轮」与「分叉到这一轮为止」）。
  */
 export const buildTurns = (items, {now = 0, active = false} = {}) => {
     const turns = [];
@@ -96,6 +134,8 @@ export const buildTurns = (items, {now = 0, active = false} = {}) => {
         turn = {
             key: turns.length,
             user: null,
+            userIndex: null,
+            endIndex: null,
             segments: [],
             startedAt: null,
             endedAt: null,
@@ -105,10 +145,12 @@ export const buildTurns = (items, {now = 0, active = false} = {}) => {
         turns.push(turn);
     };
 
-    for (const item of items) {
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         if (item.kind === 'user') {
             start();
             turn.user = item;
+            turn.userIndex = i;
             if (typeof item.at === 'number') turn.startedAt = item.at;
             continue;
         }
@@ -120,6 +162,12 @@ export const buildTurns = (items, {now = 0, active = false} = {}) => {
         else turn.segments.push({type, items: [item]});
         if (typeof item.at === 'number') turn.endedAt = item.at;
     }
+    // 每轮的结束位置 = 下一条提问开始之前（最后一轮到数组末尾）。
+    // 注意特例：只有第一轮可能 userIndex 为 null（旧数据开头就没有用户消息），
+    // 其余每轮都由一条用户消息开场，所以拿「下一轮的 userIndex」当切点总是对的。
+    for (let i = 0; i < turns.length; i++) {
+        turns[i].endIndex = i + 1 < turns.length ? turns[i + 1].userIndex : items.length;
+    }
 
     for (const entry of turns) {
         if (entry.startedAt && entry.endedAt) {
@@ -129,6 +177,7 @@ export const buildTurns = (items, {now = 0, active = false} = {}) => {
         entry.hasAnswer = entry.segments.some(segment =>
             segment.type === 'final' && segment.items.some(it => it.kind === 'agent' && it.text));
         entry.changes = summarizeChanges(entry.segments.reduce((all, segment) => all.concat(segment.items), []));
+        entry.usage = summarizeTurnUsage(entry.segments.reduce((all, segment) => all.concat(segment.items), []));
     }
 
     // 正在跑的那一轮：耗时跟着当前时间走，否则「工作中」会停在上一轮的数字上
@@ -139,3 +188,22 @@ export const buildTurns = (items, {now = 0, active = false} = {}) => {
     }
     return turns;
 };
+
+/**
+ * 「改这一轮说了什么」要丢掉的条目：这一轮的提问**连同**它后面的一切（AI 的回复、工具行、
+ * 变更摘要都跟着走）—— 与 `session.js` 的 `messagesBefore` 一起用，两边切在同一个位置。
+ * @param {Array} items 面板的 items
+ * @param {object} turn buildTurns 出来的一轮
+ * @returns {Array} 截断后的副本
+ */
+export const itemsBeforeTurn = (items, turn) =>
+    (turn && typeof turn.userIndex === 'number' ? items.slice(0, turn.userIndex) : items.slice());
+
+/**
+ * 「从这一轮分叉」要留下的条目：这一轮**干完为止**（含这一轮的回复），下一条提问之后不要。
+ * @param {Array} items 面板的 items
+ * @param {object} turn buildTurns 出来的一轮
+ * @returns {Array} 截断后的副本
+ */
+export const itemsUpToTurn = (items, turn) =>
+    (turn && typeof turn.endIndex === 'number' ? items.slice(0, turn.endIndex) : items.slice());

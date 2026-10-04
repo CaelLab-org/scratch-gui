@@ -154,12 +154,17 @@ const readTextInBrowser = async (target, {timeoutMs, signal}) => {
         if (aborted) throw new Error(`Fetch timed out (no response within ${timeoutMs / 1000}s).`);
         if (/^HTTP \d+$/.test(fetchError.message)) throw fetchError;
         // TypeError + "Failed to fetch" 就是 CORS 拒读（或断网/拒连）——这是浏览器安全模型，
-        // 代码绕不过。但「读不到」不等于「答不了」：让模型换别的路子，别一失败就把用户支走。
+        // 代码绕不过。「读不到」不等于「答不了」：让模型先换路子；页面确实是用户要的时，
+        // 可以顺口提一句桌面端没这限制（就事论事，别写成推销）。
         throw new Error(
             `Could not fetch this page (${fetchError.message}). The usual cause is CORS: the site does not ` +
-            `declare that other sites may read it, so the browser blocks the response. Do not stop here — ` +
-            `try another URL, or fall back on what you already know and say that is where it came from. ` +
-            `Mention in one line that this page could not be read; never invent page content from memory.`);
+            `declare that other sites may read it, so the browser blocks the response — on the web this ` +
+            `happens a lot, and it is not something you or the user did wrong. You can try another URL, or ` +
+            `answer from what you already know and say where it came from. If a page like this is genuinely ` +
+            `what the user needs, it is fine to mention once, in plain words, that the desktop app fetches ` +
+            `pages itself and has no such browser restriction (engine.xmuer.online/engine) — state it as a ` +
+            `fact if it is relevant, do not turn it into a sales pitch. Never present remembered content as ` +
+            `if it came from the page.`);
     }
 };
 

@@ -18,14 +18,16 @@
 
 import {authHeaders, describeHttpError, isLocalBaseUrl, sseDataLines, toolParameters} from './wire.js';
 
-// 上下文计量按「发出去多少」算，缓存命中的输入也算进前缀里，否则上下文会越算越小
+// 上下文计量按「发出去多少」算，缓存命中的输入也算进前缀里，否则上下文会越算越小。
+// cache_read 单独攒进 cached_tokens（命中率用）；cache_creation 是往缓存里写的量，算新输入不算命中
 const usageOf = (usage, patch) => {
     if (!patch) return usage;
     const prompt = (patch.input_tokens || 0) + (patch.cache_read_input_tokens || 0) +
         (patch.cache_creation_input_tokens || 0);
     const out = {
         prompt_tokens: (usage ? usage.prompt_tokens : 0) + prompt,
-        completion_tokens: patch.output_tokens || (usage ? usage.completion_tokens : 0)
+        completion_tokens: patch.output_tokens || (usage ? usage.completion_tokens : 0),
+        cached_tokens: ((usage && usage.cached_tokens) || 0) + (patch.cache_read_input_tokens || 0)
     };
     out.total_tokens = out.prompt_tokens + out.completion_tokens;
     return out;
@@ -195,6 +197,8 @@ export const createAnthropicModel = (
 
         async complete (messages, tools, {signal, onChunk = () => {}} = {}) {
             if (!apiKey && !isLocalBaseUrl(baseUrl)) throw new Error('没填 API 密钥');
+            // 掐表给 tok/s 用：从发请求到流读完（算上网络，是「体验速度」不是纯解码速度）
+            const startedAt = Date.now();
             const requestBody = buildAnthropicBody({
                 model: modelId,
                 messages,
@@ -326,7 +330,8 @@ export const createAnthropicModel = (
                 toolCalls,
                 finishReason,
                 usage,
-                stopped
+                stopped,
+                durationMs: Date.now() - startedAt
             };
         }
     };

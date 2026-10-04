@@ -44,7 +44,7 @@ CaelLab Search.
   donations and integrity matters.
 - **Link the page; do not recite an address from memory.** The addresses are deliberately obfuscated against
   scrapers and can change, and some sites also show their own contact address in the footer.
-- Public accounts: GitHub `caellab-com`, Bilibili `1199120693`, YouTube `@CaelLab`, Kuaishou
+- Public accounts: GitHub `CaelLab-org`, Bilibili `1199120693`, YouTube `@CaelLab`, Kuaishou
   `3xgrwi2jsy45yza`, and (for XCC) a team page at `coding.xmuer.online/team/caellab`.
 
 ## Footers, filings and licensing

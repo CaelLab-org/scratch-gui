@@ -42,6 +42,12 @@ const resolveMenuValue = display => (display in menuValues ? menuValues[display]
 // 正向：文本 -> sb3 blocks
 // ---------------------------------------------------------------------------
 
+// 一段脚本前的标注行，格式是 `:: script <顶块id> (N blocks)`。
+// 顶块 id 在项目里本来就存在（sb3 块 id），这里只是把它暴露出来 —— xce_edit_script /
+// xce_delete_script 靠它精确定位一段脚本，模型不用再靠「猜文本」指认。
+// 注释块同样带标注（`:: note <id>`，读取时列在积木文本后面），写回来时一并剥掉。
+const SCRIPT_HEADER = /^\s*::\s*(?:script|note)\s/;
+
 /**
  * 文本 -> sb3 形态的积木
  * @param {string} text scratchblocks 文本
@@ -49,6 +55,11 @@ const resolveMenuValue = display => (display in menuValues ? menuValues[display]
  * @returns {{blocks: object, topLevelIds: string[], variables: object, lists: object, warnings: string[]}} 转换结果与警告
  */
 export const textToBlocks = (text, ctx = {}) => {
+    // 读回来的文本每段脚本前带一行 `:: script <id>` 标注（注释区带 `:: note <id>`）；
+    // 模型照抄整段（含标注行）写回来是常见动作，解析前先把标注行摘掉，别让它变成解析错误。
+    const cleaned = String(text).split('\n')
+        .filter(line => !SCRIPT_HEADER.test(line))
+        .join('\n');
     const variables = {...(ctx.variables || {})};
     const lists = {...(ctx.lists || {})};
     const blocks = {};
@@ -284,7 +295,7 @@ export const textToBlocks = (text, ctx = {}) => {
         return id;
     };
 
-    const doc = parseScratchblocks(text, {languages: ['en']});
+    const doc = parseScratchblocks(cleaned, {languages: ['en']});
     let column = 0;
     for (const script of doc.scripts) {
         if (!script.blocks.length) continue;
@@ -313,6 +324,23 @@ export const textToBlocks = (text, ctx = {}) => {
 // 反向：sb3 blocks -> 文本
 // ---------------------------------------------------------------------------
 
+// 数一段脚本的可见块数：顶块沿 next 链 + 输入槽里的报告块（字面量 / 影子菜单不算）
+const countScriptBlocks = (topId, blocks) => {
+    let count = 0;
+    const walk = id => {
+        if (!id || typeof id !== 'string' || !blocks[id]) return;
+        count += 1;
+        const block = blocks[id];
+        walk(block.next);
+        for (const input of Object.values(block.inputs || {})) {
+            // [形态, 块id|字面量, 影子?]，字面量是数组不是字符串 id
+            if (Array.isArray(input)) walk(input[1]);
+        }
+    };
+    walk(topId);
+    return count;
+};
+
 // 一个目标（精灵/舞台）的全部脚本 -> 文本
 export const targetBlocksToText = target => {
     const blocks = target.blocks || {};
@@ -321,7 +349,9 @@ export const targetBlocksToText = target => {
     const warnings = [];
     for (const id of topIds) {
         try {
-            parts.push(psb.toScratchblocks(id, blocks, 'en', {tab: '  '}));
+            const text = psb.toScratchblocks(id, blocks, 'en', {tab: '  '});
+            const count = countScriptBlocks(id, blocks);
+            parts.push(`:: script ${id} (${count} block${count === 1 ? '' : 's'})\n${text}`);
         } catch (e) {
             warnings.push(`Failed to render ${id}: ${e && e.message}`);
         }

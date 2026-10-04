@@ -1,7 +1,10 @@
 // turns.js 的无头自测：分轮、工作段切分、时长写法、本轮变更汇总
 // 用法：node src/playground/ai/turns.test.mjs
 /* eslint-disable no-console */
-import {buildTurns, formatWorkDuration, summarizeChanges, undoActionOf} from './turns.js';
+import {
+    buildTurns, formatWorkDuration, summarizeChanges, summarizeTurnUsage,
+    undoActionOf, itemsBeforeTurn, itemsUpToTurn
+} from './turns.js';
 
 let failed = 0;
 const check = (name, ok, extra = '') => {
@@ -125,6 +128,19 @@ check('没改积木的轮次没有变更行', summarizeChanges([
     {kind: 'tool', id: 'r2', name: 'xce_read_project', status: 'done'}
 ]).length === 0);
 
+// 替换脚本 = 同一段上「删旧 + 写新」，两边数字都进「本轮变更」
+const editSummary = summarizeChanges([
+    {
+        kind: 'tool',
+        id: 'e1',
+        name: 'xce_edit_script',
+        sprite: '角色3',
+        undo: {kind: 'edit', sprite: '角色3', blocks: {}, topBlockIds: ['n'], added: 3, removed: 2}
+    }
+]);
+check('替换脚本记 +3 / -2', editSummary.length === 1 && editSummary[0].sprite === '角色3' &&
+    editSummary[0].added === 3 && editSummary[0].removed === 2, JSON.stringify(editSummary[0]));
+
 // 新建角色 / 加造型也要进「本轮变更」那一行（它们同样是这轮对项目的改动）
 const drawingSummary = summarizeChanges([
     {kind: 'tool', id: 's1', name: 'xce_add_sprite', sprite: 'Ball', undo: {kind: 'sprite', sprite: 'Ball'}},
@@ -181,6 +197,83 @@ const grouped = buildTurns([
 ]);
 check('变更挂在自己的轮上', grouped[0].changes.length === 1 && grouped[0].changes[0].added === 5 &&
     grouped[1].changes.length === 0, `${grouped[0].changes.length}/${grouped[1].changes.length}`);
+
+// ---------------------------------------------------------------- 改这一轮 / 分叉的切点
+check('每轮记下自己在 items 里的区间',
+    turns[0].userIndex === 0 && turns[0].endIndex === 6 &&
+    turns[1].userIndex === 6 && turns[1].endIndex === 8,
+    `${turns[0].userIndex}-${turns[0].endIndex} / ${turns[1].userIndex}-${turns[1].endIndex}`);
+
+// 改这一轮：这一轮的提问**连同**它后面的回复一起丢掉（AI 的回复、工具行都跟着走）
+check('改第一轮 → 一条不剩', itemsBeforeTurn(items, turns[0]).length === 0);
+check('改第二轮 → 只剩第一轮那 6 条', itemsBeforeTurn(items, turns[1]).length === 6);
+
+// 分叉：保留这一轮**干完为止**的内容，下一轮提问之后不要
+check('从第一轮分叉 → 留 6 条', itemsUpToTurn(items, turns[0]).length === 6);
+check('从第二轮分叉 → 全部留下', itemsUpToTurn(items, turns[1]).length === items.length);
+check('切点算出来的内容是对的',
+    itemsUpToTurn(items, turns[0])[5].text === '搞定了，变量 x 已就位。');
+
+// 刚发出提问、模型一个字还没回：这一轮就是那一条提问，两种切法都不该越界
+const justAsked = buildTurns([{kind: 'user', text: '在吗', at: T0, id: 'u1'}], {now: T0, active: true});
+check('问答都还没开始的轮也能算区间',
+    justAsked[0].userIndex === 0 && justAsked[0].endIndex === 1 &&
+    itemsBeforeTurn([{kind: 'user', text: '在吗', id: 'u1'}], justAsked[0]).length === 0);
+// 旧数据开头没有用户消息：第一轮 userIndex 是 null，切点要落在这轮结束处
+const legacyItems = [{kind: 'agent', text: '老对话'}, {kind: 'user', text: '新问题', id: 'u2'}];
+const legacyTurn = buildTurns(legacyItems);
+check('旧数据那轮也能切', legacyTurn[0].userIndex === null && legacyTurn[0].endIndex === 1 &&
+    itemsUpToTurn(legacyItems, legacyTurn[0]).length === 1);
+
+// 注释也是这一轮的改动（xce_note 的 undo 句柄）
+const noteSummary = summarizeChanges([
+    {
+        kind: 'tool',
+        id: 'n1',
+        name: 'xce_note',
+        sprite: '角色1',
+        undo: {kind: 'note', sprite: '角色1', commentId: 'note-1'}
+    }
+]);
+check('写注释进变更行', noteSummary.length === 1 && noteSummary[0].notes === 1,
+    JSON.stringify(noteSummary[0]));
+
+// ---------------------------------------------------------------- 回合用量汇总
+check('没有 usage 的条目汇总成 null',
+    summarizeTurnUsage([{kind: 'agent', text: 'x'}, {kind: 'user', text: 'y'}]) === null);
+const usageTurns = buildTurns([
+    {kind: 'user', text: '干活', at: T0, id: 'u9'},
+    // 中间的工具调用步 + 收尾答复：两个请求的 usage 都要加起来
+    {
+        kind: 'agent',
+        text: '',
+        hasTools: true,
+        at: T0 + 1000,
+        usage: {promptTokens: 1000, completionTokens: 50, cachedTokens: 800, durationMs: 1200}
+    },
+    {kind: 'tool', id: 't9', name: 'xce_list_sprites', status: 'done', at: T0 + 1100},
+    {
+        kind: 'agent',
+        text: '好了',
+        at: T0 + 2000,
+        usage: {promptTokens: 1400, completionTokens: 106, cachedTokens: 900, durationMs: 800}
+    }
+]);
+const usage1 = usageTurns[0].usage;
+check('一轮的 usage 跨请求累加',
+    usage1.requests === 2 && usage1.prompt === 2400 && usage1.completion === 156 &&
+    usage1.cached === 1700 && usage1.durationMs === 2000 && usage1.cachedKnown === true,
+    JSON.stringify(usage1));
+const unknownCached = summarizeTurnUsage([
+    {
+        kind: 'agent',
+        text: 'x',
+        usage: {promptTokens: 500, completionTokens: 10, cachedTokens: null, durationMs: 100}
+    }
+]);
+check('缓存字段没报就按「未知」处理，别当 0 算命中率',
+    unknownCached.prompt === 500 && unknownCached.cached === 0 && unknownCached.cachedKnown === false,
+    JSON.stringify(unknownCached));
 
 if (failed) {
     console.log(`\n❌ ${failed} 项没过`);

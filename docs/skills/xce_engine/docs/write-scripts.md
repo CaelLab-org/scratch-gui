@@ -50,5 +50,12 @@ ids — the UI offers the user an undo for the whole call.
 - Blocks from an extension the project has not loaded. The error names the extensions; tell the user
   to add them via 添加扩展 (bottom-left), then retry. Never claim you can load extensions yourself.
 - Custom blocks (`define ...` and calls to them) and `stop [this script v]`. Offer an alternative instead.
-- Editing or removing existing scripts — `xce_write_script` appends only. To change behaviour, the
-  user decides whether to delete a script (`xce_delete_script`) and re-add it.
+
+## Changing or removing an existing script
+
+`xce_write_script` appends only. When the fix is to change a script that is already there, use
+`xce_edit_script` — give it the sprite, the script's top block id, and the replacement text. The id is
+on the `:: script <id> (N blocks)` line that `xce_read_project` prints above each script. If the new
+text fails to parse or needs an unloaded extension, nothing changes: the old script stays exactly as
+it was. For a script that should just go away, `xce_delete_script` takes the same id. Never copy a
+`:: script` line into block text — it is a label, and it is stripped automatically if you do.

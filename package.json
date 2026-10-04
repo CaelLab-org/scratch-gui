@@ -1,13 +1,13 @@
 {
   "name": "scratch-gui",
-  "version": "4.0.4",
+  "version": "4.2.0",
   "description": "XMUER Coding Engine - a Scratch mod for building and running projects, maintained by CaelLab",
   "author": "Massachusetts Institute of Technology",
   "license": "GPL-3.0-only",
-  "homepage": "https://github.com/caellab-com/scratch-gui#readme",
+  "homepage": "https://github.com/CaelLab-org/scratch-gui#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/caellab-com/scratch-gui.git"
+    "url": "https://github.com/CaelLab-org/scratch-gui.git"
   },
   "main": "./dist/scratch-gui.js",
   "scripts": {

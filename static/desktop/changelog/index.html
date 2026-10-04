@@ -220,15 +220,85 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.0.4 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.2.0 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
+                    <h2>4.2.0</h2>
+                    <span class="date">2026-10-05</span>
+                    <span class="latest">最新</span>
+                </header>
+
+                <p>AI 终端这一版补上了「长期陪你用」需要的几块：AI 会记事了、配置能搬走了、对话能导出了，还多了一批更好用的工具。</p>
+
+                <h3>AI 会记事了</h3>
+                <ul>
+                    <li><strong>长期记忆</strong>：跟 AI 说过的偏好、项目背景这类事实，它现在能自己存进记忆、下个会话自己想起来。平时只占一行索引，用到才细读，不白烧 token。</li>
+                    <li><strong>项目级记忆与角色</strong>：项目里放一条 XCEAGENT 注释，AI 打开项目就知道这个项目是谁的、该按什么习惯来；项目自己的备忘（XCEMEMORY）也能存取。</li>
+                    <li><strong>用户自定义技能</strong>：在设置里可以自己写参考文档（skill），AI 和内置技能一样能读到。</li>
+                </ul>
+
+                <h3>配置和对话能搬走了</h3>
+                <ul>
+                    <li><strong>配置导出 / 导入</strong>（<code>.output.xce</code>）：API 密钥、自定义供应商、提示词、记忆、技能一键打包带走，换台机器导入即用（默认包含密钥，也可以勾掉；导出页有明确警示）。</li>
+                    <li><strong>对话记录导出 / 合并导入</strong>（<code>.chat.xce</code>）：单条对话或整个会话库都能导出备份；导入时和本地冲突的记录可以三选一处理，不会把已有的覆盖掉。</li>
+                </ul>
+
+                <h3>工具箱扩了一轮</h3>
+                <ul>
+                    <li><strong>按 id 改脚本</strong>：AI 读出脚本时带编号，可以精确替换、删除某一段，还能撤销（undo 支持编辑操作）。</li>
+                    <li><strong>触发事件</strong>：AI 可以直接拉广播、点绿旗、触发角色点击，不用再教你怎么点。</li>
+                    <li><strong>修改上一轮发言</strong>：说错的话可以改掉重答，改动点之后还能分叉出新对话。</li>
+                    <li><strong>随手笔记（xce_note）</strong>：AI 能往项目里留便签，下次接着干。</li>
+                    <li><strong>提问有超时了</strong>：AI 向你提问（xce_ask_user）60 秒没动静会自动标「超时未回答」，不会干等；你在别的窗口忙它也不会傻卡。</li>
+                </ul>
+
+                <h3>更看得清、叫得回</h3>
+                <ul>
+                    <li><strong>Token 用量统计</strong>：每轮回复脚注显示本次输入（含缓存）/ 输出、生成速度，上下文栏还能看到缓存命中率。</li>
+                    <li><strong>桌面通知</strong>：AI 干完一轮、或者有事要你拿主意时弹系统通知把人叫回来；窗口开着的时候不会烦你。网页版也会在第一次发送时申请通知权限。</li>
+                    <li><strong>舞台后台渲染失败会说明原因</strong>（网页版切到后台标签页时），并提示你可以让 AI 发通知叫你回来。</li>
+                </ul>
+
+                <h3>界面</h3>
+                <ul>
+                    <li>AI 面板大改版：多会话管理、思考默认折叠、往上翻历史时不被强行拉回底部、设置就地可改。</li>
+                    <li>多供应商接入优化，模型协议兼容性修复若干。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
+                    <h2>4.1.0</h2>
+                    <span class="date">2026-10-04</span>
+                </header>
+
+                <h3>品牌定稿：从配色到默认角色都换成自己的</h3>
+                <ul>
+                    <li><strong>默认角色换了</strong>：新建项目里那个角色不再是别人的猫，而是 <strong>XCE 自己的蓝色六边形</strong>（和站标同一个造型），旋转中心也跟着调准了。</li>
+                    <li><strong>强调色全面转品牌蓝</strong>：界面里原来那套紫（选中、拖拽高亮、复选框、菜单栏）统一换成品牌蓝 <code>#2b6fec</code>，红色只留给警告 / 错误 / 停止。</li>
+                    <li>站点图标、PWA 图标、logo 一起换新。</li>
+                </ul>
+
+                <h3>首页和介绍改成「AI 优先」</h3>
+                <ul>
+                    <li>首页大标题从「让 Scratch 作品快如闪电」改成「<strong>AI 积木编程</strong>」，副标题说明这是虚舟实验室旗下、内置 AI 终端的编辑器。</li>
+                    <li>第一张功能卡片从「极致速度」换成「<strong>AI 终端</strong>」—— 对话就能生成和修改积木、绘制造型、读懂你的项目，它直接动手而不只是给建议。</li>
+                    <li>页脚补上虚舟实验室（CaelLab）署名；标签页标题、分享卡片、应用清单里的介绍统一成 AI 优先的说法。</li>
+                </ul>
+
+                <h3>新项目带一个「还没被动过」的标记</h3>
+                <ul>
+                    <li>舞台自带的默认变量改叫 <code>XCE_default_variable</code>（<strong>故意不翻译</strong>）：一眼就能认出这是模板自己的东西、不是你建的。AI 也知道这件事 —— 看到它，说明这个项目还是全新的。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
                     <h2>4.0.4</h2>
                     <span class="date">2026-10-04</span>
-                    <span class="latest">最新</span>
                 </header>
 
                 <h3>AI 现在能自己建角色、自己画造型</h3>
