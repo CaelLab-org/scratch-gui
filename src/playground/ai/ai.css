@@ -1,12 +1,14 @@
 /*
  * AI 终端面板样式。
  *
- * 规则取自 ZCode 的 DESIGN.md 与 dsh 的 web-styling 文档（两个项目实盘在用的那套）：
+ * 规则取自 ZCode 的 DESIGN.md / 真实组件（packages/ui/src/v4/ConversationRowView.tsx、
+ * ConversationComposer.tsx）与 dsh 的 web-styling 文档（两个项目实盘在用的那套）：
  *   - 字号只有 3 档：正文 14/22、次级 13/18、行内代码 12（比正文小一档）
  *   - 间距基数 4px，只用 4 / 8 / 12 / 16
- *   - 颜色层级：文字 3 档、背景 3 档 + 用户消息单独一档、边框 3 档；色相不超过 5 个
+ *   - 颜色层级：文字 3 档、背景 3 档、边框 3 档；色相不超过 5 个
  *   - 圆角按嵌套递减：卡片 8 → 内部 6
- *   - 只有用户消息有底色（ZCode 原话：speaker labels were visually noisy）
+ *   - 会话行的分工：用户消息 = 靠右的描边气泡（带一个小尖角），助手正文 = 不带容器的整幅文字，
+ *     两边都不写 "User / Agent" 标签（ZCode 原话：speaker labels were visually noisy）
  *   - 滚动条必须自己画，否则原生滚动条会跟界面打架
  *   - markdown 必须把语法符藏掉（**、#、反引号不能出现在画面上）
  *
@@ -20,11 +22,14 @@
  * 字体栈照 dsh：代码字体不带裸 monospace 兜底，否则 Windows 上的中文会掉到 SimSun。
  */
 
+@import "../../css/z-index.css";
+
 .ai-root {
     /* 浅色，跟随 XCE 品牌（AGENTS.md「品牌」一节）：页面底色 #f5f6f8、卡片 #ffffff、
        边框 #e4e7ec、主色 #2b6fec / hover #1d5bd6、阴影一律中性 rgba(16,24,40,…) 不许带色。
-       面板是嵌在编辑器里的：菜单栏就是这个 #2b6fec，用户气泡用的是编辑器自己的
-       --ui-primary（#e9f1fc，舞台/角色面板同色），所以贴上去看不出是外挂的。 */
+       面板是嵌在编辑器里的：菜单栏就是这个 #2b6fec；--bg-user 是编辑器自己的
+       --ui-primary（#e9f1fc，舞台/角色面板同色），只给**选中态**用（历史里的当前条、
+       选中的模型行），贴上去看不出是外挂的。 */
     --bg-base: #ffffff;
     --bg-layer1: #f5f6f8;
     --bg-layer2: #eceef2;
@@ -58,7 +63,7 @@
 
 .handle {
     position: fixed;
-    z-index: 900;
+    z-index: $z-index-ai-panel;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -83,7 +88,7 @@
 
 .panel {
     position: fixed;
-    z-index: 900;
+    z-index: $z-index-ai-panel;
     display: flex;
     flex-direction: column;
     /* 停靠矩形是量出来的像素值，边框算在外还是算在内必须确定，否则偏差 1px 就会露出底下的积木 */
@@ -101,10 +106,13 @@
     width: 100% !important;
     height: 100% !important;
     border-right: 0;
+    z-index: $z-index-ai-panel-full;
 }
 
 /* ---------------------------------------------------------------- 头部 */
 
+/* 头部只有状态点和图标按钮，**一个字都不写**（学 ZCode / Codex：面板自己叫什么没必要挂在脸上，
+   而且 310px 宽度里写标题就得跟五个按钮抢地方）。左边那个点=忙闲，右边是全部操作。 */
 .header {
     display: flex;
     align-items: center;
@@ -121,7 +129,8 @@
     flex: 0 0 auto;
     width: 6px;
     height: 6px;
-    margin: 0 4px 0 2px;
+    /* 左边距顶住面板左缘，右边 auto 把按钮组推到右缘 */
+    margin: 0 auto 0 2px;
     border-radius: 50%;
     background: var(--text-3);
 }
@@ -134,16 +143,6 @@
 @keyframes aiPulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.35; }
-}
-
-.title {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-overflow: ellipsis;
 }
 
 .iconBtn {
@@ -672,13 +671,21 @@
     line-height: 18px;
 }
 
-/* 用户消息：整个界面里唯一有底色的一块（ZCode 原话：speaker labels were visually noisy，
-   所以助手那边连标签都没有，只有用户这边靠底色区分） */
+/* 用户消息：照 ZCode 的会话行 —— 靠右、宽度跟着文字走，中性底 + 一条细边框，
+   右上角收成 2px 的小尖角当"尾巴"；助手正文则完全不带容器（ZCode 原话：speaker labels
+   were visually noisy，所以连标签都不画，只靠这一块框 + 靠右来区分谁在说话）。
+   靠右用 `width: fit-content` + `margin-left: auto`，别用 text-align —— 那是给行内文字的，
+   多行时只有最后一行会跟着走。底色只留给选中态（历史当前条 / 选中的模型），跟 ZCode 的
+   `bg-surface`（消息）和 `bg-selected`（选中）是同一个分工。 */
 .user {
-    margin: 0 0 10px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: var(--bg-user);
+    box-sizing: border-box;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 0 10px auto;
+    padding: 7px 10px;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px 2px 8px 8px;
+    background: var(--bg-layer1);
     white-space: pre-wrap;
 }
 
@@ -746,17 +753,79 @@
     transform: rotate(90deg);
 }
 
+/* 干活期间整段都摊开：**不再自己开一个 340px 的小滚动窗**（那会跟转录区的滚动条打架，
+   内容也被切得看不全）。高度交给转录区统一滚。 */
 .workBody {
-    max-height: 340px;
     margin: 4px 0 0 18px;
     padding-left: 9px;
-    overflow-y: auto;
     border-left: 2px solid var(--border-l1);
 }
 
 /* 段内最后一条不用再留一份底部间距 */
 .workBody > :last-child {
     margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------- 本轮变更
+ *
+ * 一轮干完在答复下面落一行「哪个角色 +N/−M 积木」+ 一个「回退本轮变更」（学 ZCode 的
+ * 每轮变更卡片：只在真有改动时出现，数字加绿减红，其余一律灰）。整行允许折行 ——
+ * 310px 里两个角色的数字加按钮塞不下，硬挤会变成省略号，宁可换行。
+ */
+.changes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin: 2px 0 12px 18px;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.change {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.changeSprite {
+    color: var(--text-2);
+}
+
+.changePlus {
+    color: var(--success);
+}
+
+.changeMinus {
+    color: var(--error);
+}
+
+/* 跟工具行尾的「撤销」同一套：一行灰字，不配按钮外观（次要动作不做按钮） */
+.changesUndo {
+    flex: 0 0 auto;
+    height: 20px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.changesUndo:hover {
+    background: var(--bg-layer2);
+    color: var(--accent);
+}
+
+/* 待确认态：变红（跟历史列表的「删 → 确认」同一套两段式确认）。
+   带 :hover 是因为上面那条 hover 的选择器权重更高 —— 鼠标还停在按钮上时不能又变回强调色。 */
+.changesUndoArmed,
+.changesUndoArmed:hover {
+    background: var(--bg-layer2);
+    color: var(--error);
 }
 
 /* ---------------------------------------------------------------- 思考过程
@@ -938,9 +1007,11 @@
     to { transform: rotate(360deg); }
 }
 
-/* 细节行缩进到文字起点（chevron 12 + gap 6 = 18px），跟思考过程同一套缩进 */
+/* 细节行缩进到文字起点（chevron 12 + gap 6 = 18px），跟思考过程同一套缩进。
+   限高只为兜极端的长输出（读一个几百块的角色、整页网页正文）：给到视口比例的 60vh，
+   不再是 260px 那种「必须低头在小方框里滚」的死限制 —— 干活期间要能一眼看完写了什么。 */
 .toolBody {
-    max-height: 260px;
+    max-height: 60vh;
     margin: 4px 0 0 18px;
     padding: 6px 10px;
     overflow: auto;
@@ -1230,21 +1301,164 @@
     color: var(--warning);
 }
 
+/* 输入区那行模型名后面的档位小标（模型 + 思考强度一眼都看得见） */
+.effortBadge {
+    flex: 0 0 auto;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--bg-layer2);
+    color: var(--text-2);
+    font-size: 10px;
+    line-height: 15px;
+}
+
+/* ------------------------------------------------- 模型 / 思考强度快捷面板
+ *
+ * 学 ZCode 的 composer 工具栏：模型和思考档位**就地**切换，不用进设置页（那个页面留给
+ * 密钥 / 限额 / 提示词）。锚在输入盒上方，列表自己滚；点面板外面就收起来。
+ */
+.modelMenu {
+    position: relative;
+    z-index: 2;
+    max-height: 44vh;
+    margin-bottom: 8px;
+    overflow-y: auto;
+    border: 1px solid var(--border-l2);
+    border-radius: 8px;
+    background: var(--bg-base);
+    box-shadow: var(--shadow-float);
+}
+
+/* 透明遮罩：点面板以外任何地方都收起（只有面板打开时才渲染） */
+.menuBackdrop {
+    position: fixed;
+    z-index: 1;
+    inset: 0;
+}
+
+.modelMenuHead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 4px 10px;
+    border-bottom: 1px solid var(--border-l1);
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+}
+
+.modelMenuTitle {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.modelMenuSearch {
+    display: block;
+    box-sizing: border-box;
+    width: calc(100% - 16px);
+    height: 26px;
+    margin: 8px;
+    padding: 0 8px;
+    border: 1px solid var(--border-l1);
+    border-radius: 6px;
+    background: var(--bg-layer1);
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.modelMenuSearch:focus {
+    outline: none;
+    border-color: var(--accent-solid);
+    background: var(--bg-base);
+}
+
+.modelMenuList {
+    max-height: min(208px, 26vh);
+    overflow-y: auto;
+}
+
+/* 思考档位：一排小片，点一下就生效（跟 ZCode 的 effort 控件一样不用再确认） */
+.modelMenuEffort {
+    padding: 8px 10px;
+    border-top: 1px solid var(--border-l1);
+}
+
+.efforts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.effort {
+    height: 22px;
+    padding: 0 8px;
+    border: 1px solid var(--border-l1);
+    border-radius: 11px;
+    background: transparent;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.effort:hover {
+    border-color: var(--border-l3);
+    color: var(--text-1);
+}
+
+.effortOn {
+    border-color: var(--accent-solid);
+    background: var(--bg-user);
+    color: var(--accent);
+}
+
+.modelMenuNote {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-l1);
+    color: var(--warning);
+    font-size: 11px;
+    line-height: 16px;
+    white-space: normal;
+}
+
+.modelMenuMore {
+    display: block;
+    width: 100%;
+    height: 28px;
+    border: 0;
+    border-top: 1px solid var(--border-l1);
+    border-radius: 0 0 7px 7px;
+    background: transparent;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.modelMenuMore:hover {
+    background: var(--bg-layer2);
+    color: var(--accent);
+}
+
+/* 发送 / 停止：**只放图标**（学 ZCode 的 composer —— 主按钮是强调色底的圆角方按钮里一支上箭头，
+   跑起来换成中性的方块，标签走 title / aria-label）。面板窄，这里省下的宽度留给左边的模型名。 */
 .send {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
     flex: 0 0 auto;
-    height: 24px;
-    padding: 0 12px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
     border: 0;
     border-radius: 6px;
     background: var(--accent-solid);
     color: #fff;
-    font-family: inherit;
-    font-size: 12px;
-    font-weight: 600;
     cursor: pointer;
 }
 
@@ -1256,6 +1470,17 @@
     background: var(--bg-layer2);
     color: var(--text-3);
     cursor: default;
+}
+
+/* 停止 = 中性按钮（ZCode 里 stop 走 secondary 变体，跟"发送"不是同一种按钮） */
+.sendStop {
+    background: var(--bg-layer2);
+    color: var(--text-1);
+}
+
+.sendStop:hover:enabled {
+    filter: none;
+    background: var(--border-l1);
 }
 
 /* 自动总结之类的系统提示行：一行琥珀色小字，不套虚线盒子（学 ZCode：系统消息只有颜色差别） */

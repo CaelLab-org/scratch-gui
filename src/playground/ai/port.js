@@ -83,6 +83,11 @@ export const internalToSb3 = internalBlocks => {
     return out;
 };
 
+// 数「看得见」的积木：影子块（数字 / 文本这些内联输入）不算 —— 跟 Scratch 自带
+// 「积木数量」插件的口径一致，界面上的 +N/−M 才对得上用户自己数的结果。
+export const visibleBlockCount = blocks => Object.values(blocks || {})
+    .filter(block => block && !block.shadow).length;
+
 // 核心积木的 opcode 前缀。不在这张表里的前缀就是扩展积木，
 // 写入前必须先把扩展加载起来，否则那些积木在 VM 里是「未知积木」，用户看到一堆灰块。
 const CORE_PREFIXES = new Set([
@@ -174,6 +179,52 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             // eslint-disable-next-line no-console
             console.warn('[ai] 整理布局失败', e);
         }
+    };
+
+    // 抓一份脚本快照（顶块 + 子块 + 子栈 + 输入）：删脚本是破坏性操作，
+    // 不留一份原样的就再也摆不回来。形态跟 readTarget 用同一个转换器，所以能原样喂回
+    // deserializeBlocks（原语输入在内联形态里，不需要单独重建影子块）。
+    const captureScript = (spriteName, topBlockId) => {
+        const target = findTarget(spriteName);
+        if (!target || !target.blocks.getBlock(topBlockId)) return null;
+        const all = internalToSb3(target.blocks._blocks);
+        const wanted = new Set();
+        const walk = id => {
+            if (!id || wanted.has(id) || !all[id]) return;
+            wanted.add(id);
+            const block = all[id];
+            walk(block.next);
+            for (const input of Object.values(block.inputs || {})) {
+                // [1|2|3, block, shadow?]，原语已经被内联成 [code, value] 了
+                if (!Array.isArray(input)) continue;
+                walk(input[1]);
+                walk(input[2]);
+            }
+        };
+        walk(topBlockId);
+        const blocks = {};
+        for (const id of wanted) blocks[id] = all[id];
+        return {blocks, count: visibleBlockCount(blocks)};
+    };
+
+    const deleteScript = (spriteName, topBlockId) => {
+        const target = findTarget(spriteName);
+        if (!target || !target.blocks.getBlock(topBlockId)) return false;
+        target.blocks.deleteBlock(topBlockId); // 自带级联：子块、输入、子栈一起删
+        refreshWorkspace();
+        return true;
+    };
+
+    const restoreScript = (spriteName, blocks) => {
+        const target = findTarget(spriteName);
+        if (!target || !blocks || !Object.keys(blocks).length) return false;
+        const vmBlocks = sb3.deserializeBlocks(JSON.parse(JSON.stringify(blocks)));
+        for (const id of Object.keys(vmBlocks)) {
+            if (target.blocks.getBlock(id)) continue; // 这个 id 已经被占用了就别硬塞
+            target.blocks.createBlock(vmBlocks[id]);
+        }
+        refreshWorkspace();
+        return true;
     };
 
     const port = {
@@ -288,18 +339,30 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             return {
                 blockIds: converted.topLevelIds,
                 topBlockIds: converted.topLevelIds,
+                blockCount: visibleBlockCount(vmBlocks),
                 createdVariables,
                 createdLists,
                 warnings: converted.warnings
             };
         },
 
-        deleteScript: (spriteName, topBlockId) => {
-            const target = findTarget(spriteName);
-            if (!target || !target.blocks.getBlock(topBlockId)) return false;
-            target.blocks.deleteBlock(topBlockId); // 自带级联：子块、输入、子栈一起删
-            refreshWorkspace();
-            return true;
+        // 删除前先抓快照：调用方拿它做「撤销这次删除」（见 tools.js 的 delete_script）
+        captureScript,
+
+        deleteScript,
+
+        restoreScript,
+
+        // 按工具留下的 undo 句柄把那一次改动收回去（写入 = 删掉刚加的顶块；删除 = 把快照摆回去）。
+        // 界面上单张卡的「撤销」和整轮的「回退本轮变更」都走这里。
+        undoAction: action => {
+            if (!action) return false;
+            if (action.kind === 'del') return restoreScript(action.sprite, action.blocks);
+            let ok = false;
+            for (const topBlockId of action.topBlockIds || []) {
+                ok = deleteScript(action.sprite, topBlockId) || ok;
+            }
+            return ok;
         },
 
         // 绿旗运行，最多等 timeoutSec 秒；返回 'done' | 'timeout' | 'stopped'

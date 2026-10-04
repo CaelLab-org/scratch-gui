@@ -1,7 +1,7 @@
-// turns.js 的无头自测：分轮、工作段切分、时长写法
+// turns.js 的无头自测：分轮、工作段切分、时长写法、本轮变更汇总
 // 用法：node src/playground/ai/turns.test.mjs
 /* eslint-disable no-console */
-import {buildTurns, formatWorkDuration} from './turns.js';
+import {buildTurns, formatWorkDuration, summarizeChanges, undoActionOf} from './turns.js';
 
 let failed = 0;
 const check = (name, ok, extra = '') => {
@@ -88,6 +88,78 @@ check('旧数据不崩且没有耗时', legacy.length === 1 && legacy[0].duratio
     legacy[0].hasAnswer === true);
 
 check('空数组', buildTurns([]).length === 0);
+
+// ---------------------------------------------------------------- 本轮变更汇总
+const changeItems = [
+    {
+        kind: 'tool',
+        id: 'w1',
+        name: 'xce_write_script',
+        sprite: '角色1',
+        undo: {kind: 'add', sprite: '角色1', topBlockIds: ['a'], added: 12}
+    },
+    {
+        kind: 'tool',
+        id: 'w2',
+        name: 'xce_write_script',
+        sprite: '角色1',
+        undo: {kind: 'add', sprite: '角色1', topBlockIds: ['b'], added: 3}
+    },
+    {
+        kind: 'tool',
+        id: 'd1',
+        name: 'xce_delete_script',
+        sprite: '角色2',
+        undo: {kind: 'del', sprite: '角色2', topBlockId: 'x', blocks: {}, removed: 4}
+    },
+    {kind: 'tool', id: 'r1', name: 'xce_read_project', status: 'done'},
+    {kind: 'agent', text: '好了。'}
+];
+const summary = summarizeChanges(changeItems);
+check('按角色合并同一角色的多次写入', summary.length === 2, `${summary.length} 条`);
+check('角色1 合计 +15', summary[0].sprite === '角色1' && summary[0].added === 15 &&
+    summary[0].removed === 0, JSON.stringify(summary[0]));
+check('角色2 记删 4 块', summary[1].sprite === '角色2' && summary[1].removed === 4 &&
+    summary[1].added === 0, JSON.stringify(summary[1]));
+check('没改积木的轮次没有变更行', summarizeChanges([
+    {kind: 'tool', id: 'r2', name: 'xce_read_project', status: 'done'}
+]).length === 0);
+
+// 单张卡撤销过（undo 被清空）的，不该再算进本轮
+check('撤销过的卡不计入', summarizeChanges([
+    {
+        kind: 'tool',
+        id: 'w3',
+        name: 'xce_write_script',
+        sprite: '角色1',
+        undo: {kind: 'add', sprite: '角色1', topBlockIds: ['a'], added: 12}
+    },
+    {kind: 'tool', id: 'w4', name: 'xce_write_script', sprite: '角色1', undo: null}
+]).length === 1);
+
+// 旧对话：undo 是裸的顶块 id 数组，数不出块数 —— 宁可这行不出现，也不显示骗人的 +0
+check('旧数据读成写入动作', undoActionOf({sprite: '角色1', undo: ['a', 'b']}).kind === 'add');
+check('旧数据数不出块数就不汇总', summarizeChanges([
+    {kind: 'tool', id: 'w5', name: 'xce_write_script', sprite: '角色1', undo: ['a']}
+]).length === 0);
+
+// 挂在轮上：第二轮只有写入，第一轮的改动不会串到第二轮
+const grouped = buildTurns([
+    {kind: 'user', text: '先写', at: T0},
+    {
+        kind: 'tool',
+        id: 'w6',
+        name: 'xce_write_script',
+        sprite: '角色1',
+        at: T0 + 100,
+        undo: {kind: 'add', sprite: '角色1', topBlockIds: ['a'], added: 5}
+    },
+    {kind: 'agent', text: '写好了。', at: T0 + 200},
+    {kind: 'user', text: '读一下', at: T0 + 300},
+    {kind: 'tool', id: 'r3', name: 'xce_read_project', status: 'done', at: T0 + 400}
+]);
+check('变更挂在自己的轮上', grouped[0].changes.length === 1 && grouped[0].changes[0].added === 5 &&
+    grouped[1].changes.length === 0, `${grouped[0].changes.length}/${grouped[1].changes.length}`);
 
 if (failed) {
     console.log(`\n❌ ${failed} 项没过`);
