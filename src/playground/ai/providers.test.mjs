@@ -2,9 +2,10 @@
 // 用法：node src/playground/ai/providers.test.mjs
 /* eslint-disable no-console */
 import {
-    toWireMessages, buildRequestBody, sseDataLines, createCloudModel,
+    toWireMessages, buildRequestBody, createCloudModel,
     fetchProviderModels, thinkingOf
 } from './providers.js';
+import {sseDataLines} from './wire.js';
 
 const failures = [];
 const check = (label, condition, detail) => {
@@ -29,10 +30,25 @@ check('assistant 空文本传 null 而不是空串', wire[1].content === null);
 const body = buildRequestBody({
     model: 'deepseek-flash',
     messages: [{role: 'user', content: 'hi'}],
-    tools: [{name: 'xce_read_project', description: '读', input_schema: {type: 'object'}}]
+    tools: [{name: 'xce_read_project', description: '读', inputSchema: {type: 'object'}}]
 });
 check('请求体带 stream 与工具声明',
     body.stream === true && body.tools[0].type === 'function' && body.tools[0].function.name === 'xce_read_project');
+// parameters 必须逐字出现在 JSON 里：严格校验的网关缺它直接 400（实测过），JSON.stringify 会把
+// undefined 的键悄悄删掉，所以这里查的是序列化后的文本
+check('工具声明带 parameters',
+    body.tools[0].function.parameters &&
+    body.tools[0].function.parameters.type === 'object' &&
+    /"parameters"/.test(JSON.stringify(body.tools[0])),
+    JSON.stringify(body.tools[0]));
+const noParam = buildRequestBody({
+    model: 'm',
+    messages: [{role: 'user', content: 'hi'}],
+    tools: [{name: 'xce_plain', description: '无参数工具'}]
+});
+check('没声明 schema 的工具也补上空 parameters',
+    noParam.tools[0].function.parameters.type === 'object',
+    JSON.stringify(noParam.tools[0]));
 check('请求体开了 usage 回报', body.stream_options && body.stream_options.include_usage === true);
 
 // ---------- 2. SSE 分帧：半截尾巴不能当事件 ----------

@@ -30,8 +30,11 @@ import {
 } from './providers.js';
 import {
     loadSettings, saveSettings, clearSettings, describeSettings, hasApiKey,
-    loadModelCache, saveModelCache
+    loadModelCache, saveModelCache, loadProviderKey
 } from './settings.js';
+import {
+    WIRES, loadCustomProviders, saveCustomProviders, newCustomProviderId
+} from './custom-providers.js';
 import {buildSystemPrompt, WARN_AT} from './prompt.js';
 import {maybeCompact, measure} from './compact.js';
 import {buildTurns, formatWorkDuration, undoActionOf} from './turns.js';
@@ -608,6 +611,11 @@ const defaultEffortOf = (providerId, modelId) => {
     return preferred ? preferred.value : thinking.levels[thinking.levels.length - 1].value;
 };
 
+// 下拉里的分组顺序（供应商条目的 group 字段；'其它' 不在表里，排最后）
+const GROUP_ORDER = ['国内', '国外', '聚合与云', '本地', '我自己加的', '其它'];
+// 「添加自定义供应商」这一项的值。供应商 id 都是字母数字加短横线，撞不上
+const ADD_PROVIDER = '__add__';
+
 const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
     const provider = getProvider(draft.providerId);
     // 占位符里显示的「自动」值 = 目录/拉取清单里声明的元数据（不算用户覆盖）
@@ -616,6 +624,97 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
     const [fetching, setFetching] = useState(false);
     const [fetchError, setFetchError] = useState('');
     const [query, setQuery] = useState('');
+    const customs = draft.customProviders || [];
+    // 当前选中的是自定义供应商的话，名称/协议/路径编辑的就是它那条记录
+    const editing = customs.find(item => item.id === draft.providerId) || null;
+
+    // 自定义供应商清单**立即落盘**：它跟「当前用哪家、哪个模型」是两件事 ——
+    // 加一条、改个名字不该等着按保存（更不该因为点了返回就没了）
+    const patchCustom = (id, patch) => {
+        const list = customs.map(entry => (entry.id === id ? {...entry, ...patch} : entry));
+        saveCustomProviders(list);
+        setDraft(prev => ({...prev, customProviders: list}));
+    };
+
+    const applyProvider = providerId => {
+        const next = getProvider(providerId);
+        const cached = loadModelCache(providerId, next.baseUrl);
+        const first = cached[0] || next.models[0];
+        setModels(cached);
+        setFetchError('');
+        setDraft(prev => ({
+            ...prev,
+            providerId,
+            baseUrl: next.baseUrl,
+            // 每家一把钥匙：切过来就换上这家自己的（密钥表按供应商 id 存，见 settings.js）
+            apiKey: loadProviderKey(providerId),
+            modelId: first ? first.id : '',
+            models: cached,
+            effort: first ? defaultEffortOf(providerId, first.id) : ''
+        }));
+    };
+
+    const handleProvider = event => {
+        const providerId = event.target.value;
+        if (providerId !== ADD_PROVIDER) {
+            applyProvider(providerId);
+            return;
+        }
+        // 新加一条自定义供应商并直接选中它 —— 接着就能填名字、协议、地址
+        const entry = {id: newCustomProviderId(), name: '新供应商', wire: 'openai', baseUrl: ''};
+        const list = customs.concat([entry]);
+        saveCustomProviders(list);
+        setModels([]);
+        setFetchError('');
+        setDraft(prev => ({
+            ...prev,
+            customProviders: list,
+            providerId: entry.id,
+            baseUrl: '',
+            apiKey: '',
+            modelId: '',
+            models: [],
+            effort: ''
+        }));
+    };
+
+    const handleDeleteProvider = id => {
+        const list = customs.filter(entry => entry.id !== id);
+        saveCustomProviders(list);
+        if (id !== draft.providerId) {
+            setDraft(prev => ({...prev, customProviders: list}));
+            return;
+        }
+        // 删掉的正好是当前这家 → 退回第一家预设，别让设置停在一个已经不存在的供应商上
+        const fallback = PROVIDERS[0];
+        const cached = loadModelCache(fallback.id, fallback.baseUrl);
+        const first = cached[0] || fallback.models[0];
+        setModels(cached);
+        setDraft(prev => ({
+            ...prev,
+            customProviders: list,
+            providerId: fallback.id,
+            baseUrl: fallback.baseUrl,
+            apiKey: loadProviderKey(fallback.id),
+            modelId: first ? first.id : '',
+            models: cached,
+            effort: first ? defaultEffortOf(fallback.id, first.id) : ''
+        }));
+    };
+
+    // 下拉里的分组：预设按 group 归拢，自定义的单独一组，最后一项是「添加」
+    const grouped = [];
+    for (const preset of PROVIDERS) {
+        const group = preset.group || '其它';
+        const bucket = grouped.find(item => item.group === group);
+        if (bucket) bucket.items.push(preset);
+        else grouped.push({group, items: [preset]});
+    }
+    if (customs.length) grouped.push({group: '我自己加的', items: customs});
+    grouped.sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group));
+    // 自定义的 Anthropic 端点跟预设的重名不了，但下拉里标一下协议更省事
+    const labelOf = item => (item.custom && item.wire === 'anthropic' ?
+        `${item.name}（Anthropic）` : item.name);
 
     // 一份清单：预设在前（人工挑过、带说明），拉回来的在后（可能有几十上百条）
     const all = modelsOf(draft.providerId, draft.baseUrl, models);
@@ -626,22 +725,6 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
     };
     const shown = needle ? all.filter(matches) : all;
     const thinking = thinkingOf(draft.providerId, draft.modelId) || provider.thinking;
-
-    const handleProvider = event => {
-        const providerId = event.target.value;
-        const next = getProvider(providerId);
-        const cached = loadModelCache(providerId, next.baseUrl);
-        const first = cached[0] || next.models[0];
-        setModels(cached);
-        setFetchError('');
-        setDraft(prev => ({
-            ...prev,
-            providerId,
-            baseUrl: next.baseUrl,
-            modelId: first ? first.id : '',
-            effort: first ? defaultEffortOf(providerId, first.id) : ''
-        }));
-    };
 
     const handleFetch = async () => {
         setFetching(true);
@@ -687,25 +770,79 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
                         onChange={handleProvider}
                         value={draft.providerId}
                     >
-                        {PROVIDERS.map(p => (<option
-                            key={p.id}
-                            value={p.id}
-                        >{p.name}</option>))}
+                        {grouped.map(bucket => (
+                            <optgroup
+                                key={bucket.group}
+                                label={bucket.group}
+                            >
+                                {bucket.items.map(item => (
+                                    <option
+                                        key={item.id}
+                                        value={item.id}
+                                    >{labelOf(item)}</option>
+                                ))}
+                            </optgroup>
+                        ))}
+                        <option value={ADD_PROVIDER}>{'＋ 添加自定义供应商…'}</option>
                     </select>
                     <span className={styles.fieldNote}>{provider.note}</span>
                 </label>
 
-                {draft.providerId === 'custom' || draft.providerId === 'ollama' ? (
+                {editing ? (
                     <label className={styles.field}>
-                        <span className={styles.fieldLabel}>base_url</span>
+                        <span className={styles.fieldLabel}>名称</span>
                         <input
                             className={styles.fieldInput}
-                            onChange={e => {
-                                const value = e.target.value;
-                                setDraft(prev => ({...prev, baseUrl: value}));
-                            }}
-                            placeholder="https://your-gateway/v1"
-                            value={draft.baseUrl}
+                            onChange={e => patchCustom(editing.id, {name: e.target.value})}
+                            placeholder="例如：公司网关"
+                            value={editing.name}
+                        />
+                    </label>
+                ) : null}
+
+                {editing ? (
+                    <label className={styles.field}>
+                        <span className={styles.fieldLabel}>协议</span>
+                        <select
+                            className={styles.fieldSelect}
+                            onChange={e => patchCustom(editing.id, {wire: e.target.value})}
+                            value={editing.wire || 'openai'}
+                        >
+                            {WIRES.map(wire => (<option
+                                key={wire.value}
+                                value={wire.value}
+                            >{wire.label}</option>))}
+                        </select>
+                        <span className={styles.fieldNote}>
+                            Anthropic 那条走 /v1/messages（Claude 官方和它的兼容网关），其余家一律 /chat/completions。
+                        </span>
+                    </label>
+                ) : null}
+
+                <label className={styles.field}>
+                    <span className={styles.fieldLabel}>
+                        {editing ? 'base_url' : 'base_url（可改成中转地址）'}
+                    </span>
+                    <input
+                        className={styles.fieldInput}
+                        onChange={e => {
+                            const value = e.target.value;
+                            if (editing) patchCustom(editing.id, {baseUrl: value});
+                            setDraft(prev => ({...prev, baseUrl: value}));
+                        }}
+                        placeholder="https://your-gateway/v1"
+                        value={draft.baseUrl || ''}
+                    />
+                </label>
+
+                {editing ? (
+                    <label className={styles.field}>
+                        <span className={styles.fieldLabel}>接口路径（留空 = 按协议默认）</span>
+                        <input
+                            className={styles.fieldInput}
+                            onChange={e => patchCustom(editing.id, {path: e.target.value})}
+                            placeholder={editing.wire === 'anthropic' ? '/messages' : '/chat/completions'}
+                            value={editing.path || ''}
                         />
                     </label>
                 ) : null}
@@ -723,9 +860,19 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
                         value={draft.apiKey}
                     />
                     <span className={styles.fieldNote}>
-                        只存在你浏览器的 cookie 里，请求直连供应商，不经过本站服务器。
+                        只存在你这台机器的浏览器里（每家供应商各存各的），请求直连供应商，不经过本站服务器。
                     </span>
                 </label>
+
+                {editing ? (
+                    <div className={styles.rowButtons}>
+                        <button
+                            className={styles.btn}
+                            onClick={() => handleDeleteProvider(editing.id)}
+                            type="button"
+                        >删除这个供应商</button>
+                    </div>
+                ) : null}
 
                 <div className={styles.field}>
                     <span className={styles.fieldLabel}>模型（{all.length} 个可选）</span>
@@ -1070,7 +1217,11 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     // 打开历史列表那一刻的库内快照（列表是静态的，切换/删除后由对应 handler 刷新）
     const [convIndex, setConvIndex] = useState(null);
     const [settings, setSettings] = useState(() => loadSettings());
-    const [settingsDraft, setSettingsDraft] = useState(() => loadSettings());
+    // 编辑中的设置副本。自定义供应商清单（存 localStorage）也挂在这儿，保存/返回时一起处理
+    const [settingsDraft, setSettingsDraft] = useState(() => ({
+        ...loadSettings(),
+        customProviders: loadCustomProviders()
+    }));
     const [context, setContext] = useState(null);
     const [showJump, setShowJump] = useState(false);
     // 「工作中 Ns」要每秒跳一格。只在忙的时候开这个表，闲时不许有任何定时器。
@@ -1560,8 +1711,10 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
 
     const handleClearSettings = useCallback(() => {
         const cleared = clearSettings();
+        // 清的是密钥和当前设置，自己加的供应商清单留着（那不是密钥）
+        const withProviders = {...cleared, customProviders: loadCustomProviders()};
         setSettings(cleared);
-        setSettingsDraft(cleared);
+        setSettingsDraft(withProviders);
         setStatus('已清除');
     }, []);
 
@@ -1585,7 +1738,8 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
     }, [settings]);
 
     const openSettings = useCallback(() => {
-        setSettingsDraft({...settings});
+        // 每次打开都重新读一遍自定义供应商：清单是立即落盘的，别拿一份可能过期的副本
+        setSettingsDraft({...settings, customProviders: loadCustomProviders()});
         setShowSettings(true);
     }, [settings]);
 

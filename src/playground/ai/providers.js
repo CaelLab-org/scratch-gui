@@ -8,12 +8,19 @@
  *   PROVIDERS / fetchProviderModels  —— 模型目录（人工预设 + 从接口实时拉）
  *   createCloudModel(config)         —— 与本地脚本模型同形状的 {name, complete}
  *
+ * 两条线格式：默认 OpenAI 兼容（`/chat/completions`），供应商声明 `wire: 'anthropic'`
+ * 的走 Anthropic Messages API（`/v1/messages`，见 anthropic.js）。差异是**数据**，不是调用处的分支。
+ *
  * 两个实盘验证过的坑（2026-10-04 用真实 key 打过接口）：
  *   - DeepSeek 开思考时有工具调用，**assistant 消息必须把 reasoning_content 原样回传**，
  *     否则下一步直接 400「The reasoning_content in the thinking mode must be passed back to the API」。
  *   - 图片可以放在 `role: "tool"` 的消息里（content 用 [{type:'text'},{type:'image_url'}] 数组），
  *     模型确实看得到（实测让它读 1x1 像素，它答对了颜色）。
  */
+
+import {authHeaders, describeHttpError, isLocalBaseUrl, sseDataLines, toolParameters} from './wire.js';
+import {createAnthropicModel} from './anthropic.js';
+import {customProviders} from './custom-providers.js';
 
 // ---------------------------------------------------------------------------
 // 模型目录
@@ -41,12 +48,33 @@ const LEVELS_ONOFF = [
     ['on', '思考（默认）', {type: 'enabled'}]
 ];
 
+// Anthropic 的思考档位（这条是协议定死的字段名，所以自定义的 Anthropic 端点也能直接用）。
+// 官方新写法：开 = adaptive（不吃会过期的 budget_tokens），「最高」再叠一个 effort。
+// 老模型或兼容网关只认 {type:'enabled', budget_tokens} 的话，把那档的 wire 改成那个形状也能用
+// （anthropic.js 会把预算夹到 max_tokens 以下，不会因为预算超了直接 400）。
+const ANTHROPIC_THINKING = thinkingLevels('thinking', [
+    ['off', '不思考', {type: 'disabled'}],
+    ['high', '思考（默认）', {type: 'adaptive'}],
+    ['max', '最高', {type: 'adaptive', effort: 'high'}]
+]);
+
 // ⚠️ 预设的模型 id 会随供应商上下架而过期。界面上有「从接口拉取」按钮，
 // 用用户自己的 key 打 GET {baseUrl}/models 拿真实清单 —— 预设只是开箱即用的默认值。
+//
+// 一条供应商的字段（照 ZCode 的 provider 数据表：差异是数据，加一家 ≈ 加一行）：
+//   id / name / group      标识、显示名、下拉里的分组（国内 / 国外 / 聚合与云 / 本地）
+//   wire                   'openai'（默认，/chat/completions）| 'anthropic'（/v1/messages）
+//   path                   端点路径，默认按 wire 取；非标准的兼容端点（MiniMax）才要写
+//   baseUrl / keyUrl / note 地址、申请密钥的链接、给用户看的一句说明（含跨域实测结论）
+//   thinking               {field, levels[{value,label,wire}]}；wire 是最终塞进请求体的值
+//   models                 预设清单，带 supportsImage / contextWindow / maxOutputTokens
+//
+// 用户自己添加的供应商在 custom-providers.js（存在浏览器本地），下拉里和这些并列显示。
 export const PROVIDERS = [
     {
         id: 'deepseek',
         name: 'DeepSeek',
+        group: '国内',
         baseUrl: 'https://api.deepseek.com',
         keyUrl: 'https://platform.deepseek.com/api_keys',
         note: '国内可直连，浏览器跨域实测放行',
@@ -70,6 +98,7 @@ export const PROVIDERS = [
     {
         id: 'glm',
         name: '智谱 GLM',
+        group: '国内',
         baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
         keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
         note: '有免费档（glm-4.5-flash / glm-4.6v-flash）',
@@ -90,6 +119,7 @@ export const PROVIDERS = [
     {
         id: 'kimi',
         name: 'Moonshot Kimi',
+        group: '国内',
         baseUrl: 'https://api.moonshot.cn/v1',
         keyUrl: 'https://platform.moonshot.cn/console/api-keys',
         note: '旧 moonshot-v1-* 系列已下线',
@@ -115,6 +145,7 @@ export const PROVIDERS = [
     {
         id: 'dashscope',
         name: '阿里云百炼（通义千问）',
+        group: '国内',
         baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         keyUrl: 'https://bailian.console.aliyun.com/',
         note: '跨域放行 *；将来地址可能要求带 WorkspaceId',
@@ -147,6 +178,7 @@ export const PROVIDERS = [
     {
         id: 'siliconflow',
         name: '硅基流动 SiliconFlow',
+        group: '国内',
         baseUrl: 'https://api.siliconflow.cn/v1',
         keyUrl: 'https://cloud.siliconflow.cn/account/ak',
         note: '跨域最宽松；模型 id 带厂商前缀，建议用「拉取」拿真实清单',
@@ -156,6 +188,7 @@ export const PROVIDERS = [
     {
         id: 'openrouter',
         name: 'OpenRouter',
+        group: '聚合与云',
         baseUrl: 'https://openrouter.ai/api/v1',
         keyUrl: 'https://openrouter.ai/keys',
         note: '一个 key 通吃各家（模型 id 带厂商前缀）',
@@ -180,6 +213,7 @@ export const PROVIDERS = [
     {
         id: 'ark',
         name: '火山方舟（豆包）',
+        group: '国内',
         baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
         keyUrl: 'https://console.volcengine.com/ark',
         note: '路径是 /api/v3，不是 /v1',
@@ -202,6 +236,7 @@ export const PROVIDERS = [
     {
         id: 'openai',
         name: 'OpenAI',
+        group: '国外',
         baseUrl: 'https://api.openai.com/v1',
         keyUrl: 'https://platform.openai.com/api-keys',
         note: '跨域仅第三方实测，且 chat/completions 基本看不到思考内容',
@@ -215,6 +250,7 @@ export const PROVIDERS = [
     {
         id: 'groq',
         name: 'Groq',
+        group: '聚合与云',
         baseUrl: 'https://api.groq.com/openai/v1',
         keyUrl: 'https://console.groq.com/keys',
         note: '跨域仅第三方实测；快，适合小模型',
@@ -233,6 +269,7 @@ export const PROVIDERS = [
     {
         id: 'ollama',
         name: '本地 Ollama',
+        group: '本地',
         baseUrl: 'http://localhost:11434/v1',
         keyUrl: '',
         note: '只在本机跑编辑器时可用：线上 HTTPS 页面调 http://localhost 会被浏览器按混合内容拦掉',
@@ -240,16 +277,236 @@ export const PROVIDERS = [
         models: []
     },
     {
-        id: 'custom',
-        name: 'OpenAI 兼容（自定义）',
-        baseUrl: '',
-        keyUrl: '',
-        note: '自己填 base_url 和模型名，任何 OpenAI 兼容端点都能接',
-        models: []
+        id: 'anthropic',
+        name: 'Anthropic Claude',
+        group: '国外',
+        wire: 'anthropic',
+        baseUrl: 'https://api.anthropic.com/v1',
+        keyUrl: 'https://console.anthropic.com/settings/keys',
+        note: '原生 Messages 协议（不是 chat/completions）；浏览器直连要带专用头，我们已经带了',
+        thinking: ANTHROPIC_THINKING,
+        models: [
+            {
+                id: 'claude-sonnet-4-5',
+                name: 'Claude Sonnet 4.5',
+                supportsImage: true,
+                contextWindow: 200000
+            },
+            {
+                id: 'claude-opus-4-1',
+                name: 'Claude Opus 4.1',
+                supportsImage: true,
+                contextWindow: 200000
+            },
+            {
+                id: 'claude-haiku-4-5',
+                name: 'Claude Haiku 4.5',
+                supportsImage: true,
+                contextWindow: 200000,
+                note: '快而便宜'
+            }
+        ]
+    },
+    {
+        id: 'gemini',
+        name: 'Google Gemini',
+        group: '国外',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        keyUrl: 'https://aistudio.google.com/apikey',
+        note: '走它的 OpenAI 兼容端点；跨域放行，但 key 不加限制会被 403',
+        thinking: thinkingLevels('reasoning_effort', LEVELS_3),
+        models: [
+            {
+                id: 'gemini-2.5-pro',
+                name: 'Gemini 2.5 Pro',
+                supportsImage: true,
+                contextWindow: 1048576
+            },
+            {
+                id: 'gemini-2.5-flash',
+                name: 'Gemini 2.5 Flash',
+                supportsImage: true,
+                contextWindow: 1048576
+            },
+            {
+                id: 'gemini-2.5-flash-lite',
+                name: 'Gemini 2.5 Flash Lite',
+                supportsImage: true,
+                contextWindow: 1048576,
+                note: '便宜'
+            }
+        ]
+    },
+    {
+        id: 'xai',
+        name: 'xAI Grok',
+        group: '国外',
+        baseUrl: 'https://api.x.ai/v1',
+        keyUrl: 'https://console.x.ai/',
+        note: '跨域没有官方说明，网页版可能被拦（桌面版不受影响）',
+        thinking: thinkingLevels('reasoning_effort', LEVELS_3),
+        models: [
+            {id: 'grok-4', name: 'Grok 4', supportsImage: true},
+            {id: 'grok-4-fast-reasoning', name: 'Grok 4 Fast Reasoning', contextWindow: 2000000},
+            {id: 'grok-3-mini', name: 'Grok 3 Mini', note: '便宜'}
+        ]
+    },
+    {
+        id: 'mistral',
+        name: 'Mistral',
+        group: '国外',
+        baseUrl: 'https://api.mistral.ai/v1',
+        keyUrl: 'https://console.mistral.ai/api-keys',
+        note: '预检多半不放行，网页版基本要自建代理',
+        models: [
+            {id: 'mistral-large-latest', name: 'Mistral Large'},
+            {id: 'mistral-small-latest', name: 'Mistral Small'},
+            {id: 'pixtral-12b-latest', name: 'Pixtral 12B', supportsImage: true}
+        ]
+    },
+    {
+        id: 'qianfan',
+        name: '百度千帆（文心）',
+        group: '国内',
+        baseUrl: 'https://qianfan.baidubce.com/v2',
+        keyUrl: 'https://console.bce.baidu.com/iam/#/iam/apikey/list',
+        note: 'v2 是 OpenAI 兼容；浏览器跨域被拦，网页版用不了（桌面版可以）',
+        models: [
+            {id: 'ernie-4.5-turbo-128k', name: 'ERNIE 4.5 Turbo 128K'},
+            {id: 'ernie-4.0-turbo-8k', name: 'ERNIE 4.0 Turbo 8K'}
+        ]
+    },
+    {
+        id: 'hunyuan',
+        name: '腾讯混元',
+        group: '国内',
+        baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
+        keyUrl: 'https://console.cloud.tencent.com/hunyuan/api-key',
+        note: '密钥要 TokenHub 的 API Key（不是 SecretId/SecretKey）；跨域被拦，网页版用不了',
+        models: [
+            {id: 'hunyuan-turbos-latest', name: '混元 TurboS'},
+            {id: 'hunyuan-t1-latest', name: '混元 T1（推理）'},
+            {id: 'hunyuan-vision', name: '混元 Vision', supportsImage: true}
+        ]
+    },
+    {
+        id: 'minimax',
+        name: 'MiniMax',
+        group: '国内',
+        baseUrl: 'https://api.minimaxi.com/v1',
+        keyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
+        // 它的对话路径不是 /chat/completions，所以单独声明（这就是 path 这个字段存在的理由）
+        path: '/text/chatcompletion_v2',
+        note: '国内（api.minimaxi.com）与国际（api.minimax.io）的 key 不通用；对话路径非标准',
+        models: [
+            {id: 'MiniMax-M2', name: 'MiniMax M2'},
+            {id: 'MiniMax-M1', name: 'MiniMax M1'},
+            {id: 'MiniMax-Text-01', name: 'MiniMax Text 01', note: '便宜'}
+        ]
+    },
+    {
+        id: 'spark',
+        name: '讯飞星火 Spark',
+        group: '国内',
+        baseUrl: 'https://spark-api-open.xf-yun.com/v1',
+        keyUrl: 'https://console.xfyun.cn/services/bm4',
+        note: '密钥填控制台「HTTP 服务接口认证信息」里的 APIPassword，不是 apiKey/apiSecret',
+        models: [
+            {id: '4.0Ultra', name: '星火 4.0 Ultra'},
+            {id: 'generalv3.5', name: '星火 Max'},
+            {id: 'lite', name: '星火 Lite', note: '免费档'}
+        ]
+    },
+    {
+        id: 'stepfun',
+        name: '阶跃星辰 StepFun',
+        group: '国内',
+        baseUrl: 'https://api.stepfun.com/v1',
+        keyUrl: 'https://platform.stepfun.com/interface-key',
+        note: '国内（api.stepfun.com）与国际（api.stepfun.ai）的 key 不通用',
+        models: [
+            {id: 'step-3.5-flash', name: 'Step 3.5 Flash'},
+            {id: 'step-2-16k', name: 'Step 2 16K'},
+            {id: 'step-1v-8k', name: 'Step 1V 8K', supportsImage: true}
+        ]
+    },
+    {
+        id: 'together',
+        name: 'Together AI',
+        group: '聚合与云',
+        baseUrl: 'https://api.together.xyz/v1',
+        keyUrl: 'https://api.together.xyz/settings/api-keys',
+        note: '预检不放行，网页版要自建代理；模型 id 带厂商前缀，大小写敏感',
+        models: [
+            {id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'Llama 3.3 70B Turbo'},
+            {id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B'}
+        ]
+    },
+    {
+        id: 'fireworks',
+        name: 'Fireworks AI',
+        group: '聚合与云',
+        baseUrl: 'https://api.fireworks.ai/inference/v1',
+        keyUrl: 'https://fireworks.ai/account/api-keys',
+        note: '跨域实测放行；模型 id 形如 accounts/fireworks/models/…',
+        models: [
+            {id: 'accounts/fireworks/models/qwen3-235b-a22b', name: 'Qwen3 235B'},
+            {id: 'accounts/fireworks/models/llama-v3p1-8b-instruct', name: 'Llama 3.1 8B'}
+        ]
+    },
+    {
+        id: 'cerebras',
+        name: 'Cerebras',
+        group: '聚合与云',
+        baseUrl: 'https://api.cerebras.ai/v1',
+        keyUrl: 'https://cloud.cerebras.ai/',
+        note: '跨域放行；出名的快，适合小模型',
+        models: [
+            {id: 'gpt-oss-120b', name: 'GPT-OSS 120B'},
+            {id: 'llama3.1-8b', name: 'Llama 3.1 8B'}
+        ]
+    },
+    {
+        id: 'deepinfra',
+        name: 'DeepInfra',
+        group: '聚合与云',
+        baseUrl: 'https://api.deepinfra.com/v1/openai',
+        keyUrl: 'https://deepinfra.com/dash/api_keys',
+        note: '模型 id 带厂商前缀',
+        models: [
+            {id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'Llama 3.3 70B Turbo'},
+            {id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1'}
+        ]
     }
 ];
 
-export const getProvider = id => PROVIDERS.find(p => p.id === id) || PROVIDERS[0];
+/**
+ * 全部可选供应商：预设 + 用户自己添加的（后者在前还是在后无所谓，界面上按 group 显示）
+ * @returns {Array<object>} 供应商清单
+ */
+export const allProviders = () => PROVIDERS.concat(customProviders());
+
+export const getProvider = id => allProviders().find(p => p.id === id) || PROVIDERS[0];
+
+/**
+ * 这家走哪条线格式
+ * @param {object} provider 供应商条目
+ * @returns {string} 'openai' | 'anthropic'
+ */
+export const wireOf = provider => (provider && provider.wire === 'anthropic' ? 'anthropic' : 'openai');
+
+// 端点路径：默认按线格式取，供应商用 path 覆盖（MiniMax 那种非标准路径）
+export const pathOf = provider => (provider && provider.path) ||
+    (wireOf(provider) === 'anthropic' ? '/messages' : '/chat/completions');
+
+/**
+ * 这家要不要密钥。本地跑的端点（Ollama / vLLM / LM Studio）不要。
+ * @param {object} provider 供应商条目
+ * @param {string} baseUrl 实际用到的地址（可能是用户覆盖的）
+ * @returns {boolean} 需要密钥
+ */
+export const keyRequired = (provider, baseUrl) =>
+    !(provider.id === 'ollama' || isLocalBaseUrl(baseUrl || provider.baseUrl));
 
 /**
  * 找出当前设置对应的「目录里的模型条目」。
@@ -300,35 +557,11 @@ export const thinkingOf = (providerId, modelId) => {
     const provider = getProvider(providerId);
     const model = provider.models.find(m => m.id === modelId);
     if (model && model.thinking === null) return null;
-    return (model && model.thinking) || provider.thinking || null;
-};
-
-// ---------------------------------------------------------------------------
-// HTTP 错误说明
-// ---------------------------------------------------------------------------
-
-/**
- * 从响应里尽量挖出一句人能看懂的错误
- * @param {Response} response 失败的响应
- * @returns {Promise<string>} 给用户看的错误说明
- */
-export const describeHttpError = async response => {
-    let detail = '';
-    try {
-        const text = await response.text();
-        try {
-            const parsed = JSON.parse(text);
-            detail = (parsed.error && (parsed.error.message || parsed.error.type)) || parsed.message || text;
-        } catch (e) {
-            detail = text;
-        }
-    } catch (e) {
-        detail = '';
-    }
-    if (response.status === 401) return `密钥无效或已过期（401）。${detail}`;
-    if (response.status === 402) return `余额不足（402）。${detail}`;
-    if (response.status === 429) return `请求太频繁或被限流（429）。${detail}`;
-    return `接口返回 ${response.status}。${detail}`;
+    if (model && model.thinking) return model.thinking;
+    if (provider.thinking) return provider.thinking;
+    // 自定义的 Anthropic 端点：档位是协议定死的，直接用（OpenAI 兼容的不给 ——
+    // 各家思考字段名不一样，猜一个塞过去会被严格校验的网关整条拒掉）
+    return wireOf(provider) === 'anthropic' ? ANTHROPIC_THINKING : null;
 };
 
 // ---------------------------------------------------------------------------
@@ -349,7 +582,8 @@ const normalizeModel = raw => {
     const levels = effortInfo.supported_levels;
     const model = {
         id,
-        name: raw.name || id,
+        // Anthropic 的 /models 用 display_name 当显示名
+        name: raw.display_name || raw.name || id,
         supportsImage: hasImage,
         note: '（从接口拉到）'
     };
@@ -370,8 +604,8 @@ export const fetchProviderModels = async ({providerId, baseUrl, apiKey, signal})
     const provider = getProvider(providerId);
     const url = `${(baseUrl || provider.baseUrl || '').replace(/\/+$/, '')}/models`;
     if (!url || url === '/models') throw new Error('还没填 base_url');
-    const headers = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    // 鉴权头按线格式给：Anthropic 要 x-api-key + 版本头，别的家是 Bearer
+    const headers = authHeaders(wireOf(provider), apiKey);
     const response = await fetch(url, {headers, signal});
     if (!response.ok) throw new Error(await describeHttpError(response));
     const payload = await response.json();
@@ -445,7 +679,8 @@ export const toWireTools = tools => tools.map(tool => ({
     function: {
         name: tool.name,
         description: tool.description,
-        parameters: tool.inputSchema
+        // parameters 不能缺：严格校验的 OpenAI 兼容网关缺这个字段就整条请求 400
+        parameters: toolParameters(tool)
     }
 }));
 
@@ -475,39 +710,6 @@ export const buildRequestBody = ({
 };
 
 // ---------------------------------------------------------------------------
-// SSE 分帧
-// ---------------------------------------------------------------------------
-
-/**
- * 把 SSE 字节流切成 data 负载。按 dsh 的做法：**不把没有结束标记的尾巴当成事件**。
- * @param {ReadableStream} body 流式响应体
- * @returns {AsyncGenerator<string>} 每个 data 负载（不含 "data: " 前缀）
- */
-export const sseDataLines = async function* (body) {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    try {
-        for (;;) {
-            const {done, value} = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, {stream: true});
-            let boundary = buffer.indexOf('\n\n');
-            while (boundary !== -1) {
-                const frame = buffer.slice(0, boundary);
-                buffer = buffer.slice(boundary + 2);
-                for (const line of frame.split('\n')) {
-                    if (line.startsWith('data:')) yield line.slice(5).trim();
-                }
-                boundary = buffer.indexOf('\n\n');
-            }
-        }
-    } finally {
-        reader.releaseLock();
-    }
-};
-
-// ---------------------------------------------------------------------------
 // 云端模型
 // ---------------------------------------------------------------------------
 
@@ -534,12 +736,13 @@ const reasoningOf = delta => {
 const isStop = verdict => verdict === true || !!(verdict && verdict.stop);
 
 /**
- * @param {object} config  {providerId, modelId, apiKey, baseUrl, effort, model}
- * @param {object} opts    {idleTimeoutMs} 读超时（两次事件之间），不是整请求超时
+ * OpenAI 兼容那条线（`POST {baseUrl}/chat/completions`）。
+ * @param {object} config {providerId, modelId, apiKey, baseUrl, effort, model}
+ * @param {object} options {idleTimeoutMs} 读超时
+ * @param {object} provider 供应商条目（目录里的那份）
  * @returns {{name, cloud, supportsImage, contextWindow, complete}} 与本地脚本模型同形状
  */
-export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
-    const provider = getProvider(config.providerId);
+const createOpenAICompatibleModel = (config, {idleTimeoutMs = 120000}, provider) => {
     const baseUrl = (config.baseUrl || provider.baseUrl || '').replace(/\/+$/, '');
     const modelId = config.modelId;
     const apiKey = config.apiKey;
@@ -554,7 +757,7 @@ export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
 
         async complete (messages, tools, {signal, onChunk = () => {}} = {}) {
             if (!baseUrl) throw new Error('没填 base_url');
-            if (!apiKey && config.providerId !== 'ollama') throw new Error('没填 API 密钥');
+            if (!apiKey && keyRequired(provider, baseUrl)) throw new Error('没填 API 密钥');
 
             const requestBody = buildRequestBody({
                 model: modelId,
@@ -565,11 +768,11 @@ export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
                 maxTokens: config.maxOutputTokens,
                 includeUsage: provider.includeUsage !== false
             });
-            const response = await fetch(`${baseUrl}/chat/completions`, {
+            const response = await fetch(`${baseUrl}${pathOf(provider)}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(apiKey ? {Authorization: `Bearer ${apiKey}`} : {})
+                    ...authHeaders('openai', apiKey)
                 },
                 body: JSON.stringify(requestBody),
                 signal
@@ -673,4 +876,28 @@ export const createCloudModel = (config, {idleTimeoutMs = 120000} = {}) => {
             return {text, reasoning, toolCalls, finishReason, usage, stopped};
         }
     };
+};
+
+// ---------------------------------------------------------------------------
+// 对外入口：按协议挑一条线
+// ---------------------------------------------------------------------------
+
+/**
+ * 造一个云端模型（与本地脚本模型同形状：{name, cloud, supportsImage, contextWindow, complete}）。
+ * 协议分派就这一处：Anthropic 那条线在 anthropic.js 里，循环和工具都不知道这回事。
+ * @param {object} config {providerId, modelId, apiKey, baseUrl, effort, model}
+ * @param {object} options {idleTimeoutMs} 读超时（两次事件之间），不是整请求超时
+ * @returns {object} 模型
+ */
+export const createCloudModel = (config, options = {}) => {
+    const provider = getProvider(config.providerId);
+    if (wireOf(provider) === 'anthropic') {
+        return createAnthropicModel(config, {
+            ...options,
+            providerName: provider.name,
+            // 非标准路径（自定义供应商那栏填的，或 MiniMax 那种预设）走它
+            path: provider.path || void 0
+        });
+    }
+    return createOpenAICompatibleModel(config, options, provider);
 };

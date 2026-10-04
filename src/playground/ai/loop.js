@@ -35,11 +35,13 @@ export const clampMaxSteps = value => {
 export const maxStepsOf = settings =>
     (settings && Number(settings.maxSteps) > 0 ? clampMaxSteps(settings.maxSteps) : STEP_LIMITS.default);
 
-// 工具的模型可见声明
+// 工具的模型可见声明。参数 schema 的字段名必须与 tools.js 里的工具对象一致（inputSchema，驼峰）：
+// 下发时（providers.js 的 toWireTools）就是按这个名字取的，写成下划线会把 parameters 整个丢掉 ——
+// 宽松的供应商（DeepSeek）照收不误，严格的网关直接 400「missing field `parameters`」。
 export const toolToSchema = tool => ({
     name: tool.name,
     description: tool.description,
-    input_schema: tool.inputSchema
+    inputSchema: tool.inputSchema || {type: 'object', properties: {}}
 });
 
 // 工具结果的硬限制（用户定的）：超过就截断，并在底部注明。
@@ -196,6 +198,9 @@ export const runTurn = async ({
         if (reply.toolCalls && reply.toolCalls.length) assistantMessage.toolCalls = reply.toolCalls;
         // 思考原文只在会话里留一轮：toWireMessages 只回传最后一条（更早的剥掉，用户要求别堆进历史）
         if (reply.reasoning) assistantMessage.reasoning = reply.reasoning;
+        // Anthropic 的思考块要连签名一起回传，否则带 tool_use 的续写会被拒（见 anthropic.js）。
+        // 只有 Anthropic 那条线会给这个字段，别的家没有就是 undefined，不会进 JSON
+        if (reply.reasoningSignature) assistantMessage.reasoningSignature = reply.reasoningSignature;
         // 空回复（思考里打转被切干净、或本来就没内容）不必留一条空消息在历史里
         if (assistantMessage.content || assistantMessage.toolCalls) {
             session.messages.push(assistantMessage);
