@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://engine.xmuer.online/xce-logo.png" alt="XMUER Coding Engine logo" width="128">
+</p>
+
 # XMUER Coding Engine
 
 基于 [TurboWarp/scratch-gui](https://github.com/TurboWarp/scratch-gui) 的 Scratch 编辑器分支，由[虚舟实验室（CaelLab）](https://www.caellab.com/)开发维护。
@@ -30,7 +34,7 @@ npm run build    # 生产构建，产物在 build/
 
 **GPL-3.0-only** — 见 [LICENSE](LICENSE)。
 
-本项目是 [TurboWarp scratch-gui](https://github.com/TurboWarp/scratch-gui)（GPL-3.0）的修改版分支，其上游是 MIT 许可的 Scratch GUI。桌面版在另一个仓库（Electron 壳，打包时引用本仓库的构建产物），不在本仓库内。
+本项目是 [TurboWarp scratch-gui](https://github.com/TurboWarp/scratch-gui)（GPL-3.0）的修改版分支，TurboWarp 的上游是 Scratch Foundation 的 [scratch-gui](https://github.com/scratchfoundation/scratch-gui)（AGPL-3.0）。桌面版在另一个仓库（Electron 壳，打包时引用本仓库的构建产物），不在本仓库内。
 
 ## 关于
 
