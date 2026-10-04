@@ -1,12 +1,17 @@
 /**
  * 模型设置的存取。
  *
- * 分两处存，因为两类数据的性质不同：
- *   - **cookie**：供应商 / base_url / 模型 id / api_key / 思考档位。key 是秘密，
- *     按用户要求放 cookie（非 HttpOnly 才能被前端读出来自己塞 Authorization 头，
- *     也就是说 XSS 能读到它，与 localStorage 同级）。BYOK，服务端不参与。
- *   - **localStorage**：从接口拉回来的模型清单。它不是秘密，还可能上百条，
- *     cookie 的 4KB 装不下。
+ * 设置本体（供应商 / base_url / 模型 id / api_key / 思考档位）存哪儿分两种情况：
+ *   - **网页版：cookie**。key 是秘密，按用户要求放 cookie（非 HttpOnly 才能被前端读出来
+ *     自己塞 Authorization 头，也就是说 XSS 能读到它，与 localStorage 同级）。BYOK，服务端不参与。
+ *   - **桌面版：主进程的文件**。xce:// 是自定义协议，Chromium 不给它写 cookie
+ *     （渲染端的 document.cookie 静默失败，主进程的 session.cookies.set 直接报 invalid domain），
+ *     所以改存 userData 下的 settings.json。preload 在页面脚本之前同步取一份快照，
+ *     这里启动时探测一次写进常量，读取全同步 —— loadSettings 在 render 里就调，等不了 IPC。
+ *     写走 settingsWrite 异步落盘，失败的只是这一次落盘（下次启动退回上一份）。
+ *
+ * 另外两样仍放 localStorage（两端一致）：从接口拉回来的模型清单（不是秘密，还可能上百条，
+ * cookie 的 4KB 装不下）、以及用户在设置里写的自定义提示词。
  */
 import {getProvider, PROVIDERS, resolveModel, thinkingOf} from './providers.js';
 import {clampMaxSteps} from './loop.js';
@@ -34,6 +39,41 @@ const readCookie = name => {
 const writeCookie = (name, value) => {
     const encoded = encodeURIComponent(value);
     document.cookie = `${name}=${encoded}; path=/; max-age=${MAX_AGE_SECONDS}; SameSite=Lax`;
+};
+
+/**
+ * 桌面版（Electron 壳）的设置通道，启动时探测一次，运行期不再变。
+ * settingsWrite 只有桌面版的 preload 才挂；网页版探测为 null，下面一律走 cookie，行为与从前一致。
+ */
+const desktopBridge = (typeof window === 'object' && window.EditorPreload &&
+    typeof window.EditorPreload.settingsWrite === 'function') ? window.EditorPreload : null;
+
+/** 桌面版的内存副本：启动时由 preload 的快照喂进来，之后是本会话的真相（读同步、写异步落盘） */
+let desktopCache = desktopBridge ? (desktopBridge.settingsSnapshot || null) : null;
+
+/**
+ * 读设置本体
+ * @returns {string|null} 桌面版读内存副本，网页版读 cookie；没存过就是 null
+ */
+const readRawSettings = () => (desktopBridge ? desktopCache : readCookie(COOKIE_NAME));
+
+const writeRawSettings = raw => {
+    if (desktopBridge) {
+        desktopCache = raw;
+        // 落盘失败就只丢这一次写（下次启动退回上一份），别让界面卡在等待上
+        desktopBridge.settingsWrite(raw).catch(() => {});
+        return;
+    }
+    writeCookie(COOKIE_NAME, raw);
+};
+
+const clearRawSettings = () => {
+    if (desktopBridge) {
+        desktopCache = null;
+        desktopBridge.settingsWrite(null).catch(() => {});
+        return;
+    }
+    document.cookie = `${COOKIE_NAME}=; path=/; max-age=0`;
 };
 
 // ---------------------------------------------------------------------------
@@ -147,7 +187,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const loadSettings = () => {
-    const raw = readCookie(COOKIE_NAME);
+    const raw = readRawSettings();
     if (!raw) return {...DEFAULT_SETTINGS};
     try {
         const parsed = JSON.parse(raw);
@@ -182,7 +222,7 @@ export const saveSettings = settings => {
     if (Number(settings.contextWindow) > 0) limits.contextWindow = Number(settings.contextWindow);
     if (Number(settings.maxOutputTokens) > 0) limits.maxOutputTokens = Number(settings.maxOutputTokens);
     if (Number(settings.maxSteps) > 0) limits.maxSteps = clampMaxSteps(settings.maxSteps);
-    writeCookie(COOKIE_NAME, JSON.stringify({
+    writeRawSettings(JSON.stringify({
         providerId: settings.providerId,
         baseUrl: settings.baseUrl,
         modelId: settings.modelId,
@@ -196,7 +236,7 @@ export const saveSettings = settings => {
 };
 
 export const clearSettings = () => {
-    document.cookie = `${COOKIE_NAME}=; path=/; max-age=0`;
+    clearRawSettings();
     return {...DEFAULT_SETTINGS};
 };
 
