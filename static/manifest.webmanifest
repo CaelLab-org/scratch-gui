@@ -1,7 +1,7 @@
 {
   "short_name": "XMUER",
   "name": "XMUER Coding Engine",
-  "description": "虚舟实验室旗下的在线积木编程编辑器，基于 Scratch 构建，编译器让作品运行更快。",
+  "description": "虚舟实验室（CaelLab）旗下的在线积木编程编辑器，内置 AI 终端，用对话生成与修改积木，基于 Scratch 构建，作品编译为 JavaScript 运行更快。",
   "icons": [
     {
       "src": "images/192.png",
@@ -15,7 +15,7 @@
     }
   ],
   "start_url": "editor",
-  "background_color": "#4c1d95",
+  "background_color": "#1b3d82",
   "display": "standalone",
-  "theme_color": "#4c1d95"
+  "theme_color": "#2b6fec"
 }

@@ -1,15 +1,4 @@
-import {defineMessages} from 'react-intl';
 import sharedMessages from '../shared-messages';
-
-let messages = defineMessages({
-    variable: {
-        defaultMessage: 'my variable',
-        description: 'Name for the default variable',
-        id: 'gui.defaultProject.variable'
-    }
-});
-
-messages = {...messages, ...sharedMessages};
 
 // use the default message if a translation function is not passed
 const defaultTranslator = msgObj => msgObj.defaultMessage;
@@ -27,8 +16,9 @@ const projectData = translateFunction => {
                 isStage: true,
                 name: 'Stage',
                 variables: {
-                    '`jEk@4|i[#Fk?(8x)AV.-my variable': [
-                        translator(messages.variable),
+                    // 舞台自带的默认变量，故意不本地化：人和 AI 都能一眼认出它不是用户建的
+                    '`jEk@4|i[#Fk?(8x)AV.-XCE_default_variable': [
+                        'XCE_default_variable',
                         0
                     ]
                 },
@@ -39,7 +29,7 @@ const projectData = translateFunction => {
                 costumes: [
                     {
                         assetId: 'cd21514d0531fdffb22204e0ec5ed84a',
-                        name: translator(messages.backdrop, {index: 1}),
+                        name: translator(sharedMessages.backdrop, {index: 1}),
                         md5ext: 'cd21514d0531fdffb22204e0ec5ed84a.svg',
                         dataFormat: 'svg',
                         rotationCenterX: 240,
@@ -51,7 +41,7 @@ const projectData = translateFunction => {
             },
             {
                 isStage: false,
-                name: translator(messages.sprite, {index: 1}),
+                name: translator(sharedMessages.sprite, {index: 1}),
                 variables: {},
                 lists: {},
                 broadcasts: {},
@@ -60,13 +50,13 @@ const projectData = translateFunction => {
                 currentCostume: 0,
                 costumes: [
                     {
-                        assetId: '927d672925e7b99f7813735c484c6922',
-                        name: translator(messages.costume, {index: 1}),
+                        assetId: 'bf2245779eb39ddcacecccc606ed27d1',
+                        name: translator(sharedMessages.costume, {index: 1}),
                         bitmapResolution: 1,
-                        md5ext: '927d672925e7b99f7813735c484c6922.svg',
+                        md5ext: 'bf2245779eb39ddcacecccc606ed27d1.svg',
                         dataFormat: 'svg',
-                        rotationCenterX: 30.74937882782359,
-                        rotationCenterY: 58.864768144346826
+                        rotationCenterX: 40,
+                        rotationCenterY: 46
                     }
                 ],
                 sounds: [],
