@@ -2,7 +2,7 @@
 // 用法：node src/playground/ai/harness.test.mjs
 /* eslint-disable no-console */
 import {createRequire} from 'node:module';
-import {createScratchPort} from './port.js';
+import {createScratchPort, collectSvgAssets, cacheSvgAssets, svgCanvasSize} from './port.js';
 import {createTools} from './tools.js';
 import {createSession, toModelMessages} from './session.js';
 import {runTurn, executeTool, createSkipToken, STEP_LIMITS, clampMaxSteps, maxStepsOf} from './loop.js';
@@ -482,6 +482,130 @@ check('思考里打转一样打断', thoughtLoop.reason === 'repeat', `reason=${
 check('打转得只剩空的回复不留进历史',
   thinkSession.messages.length === 1 && thinkSession.messages[0].role === 'user',
   thinkSession.messages.map(m => m.role).join('、'));
+
+// === AI 画角色：新建角色 + SVG 造型 + 撤销 + 非视觉模型下的视觉工具 ===
+// 无头环境没有 scratch-render，用一个万能桩顶上；画质本身是浏览器里的事，
+// 这里验的是「角色建出来了、造型挂对了、undo 收得回去、快照带得走那份矢量图」。
+vm.attachStorage(new (require('@turbowarp/scratch-storage'))());
+vm.runtime.renderer = new Proxy({}, {
+  get: (t, key) => {
+    if (key === 'getSkinSize' || key === 'getCurrentSkinSize') return () => [120, 80];
+    if (key === 'getSkinRotationCenter') return () => [60, 40];
+    if (key === 'getBounds') return () => ({left: 0, right: 0, top: 0, bottom: 0});
+    if (key === 'getFencedPositionOfDrawable') return (id, pos) => pos;
+    if (key === 'createDrawable' || key === 'createSVGSkin' || key === 'createBitmapSkin') return () => 1;
+    return () => undefined;
+  }
+});
+
+const BALL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80">' +
+  '<circle cx="60" cy="40" r="30" fill="#2b6fec"/></svg>';
+
+const addSpriteTool = tools.find(t => t.name === 'xce_add_sprite');
+const addCostumeTool = tools.find(t => t.name === 'xce_add_costume');
+const readCostumeTool = tools.find(t => t.name === 'xce_read_costume');
+check('工具表里有新增角色 / 添加造型 / 查看造型',
+  !!addSpriteTool && !!addCostumeTool && !!readCostumeTool);
+
+const beforeSprites = vm.runtime.targets.filter(t => !t.isStage).length;
+const created = await addSpriteTool.handler({name: 'Ball', svg: BALL_SVG, x: 10, y: -20}, {});
+const ball = vm.runtime.targets.find(t => t.getName && t.getName() === 'Ball');
+check('xce_add_sprite 建出角色并选中它',
+  !created.isError && !!ball && vm.editingTarget && vm.editingTarget.getName() === 'Ball',
+  String(created.content).split('\n')[0]);
+check('角色数 +1', vm.runtime.targets.filter(t => !t.isStage).length === beforeSprites + 1);
+check('造型就是那张 SVG，编辑器给的空白造型被摘掉了',
+  !!ball && ball.getCostumes().length === 1 && ball.getCostumes()[0].dataFormat === 'svg' &&
+  ball.getCostumes()[0].asset.decodeText().includes('circle'),
+  ball && ball.getCostumes().map(c => `${c.name}/${c.dataFormat}`).join(', '));
+check('旋转中心取画布中心（120x80 -> 60,40）',
+  !!ball && ball.getCostumes()[0].rotationCenterX === 60 && ball.getCostumes()[0].rotationCenterY === 40,
+  ball && `${ball.getCostumes()[0].rotationCenterX},${ball.getCostumes()[0].rotationCenterY}`);
+check('位置参数生效', !!ball && ball.x === 10 && ball.y === -20, ball && `${ball.x},${ball.y}`);
+check('undo 句柄是「新建角色」',
+  created.undo && created.undo.kind === 'sprite' && created.undo.sprite === 'Ball',
+  JSON.stringify(created.undo));
+
+const dup = await addSpriteTool.handler({name: 'Ball', svg: BALL_SVG}, {});
+check('重名被拒并给出改法',
+  dup.isError === true && /already exists/.test(dup.content), String(dup.content).slice(0, 70));
+
+const noSize = await addSpriteTool.handler({
+  name: 'NoSize',
+  svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'
+}, {});
+check('SVG 缺 width/height：角色建出来，但明确说造型没用上',
+  noSize.isError === true && /width and height/.test(noSize.content) &&
+  !!vm.runtime.targets.find(t => t.getName && t.getName() === 'NoSize'),
+  String(noSize.content).slice(0, 90));
+
+const addedCostume = await addCostumeTool.handler({sprite: 'Ball', svg: BALL_SVG, name: 'big'}, {});
+check('xce_add_costume 加造型并切成当前造型',
+  !addedCostume.isError && /"big"/.test(addedCostume.content) &&
+  ball.getCostumes().length === 2 && ball.getCostumes()[ball.currentCostume].name === 'big',
+  String(addedCostume.content));
+check('加造型的 undo 句柄带下标',
+  addedCostume.undo && addedCostume.undo.kind === 'costume' && addedCostume.undo.index === 1,
+  JSON.stringify(addedCostume.undo));
+
+// 造型渲染在无头环境里做不出来（没有 Image / canvas）：必须明确失败，不能悄悄给张空图
+const noCanvas = await readCostumeTool.handler({sprite: 'Ball'}, {supportsImage: true});
+check('无画布环境里 xce_read_costume 明确报失败',
+  noCanvas.isError === true && /could be captured/.test(noCanvas.content),
+  String(noCanvas.content).slice(0, 80));
+
+const blindCostume = await readCostumeTool.handler({sprite: 'Ball'}, {supportsImage: false});
+check('非视觉模型不塞图，给一句能转述的话',
+  blindCostume.images === void 0 && !blindCostume.isError &&
+  /does not read images/.test(blindCostume.content) && /vision-capable model/.test(blindCostume.content),
+  String(blindCostume.content).slice(0, 90));
+
+// 快照要带的 SVG 资产：收集 + 塞回（刷新恢复靠它，见 project-persistence.jsx）。
+// 得赶在撤销之前做 —— 撤销会把 Ball 整个删掉，那时项目里就没有 AI 画的造型了。
+const collected = collectSvgAssets(vm);
+const collectedIds = Object.keys(collected);
+check('快照收集到项目里的 SVG 造型（内置的不收）',
+  collectedIds.length >= 1 && Object.values(collected).some(text => text.includes('circle')),
+  `收了 ${collectedIds.length} 份：${collectedIds.join(', ')}`);
+
+const freshVm = new (require(VM_PATH))();
+freshVm.attachStorage(new (require('@turbowarp/scratch-storage'))());
+freshVm.runtime.renderer = vm.runtime.renderer;
+await freshVm.loadProject(vm.toJSON());
+const lostInFresh = freshVm.runtime.targets.find(t => t.getName && t.getName() === 'Ball');
+check('不塞回资产的话，读档后造型是 broken 的（这正是要防的）',
+  !!lostInFresh && !!lostInFresh.getCostumes()[0].broken,
+  lostInFresh && `broken=${!!lostInFresh.getCostumes()[0].broken}`);
+
+const withAssetsVm = new (require(VM_PATH))();
+withAssetsVm.attachStorage(new (require('@turbowarp/scratch-storage'))());
+withAssetsVm.runtime.renderer = vm.runtime.renderer;
+cacheSvgAssets(withAssetsVm, collected);
+await withAssetsVm.loadProject(vm.toJSON());
+const restored = withAssetsVm.runtime.targets.find(t => t.getName && t.getName() === 'Ball');
+check('资产塞回去之后读档，造型不再是 broken（刷新恢复的关键一步）',
+  !!restored && !restored.getCostumes()[0].broken,
+  restored && `broken=${!!restored.getCostumes()[0].broken}`);
+
+// 撤销：加造型 -> 删造型；新建角色 -> 删角色
+check('undoAction 收得回加造型',
+  port.undoAction(addedCostume.undo) === true && ball.getCostumes().length === 1);
+check('undoAction 收得回新建角色',
+  port.undoAction(created.undo) === true &&
+  !vm.runtime.targets.find(t => t.getName && t.getName() === 'Ball'));
+
+// ls 要带上造型名（加造型 / 看造型都按名字指认）
+const lsWithCostumes = await listSpritesTool.handler({}, {});
+check('ls 带上造型名与当前造型',
+  /costumes: /.test(lsWithCostumes.content),
+  String(lsWithCostumes.content).split('\n').filter(line => line.includes('NoSize'))[0]);
+
+// 纯函数：SVG 尺寸解析（最常踩的那个坑）
+check('svgCanvasSize 读得出普通数字', JSON.stringify(svgCanvasSize(BALL_SVG)) === '{"width":120,"height":80}');
+check('svgCanvasSize 对百分比 / 缺失 / 非 SVG 都返回 null',
+  svgCanvasSize('<svg width="100%" height="80"></svg>') === null &&
+  svgCanvasSize('<svg viewBox="0 0 10 10"></svg>') === null &&
+  svgCanvasSize('not an svg') === null);
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

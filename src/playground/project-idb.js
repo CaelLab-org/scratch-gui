@@ -3,7 +3,11 @@
  *
  * 项目动辄几 MB，localStorage 的 5MB 配额装不下；IndexedDB 的配额是浏览器按
  * 磁盘余量给的，宽裕得多。只有一个键 'last'：上次自动保存的快照。
- *   { json: <vm.toJSON() 的字符串>, savedAt: <时间戳> }
+ *   { json: <vm.toJSON() 的字符串>, savedAt: <时间戳>, assets: {assetId: svg 文本} }
+ *
+ * assets 是项目里那些**不在内置资产里的 SVG 造型**（AI 画的角色造型全走这里）：
+ * vm.toJSON() 只有 JSON，资产得另外带上，否则读档时 storage 里找不到那份矢量图，
+ * 造型会变成一片空白。老快照没有这个字段，读出来是 undefined，按「没有」处理。
  *
  * IndexedDB 打不开（隐私模式、配额被清等）时所有操作静默退化：存不上、读不到，
  * 不该因为它打断编辑器 —— 所以这里把一切错误都吞成 null / false。
@@ -57,8 +61,14 @@ const withStore = async (mode, run) => {
     });
 };
 
-export const saveSnapshot = (json, savedAt = Date.now()) =>
-    withStore('readwrite', store => store.put({json, savedAt}, KEY))
+/**
+ * @param {string} json vm.toJSON() 的字符串
+ * @param {number} savedAt 保存时间戳
+ * @param {?Object<string, string>} assets assetId -> SVG 文本（没有就不带这个字段）
+ * @returns {Promise<boolean>} 是否写成功
+ */
+export const saveSnapshot = (json, savedAt = Date.now(), assets = null) =>
+    withStore('readwrite', store => store.put({json, savedAt, assets}, KEY))
         .then(result => result !== null);
 
 export const loadSnapshot = () =>

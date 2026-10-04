@@ -27,6 +27,7 @@ import {
     requestNewProject, getIsShowingProject, LoadingState
 } from '../reducers/project-state.js';
 import {saveSnapshot, loadSnapshot, clearSnapshot} from './project-idb.js';
+import {collectSvgAssets, cacheSvgAssets} from './ai/port.js';
 import styles from './interface.css';
 
 const SAVE_DEBOUNCE = 2000;
@@ -53,7 +54,16 @@ const serializeAndSave = () => {
     }
     if (json === lastSavedJson) return;
     lastSavedJson = json;
-    saveSnapshot(json).catch(() => {
+    // 项目里的 SVG 造型（AI 画的角色造型就是这种）不在 toJSON 里，得快照时另抄一份文本 ——
+    // 否则读档时 storage 里没有这份矢量图，造型全成空白（见 project-idb.js）。
+    let assets = null;
+    try {
+        const found = collectSvgAssets(activeVm);
+        assets = Object.keys(found).length ? found : null;
+    } catch (e) {
+        assets = null;
+    }
+    saveSnapshot(json, Date.now(), assets).catch(() => {
         // project-idb 吞了大部分错误，这里兜个底
     });
 };
@@ -134,6 +144,9 @@ const ProjectPersistence = ({vm, projectId, isPlayerOnly, isShowingProject, load
                 if (projectIdRef.current !== '0') return;
                 try {
                     lastSavedJson = snapshot.json;
+                    // 造型资产要先塞回 storage 再 loadProject：反过来的话 load 时找不到
+                    // 那份矢量图，AI 画的造型会全空
+                    cacheSvgAssets(vm, snapshot.assets);
                     await vm.loadProject(snapshot.json);
                     if (!unmountedRef.current && ProjectPersistence.restoreSeq === seq) {
                         setBanner({savedAt: snapshot.savedAt});

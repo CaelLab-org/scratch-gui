@@ -1,0 +1,145 @@
+/*
+ * 应用内对话框（dialog.js）的样式。
+ *
+ * 目标：像**系统级对话框**，不像网页弹窗 —— 中性描边 + 中性阴影、字号间距只用界面那套、
+ * 入场只有 120ms 的淡入加一点点缩放（不回弹、不糊背景，那两样都让人干等）。
+ * 颜色取 interface.css 里 :root 的品牌变量，只补一个「危险」红给退出 / 删除这类动作。
+ *
+ * 一条硬约束：显示用 opacity + pointer-events 开关，**不用 display** ——
+ * 元素一直挂在 DOM 里，弹出时只要加一个类，省掉「插入 → 重排 → 再动画」那一步，点下去当帧就出来。
+ */
+
+@import "../css/z-index.css";
+
+:root {
+    /* 品牌色板里没有红。危险动作需要一个明确的警示色，取跟 AI 面板 --error 相同的值 */
+    --xce-danger: #d92d20;
+    --xce-danger-hover: #b42318;
+}
+
+.overlay {
+    position: fixed;
+    z-index: $z-index-system-dialog;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 24px;
+    background: rgba(16, 24, 40, 0.28);
+    opacity: 0;
+    /* 没弹出来的时候绝不能吃点击：AI 面板、积木选择框都在它底下 */
+    pointer-events: none;
+    transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.box {
+    box-sizing: border-box;
+    width: min(420px, 100%);
+    padding: 20px 22px 18px;
+    border: 1px solid var(--xce-border, #e4e7ec);
+    border-radius: 10px;
+    background: var(--xce-surface, #ffffff);
+    box-shadow: var(--xce-shadow-lg);
+    /* 从 0.97 落下来：系统对话框那种「贴上来」的感觉，不做回弹 */
+    transform: scale(0.97);
+    transition: transform 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.open .box {
+    transform: none;
+}
+
+.title {
+    margin: 0;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
+    letter-spacing: 0.1px;
+    color: var(--xce-text, #101828);
+}
+
+.message {
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--xce-text-secondary, #5a6472);
+    word-break: break-word;
+    /* 多段用 \n 传进来，别塞 <br> */
+    white-space: pre-line;
+}
+
+.actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.btn {
+    box-sizing: border-box;
+    min-width: 78px;
+    height: 32px;
+    padding: 0 14px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 90ms ease, border-color 90ms ease, color 90ms ease;
+}
+
+/* 键盘走查要有焦点圈；鼠标点的不显，免得一按就花 */
+.btn:focus-visible {
+    outline: 2px solid rgba(43, 111, 236, 0.5);
+    outline-offset: 1px;
+}
+
+/* 一行就够的「按下去了」手感 */
+.btn:active {
+    transform: translateY(0.5px);
+}
+
+.ghost {
+    border-color: var(--xce-border, #e4e7ec);
+    background: var(--xce-surface, #ffffff);
+    color: var(--xce-text, #101828);
+}
+
+.ghost:hover {
+    background: #f5f6f8;
+}
+
+.primary {
+    background: var(--xce-primary, #2b6fec);
+    color: #ffffff;
+}
+
+.primary:hover {
+    background: var(--xce-primary-hover, #1d5bd6);
+}
+
+.danger {
+    background: var(--xce-danger);
+    color: #ffffff;
+}
+
+.danger:hover {
+    background: var(--xce-danger-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .overlay,
+    .box,
+    .btn {
+        transition: none;
+    }
+}

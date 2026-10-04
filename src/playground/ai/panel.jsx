@@ -58,6 +58,9 @@ const TOOL_LABELS = {
     xce_run_project: '运行项目',
     xce_read_state: '读取状态',
     xce_read_stage: '截取舞台',
+    xce_add_sprite: '新增角色',
+    xce_add_costume: '添加造型',
+    xce_read_costume: '查看造型',
     xce_get_time: '获取时间',
     xce_time: '等待',
     xce_read_skill: '查阅资料',
@@ -464,9 +467,11 @@ const TurnChanges = ({changes, onRevert}) => {
                     key={change.sprite}
                 >
                     <span className={styles.changeSprite}>{change.sprite}</span>
+                    {change.sprites ? <span className={styles.changePlus}>{'新角色'}</span> : null}
                     {change.added ? <span className={styles.changePlus}>{`+${change.added}`}</span> : null}
+                    {change.costumes ? <span className={styles.changePlus}>{`+${change.costumes} 造型`}</span> : null}
                     {change.removed ? <span className={styles.changeMinus}>{`\u2212${change.removed}`}</span> : null}
-                    <span className={styles.changeUnit}>积木</span>
+                    {change.added || change.removed ? <span className={styles.changeUnit}>{'积木'}</span> : null}
                 </span>
             ))}
             <button
@@ -1618,9 +1623,12 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
         const done = new Set(turnItems);
         const summary = turn.changes.map(change => {
             const parts = [];
+            if (change.sprites) parts.push('新增角色');
             if (change.added) parts.push(`+${change.added}`);
             if (change.removed) parts.push(`\u2212${change.removed}`);
-            return `${change.sprite} ${parts.join(' ')} 积木`;
+            if (change.costumes) parts.push(`+${change.costumes} 造型`);
+            const unit = change.added || change.removed ? ' 积木' : '';
+            return `${change.sprite} ${parts.join(' ')}${unit}`;
         }).join('，');
         setItemsState(prev => prev
             .map(entry => (done.has(entry) ? {...entry, undo: null} : entry))
@@ -1631,9 +1639,9 @@ const AIPanel = ({vm, activeTabIndex = 0}) => {
         // 下一轮它会当成还在，用户说「继续」就什么都不做了 —— 插一句话把事实对齐。
         sessionRef.current.messages.push({
             role: 'user',
-            content: '[The user reverted the changes made in the previous turn: those scripts were ' +
-                'removed from the project. Treat them as not existing. If the user asks for them ' +
-                'again, write them again instead of assuming they are still there.]'
+            content: '[The user reverted the changes made in the previous turn: those scripts, sprites and ' +
+                'costumes were removed from the project. Treat them as not existing. If the user asks for ' +
+                'them again, make them again instead of assuming they are still there.]'
         });
     }, []);
 

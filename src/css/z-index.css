@@ -23,6 +23,9 @@ $z-index-alerts: 490;
 $z-index-menu-bar: 491; /* menu-bar should go over monitors, alerts and tutorials */
 $z-index-loader: 490; /* behind menu-bar */
 $z-index-modal: 510;
+/* 应用内对话框（关窗确认这类）：要高过 AI 面板的全屏形态（600）和积木拖拽层（1000）——
+   它弹出来的时候，屏幕上最该被点到的就是它 */
+$z-index-system-dialog: 1200;
 
 $z-index-drag-layer: 1000;
 /* Block drag z-index: 1000; default 50 is overriden in blocks.css */

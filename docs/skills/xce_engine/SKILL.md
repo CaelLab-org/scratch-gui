@@ -20,6 +20,18 @@ faster than in the standard editor, plus dark mode, addons, and this built-in AI
 `xce_write_script` takes exactly two parameters: `sprite` (an existing sprite's name) and `text`
 (the scratchblocks script). There is **no** `script` parameter — passing the code as `script` is a mistake.
 
+## Drawing a costume
+
+`xce_add_sprite` creates a new sprite, `xce_add_costume` gives an existing sprite one more costume;
+both take the costume as an SVG document **you write**. Whether it shows up at all comes down to a
+few rules (numeric `width`/`height` on the root element, the subset of SVG the editor renders, where
+the rotation centre sits) — they are in the detailed doc `xce_engine/draw-svg`. Read that before you
+draw, not after something comes out blank.
+
+Then look at your own work with `xce_read_costume` (or `xce_read_stage` for the whole stage). Both
+return a picture **only on a vision model**; on a text-only model they hand back a note saying so,
+and then you tell the user you cannot see it — never describe a drawing you have not looked at.
+
 ## Where things are
 
 - Editor: <https://engine.xmuer.online/> — the landing page is

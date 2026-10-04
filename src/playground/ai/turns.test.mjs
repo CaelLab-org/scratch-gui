@@ -125,6 +125,27 @@ check('没改积木的轮次没有变更行', summarizeChanges([
     {kind: 'tool', id: 'r2', name: 'xce_read_project', status: 'done'}
 ]).length === 0);
 
+// 新建角色 / 加造型也要进「本轮变更」那一行（它们同样是这轮对项目的改动）
+const drawingSummary = summarizeChanges([
+    {kind: 'tool', id: 's1', name: 'xce_add_sprite', sprite: 'Ball', undo: {kind: 'sprite', sprite: 'Ball'}},
+    {kind: 'tool', id: 'c1', name: 'xce_add_costume', sprite: 'Ball', undo: {kind: 'costume', sprite: 'Ball', index: 1}},
+    {
+        kind: 'tool',
+        id: 'w7',
+        name: 'xce_write_script',
+        sprite: 'Ball',
+        undo: {kind: 'add', sprite: 'Ball', topBlockIds: ['a'], added: 6}
+    }
+]);
+check('新建角色 + 加造型 + 写积木合并到一条（同一个角色）',
+    drawingSummary.length === 1 && drawingSummary[0].sprite === 'Ball' &&
+    drawingSummary[0].sprites === 1 && drawingSummary[0].costumes === 1 && drawingSummary[0].added === 6,
+    JSON.stringify(drawingSummary[0]));
+check('只新建角色、没写积木的轮次也有变更行（0 块不算没改）',
+    summarizeChanges([
+        {kind: 'tool', id: 's2', name: 'xce_add_sprite', sprite: 'Ball', undo: {kind: 'sprite', sprite: 'Ball'}}
+    ]).length === 1);
+
 // 单张卡撤销过（undo 被清空）的，不该再算进本轮
 check('撤销过的卡不计入', summarizeChanges([
     {

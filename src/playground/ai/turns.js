@@ -43,20 +43,27 @@ export const undoActionOf = item => {
 };
 
 /**
- * 一轮的变更汇总：按角色把「加了几块 / 删了几块」加起来，给界面上的「本轮变更」那一行用。
+ * 一轮的变更汇总：按角色把「加了几块 / 删了几块积木、多了几个角色 / 造型」加起来，
+ * 给界面上的「本轮变更」那一行用。
  *
  * 只统计**还留着手柄**的动作：单张卡撤销过的、整轮回退过的（undo 已清空）都不该再算进去，
  * 所以这一行会跟着撤销实时缩水，而不是永远记着「这轮本来改了多少」。
  * 数不出块数的（旧数据）整条丢掉 —— 宁可这一行不出现，也不显示一个骗人的 +0。
  * @param {Array} items 本轮的条目（含工具行）
- * @returns {Array<{sprite, added, removed}>} 按角色一条，全是 0 的角色不出现
+ * @returns {Array<{sprite, added, removed, sprites, costumes}>} 按角色一条，什么都没改的不出现
  */
 export const summarizeChanges = items => {
     const bySprite = new Map();
     for (const action of items.map(undoActionOf)) {
         if (!action || !action.sprite) continue;
-        const entry = bySprite.get(action.sprite) || {sprite: action.sprite, added: 0, removed: 0, known: true};
-        if (action.kind === 'del') {
+        const entry = bySprite.get(action.sprite) ||
+            {sprite: action.sprite, added: 0, removed: 0, sprites: 0, costumes: 0, known: true};
+        if (action.kind === 'sprite') {
+            // 新建角色：这条手柄的数就是「多了一个角色」，名字就是新角色的名字
+            entry.sprites += 1;
+        } else if (action.kind === 'costume') {
+            entry.costumes += 1;
+        } else if (action.kind === 'del') {
             if (typeof action.removed === 'number') entry.removed += action.removed;
             else entry.known = false;
         } else if (typeof action.added === 'number') {
@@ -67,8 +74,9 @@ export const summarizeChanges = items => {
         bySprite.set(action.sprite, entry);
     }
     return [...bySprite.values()]
-        .filter(entry => entry.known && (entry.added || entry.removed))
-        .map(({sprite, added, removed}) => ({sprite, added, removed}));
+        .filter(entry => entry.known &&
+            (entry.added || entry.removed || entry.sprites || entry.costumes))
+        .map(({sprite, added, removed, sprites, costumes}) => ({sprite, added, removed, sprites, costumes}));
 };
 
 /**
