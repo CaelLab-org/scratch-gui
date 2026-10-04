@@ -31,6 +31,11 @@ check('思考一律英文', /Think in English/.test(plain));
 check('不再硬性要求中文回答', !/Always reply in Chinese/.test(plain));
 check('中文里仍叫「角色」不叫「精灵」', plain.includes('「角色」') && plain.includes('「精灵」'));
 
+// ---------- 1.6 链接写法（裸链接会一路吞掉后面的中文，提示词里必须点明） ----------
+check('要求写成 markdown 链接形式',
+    /Write links in the markdown form/.test(plain) && plain.includes('[what the page is](https://example.com/a)'));
+check('说明裸链接会把后面的字一起吞进链接', /keeps swallowing whatever follows it/.test(plain));
+
 // 没写自定义提示词就不许出现分隔标记
 check('没有自定义提示词时不留空分隔块', !plain.includes('[End of system prompt]'));
 

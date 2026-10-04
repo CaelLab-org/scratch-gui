@@ -10,15 +10,22 @@
  *     这里启动时探测一次写进常量，读取全同步 —— loadSettings 在 render 里就调，等不了 IPC。
  *     写走 settingsWrite 异步落盘，失败的只是这一次落盘（下次启动退回上一份）。
  *
- * 另外两样仍放 localStorage（两端一致）：从接口拉回来的模型清单（不是秘密，还可能上百条，
- * cookie 的 4KB 装不下）、以及用户在设置里写的自定义提示词。
+ * 另外几样仍放 localStorage（两端一致）：从接口拉回来的模型清单（不是秘密，还可能上百条，
+ * cookie 的 4KB 装不下）、用户在设置里写的自定义提示词、用户自己添加的供应商清单
+ * （多条，见 custom-providers.js），以及**每家供应商各自的密钥表**。
+ * 密钥单独一张表按供应商 id 存：多供应商来回切的时候，一个字段会被覆盖成上一家的 key，
+ * 用户每次都得重贴一遍 —— 分开存就各自恢复自己那把。
  */
-import {getProvider, PROVIDERS, resolveModel, thinkingOf} from './providers.js';
+import {getProvider, keyRequired, PROVIDERS, resolveModel, thinkingOf} from './providers.js';
+import {customProviders, saveCustomProviders} from './custom-providers.js';
 import {clampMaxSteps} from './loop.js';
 
 const COOKIE_NAME = 'xce_ai_model';
 const MODELS_KEY = 'xce_ai_models';
+const KEYS_KEY = 'xce_ai_keys';
 const USER_PROMPT_KEY = 'xce_ai_prompt';
+// 老版本只有一条「自定义」（id 固定是 custom），搬进自定义列表时用这个 id
+const LEGACY_CUSTOM_ID = 'custom-legacy';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 180; // 半年
 
 const readCookie = name => {
@@ -114,6 +121,41 @@ export const saveModelCache = (providerId, baseUrl, models) => {
 };
 
 // ---------------------------------------------------------------------------
+// 密钥表：一家供应商一把钥匙
+// ---------------------------------------------------------------------------
+
+const readKeys = () => {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(KEYS_KEY) || '{}');
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+        return {};
+    }
+};
+
+/**
+ * 取某家的密钥
+ * @param {string} providerId 供应商 id
+ * @returns {string} 密钥，没存过就是空串
+ */
+export const loadProviderKey = providerId => {
+    const key = readKeys()[providerId];
+    return typeof key === 'string' ? key : '';
+};
+
+const saveProviderKey = (providerId, apiKey) => {
+    if (!providerId) return;
+    try {
+        const all = readKeys();
+        if (apiKey) all[providerId] = apiKey;
+        else delete all[providerId];
+        localStorage.setItem(KEYS_KEY, JSON.stringify(all));
+    } catch (e) {
+        // 存不下就算了
+    }
+};
+
+// ---------------------------------------------------------------------------
 // 设置本身
 // ---------------------------------------------------------------------------
 
@@ -175,14 +217,13 @@ export const defaultSettingsFor = providerId => {
         baseUrl: provider.baseUrl,
         modelId: first ? first.id : '',
         models: cached,
-        apiKey: '',
+        apiKey: loadProviderKey(provider.id),
         effort: defaultEffort(provider.id, first)
     };
 };
 
 export const DEFAULT_SETTINGS = {
     ...defaultSettingsFor('deepseek'),
-    apiKey: '',
     userPrompt: loadUserPrompt()
 };
 
@@ -191,18 +232,38 @@ export const loadSettings = () => {
     if (!raw) return {...DEFAULT_SETTINGS};
     try {
         const parsed = JSON.parse(raw);
-        const providerId = getProvider(parsed.providerId).id;
+        // 老设置的「自定义供应商」只有一条，地址和密钥都存在设置本体里。现在自定义是多条、各存各的，
+        // 所以把它搬成列表里的一条（密钥跟着搬过去，用户不用重填），再把这条设为当前供应商。
+        let providerId = parsed.providerId;
+        if (providerId === 'custom') {
+            const existing = customProviders().find(p => p.id === LEGACY_CUSTOM_ID);
+            if (!existing) {
+                saveCustomProviders(customProviders().concat([{
+                    id: LEGACY_CUSTOM_ID,
+                    name: '自定义供应商',
+                    wire: 'openai',
+                    baseUrl: parsed.baseUrl || ''
+                }]));
+            }
+            providerId = LEGACY_CUSTOM_ID;
+        }
+        providerId = getProvider(providerId).id;
+        // 老设置的密钥是跟着设置本体走的，现在每家一把钥匙存在密钥表里 —— 第一次读到就搬过去，
+        // 用户不用重填（预设和那条老「自定义」都走这一条）
+        if (parsed.apiKey && !loadProviderKey(providerId)) saveProviderKey(providerId, parsed.apiKey);
         const provider = getProvider(providerId);
         const baseUrl = parsed.baseUrl === void 0 ? provider.baseUrl : parsed.baseUrl;
         const models = loadModelCache(providerId, baseUrl);
         const known = provider.models.concat(models);
-        const model = known.find(m => m.id === parsed.modelId) || known[0] || null;
+        // 清单里找不到就保留用户手填的那个 id（自定义供应商刚建、还没拉清单时只有它）
+        const model = known.find(m => m.id === parsed.modelId) || known[0] ||
+            (parsed.modelId ? {id: parsed.modelId} : null);
         return {
             providerId,
             baseUrl,
             modelId: model ? model.id : '',
             models,
-            apiKey: parsed.apiKey || '',
+            apiKey: loadProviderKey(providerId),
             effort: parsed.effort || defaultEffort(providerId, model),
             // 用户自定义的限额（数字），没存过就是 undefined = 自动
             contextWindow: Number(parsed.contextWindow) > 0 ? Number(parsed.contextWindow) : void 0,
@@ -222,11 +283,12 @@ export const saveSettings = settings => {
     if (Number(settings.contextWindow) > 0) limits.contextWindow = Number(settings.contextWindow);
     if (Number(settings.maxOutputTokens) > 0) limits.maxOutputTokens = Number(settings.maxOutputTokens);
     if (Number(settings.maxSteps) > 0) limits.maxSteps = clampMaxSteps(settings.maxSteps);
+    // 密钥按供应商 id 进密钥表，设置本体不带它（切供应商时各自恢复自己那把）
+    saveProviderKey(settings.providerId, (settings.apiKey || '').trim());
     writeRawSettings(JSON.stringify({
         providerId: settings.providerId,
         baseUrl: settings.baseUrl,
         modelId: settings.modelId,
-        apiKey: settings.apiKey,
         effort: settings.effort,
         ...limits
     }));
@@ -237,6 +299,11 @@ export const saveSettings = settings => {
 
 export const clearSettings = () => {
     clearRawSettings();
+    try {
+        localStorage.removeItem(KEYS_KEY);
+    } catch (e) {
+        // 清不掉就算了，设置本体已经清了
+    }
     return {...DEFAULT_SETTINGS};
 };
 
@@ -252,5 +319,7 @@ export const describeSettings = settings => {
     return `${provider.name} · ${label}`;
 };
 
+// 本地端点（Ollama / 自建的 vLLM 之类）不需要密钥，别拿「没填 key」挡住用户
 export const hasApiKey = settings =>
-    !!(settings.apiKey && settings.apiKey.trim()) || settings.providerId === 'ollama';
+    !keyRequired(getProvider(settings.providerId), settings.baseUrl) ||
+    !!(settings.apiKey && settings.apiKey.trim());
