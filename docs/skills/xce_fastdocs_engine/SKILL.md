@@ -1,5 +1,5 @@
 ---
-name: xce_engine
+name: xce_fastdocs_engine
 description: XMUER Coding Engine itself — what it is, where it lives, and how it is built and deployed. Load this when the user asks about the editor's own features, its relationship to Scratch or TurboWarp, or how a change gets published.
 ---
 
@@ -22,11 +22,14 @@ faster than in the standard editor, plus dark mode, addons, and this built-in AI
 
 ## Drawing a costume
 
-`xce_add_sprite` creates a new sprite, `xce_add_costume` gives an existing sprite one more costume;
-both take the costume as an SVG document **you write**. Whether it shows up at all comes down to a
-few rules (numeric `width`/`height` on the root element, the subset of SVG the editor renders, where
-the rotation centre sits) — they are in the detailed doc `xce_engine/draw-svg`. Read that before you
-draw, not after something comes out blank.
+`xce_add_sprite` creates a new sprite with one blank costume (that is the normal starting point);
+`xce_rename_sprite` renames one. Looks are made and changed with `xce_edit_costume`: action `"new"`
+appends a costume you drew, action `"edit"` redraws an existing vector costume (including the blank
+one) in place. `xce_add_costume_from_url` imports an image file from the web instead
+(webp/png/jpeg/svg), and `xce_delete_costume` removes a costume the user no longer wants. Drawings are SVG documents **you write**, and whether
+they show up at all comes down to a few rules (numeric `width`/`height` on the root element, the
+subset of SVG the editor renders, where the rotation centre sits) — they are in the detailed doc
+`xce_fastdocs_engine/draw-svg`. Read that before you draw, not after something comes out blank.
 
 Then look at your own work with `xce_read_costume` (or `xce_read_stage` for the whole stage). Both
 return a picture **only on a vision model**; on a text-only model they hand back a note saying so,

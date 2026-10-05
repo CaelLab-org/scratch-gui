@@ -15,6 +15,7 @@ const postcssImport = require('postcss-import');
 const STATIC_PATH = process.env.STATIC_PATH || '/static';
 const {APP_NAME} = require('./src/lib/brand');
 const {getSupportedLocales} = require('./src/lib/locales-config');
+const {version: APP_VERSION} = require('./package.json');
 
 const root = process.env.ROOT || '';
 if (root.length > 0 && !root.endsWith('/')) {
@@ -208,6 +209,7 @@ module.exports = [
         plugins: base.plugins.concat([
             new webpack.DefinePlugin({
                 'process.env.NODE_ENV': `"${process.env.NODE_ENV}"`,
+                'process.env.XCE_VERSION': JSON.stringify(APP_VERSION),
                 'process.env.DEBUG': Boolean(process.env.DEBUG),
                 'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(process.env.ENABLE_SERVICE_WORKER || ''),
                 'process.env.ROOT': JSON.stringify(root),

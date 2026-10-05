@@ -555,52 +555,163 @@ const BALL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80
   '<circle cx="60" cy="40" r="30" fill="#2b6fec"/></svg>';
 
 const addSpriteTool = tools.find(t => t.name === 'xce_add_sprite');
-const addCostumeTool = tools.find(t => t.name === 'xce_add_costume');
+const editCostumeTool = tools.find(t => t.name === 'xce_edit_costume');
+const deleteCostumeTool = tools.find(t => t.name === 'xce_delete_costume');
+const fromUrlTool = tools.find(t => t.name === 'xce_add_costume_from_url');
 const readCostumeTool = tools.find(t => t.name === 'xce_read_costume');
-check('工具表里有新增角色 / 添加造型 / 查看造型',
-    !!addSpriteTool && !!addCostumeTool && !!readCostumeTool);
+check('工具表里有新增角色 / 编辑造型 / 删除造型 / 从网页加造型 / 查看造型',
+    !!addSpriteTool && !!editCostumeTool && !!deleteCostumeTool && !!fromUrlTool && !!readCostumeTool);
 
 const beforeSprites = vm.runtime.targets.filter(t => !t.isStage).length;
-const created = await addSpriteTool.handler({name: 'Ball', svg: BALL_SVG, x: 10, y: -20}, {});
+const created = await addSpriteTool.handler({name: 'Ball', x: 10, y: -20}, {});
 const ball = vm.runtime.targets.find(t => t.getName && t.getName() === 'Ball');
 check('xce_add_sprite 建出角色并选中它',
     !created.isError && !!ball && vm.editingTarget && vm.editingTarget.getName() === 'Ball',
     String(created.content).split('\n')[0]);
 check('角色数 +1', vm.runtime.targets.filter(t => !t.isStage).length === beforeSprites + 1);
-check('造型就是那张 SVG，编辑器给的空白造型被摘掉了',
-    !!ball && ball.getCostumes().length === 1 && ball.getCostumes()[0].dataFormat === 'svg' &&
-  ball.getCostumes()[0].asset.decodeText().includes('circle'),
+check('新角色带一个空白造型（0x0），并指路 edit_costume',
+    !!ball && ball.getCostumes().length === 1 &&
+  /blank costume/.test(created.content) && /xce_edit_costume/.test(created.content),
     ball && ball.getCostumes().map(c => `${c.name}/${c.dataFormat}`)
         .join(', '));
-check('旋转中心取画布中心（120x80 -> 60,40）',
-    !!ball && ball.getCostumes()[0].rotationCenterX === 60 && ball.getCostumes()[0].rotationCenterY === 40,
-    ball && `${ball.getCostumes()[0].rotationCenterX},${ball.getCostumes()[0].rotationCenterY}`);
 check('位置参数生效', !!ball && ball.x === 10 && ball.y === -20, ball && `${ball.x},${ball.y}`);
 check('undo 句柄是「新建角色」',
     created.undo && created.undo.kind === 'sprite' && created.undo.sprite === 'Ball',
     JSON.stringify(created.undo));
 
-const dup = await addSpriteTool.handler({name: 'Ball', svg: BALL_SVG}, {});
+const dup = await addSpriteTool.handler({name: 'Ball'}, {});
 check('重名被拒并给出改法',
     dup.isError === true && /already exists/.test(dup.content), String(dup.content).slice(0, 70));
 
-const noSize = await addSpriteTool.handler({
-    name: 'NoSize',
+// action: 'edit' 把那张空白造型就地画掉（用户要的标准流程：先建角色、再调编辑造型）
+const blankIndex = ball.getCostumes().length - 1;
+const drawnBlank = await editCostumeTool.handler(
+    {sprite: 'Ball', action: 'edit', svg: BALL_SVG}, {});
+check('edit + 空白造型：就地替换内容，造型数不变',
+    !drawnBlank.isError && ball.getCostumes().length === 1 &&
+  ball.getCostumes()[0].dataFormat === 'svg' && ball.getCostumes()[0].asset.decodeText().includes('circle'),
+    String(drawnBlank.content).slice(0, 90));
+check('旋转中心取画布中心（120x80 -> 60,40）',
+    !!ball && ball.getCostumes()[0].rotationCenterX === 60 && ball.getCostumes()[0].rotationCenterY === 40,
+    ball && `${ball.getCostumes()[0].rotationCenterX},${ball.getCostumes()[0].rotationCenterY}`);
+check('edit 的 undo 句柄带旧 SVG 全文',
+    drawnBlank.undo && drawnBlank.undo.kind === 'costumeContent' && !!drawnBlank.undo.oldSvg,
+    JSON.stringify(drawnBlank.undo && drawnBlank.undo.kind));
+check('原先的空白造型名沿用（造型N 不跳号）',
+    ball.getCostumes()[blankIndex].name.startsWith('造型'),
+    ball.getCostumes()[blankIndex].name);
+
+// SVG 缺 width/height：明确报错并点出那条规则，且不改动项目
+const noSize = await editCostumeTool.handler({
+    sprite: 'Ball',
+    action: 'new',
     svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'
 }, {});
-check('SVG 缺 width/height：角色建出来，但明确说造型没用上',
+check('SVG 缺 width/height 被拒并点明规则',
     noSize.isError === true && /width and height/.test(noSize.content) &&
-  !!vm.runtime.targets.find(t => t.getName && t.getName() === 'NoSize'),
+  ball.getCostumes().length === 1,
     String(noSize.content).slice(0, 90));
 
-const addedCostume = await addCostumeTool.handler({sprite: 'Ball', svg: BALL_SVG, name: 'big'}, {});
-check('xce_add_costume 加造型并切成当前造型',
+// action: 'new'（create 同义）追加一个造型并切成当前
+const addedCostume = await editCostumeTool.handler(
+    {sprite: 'Ball', action: 'new', svg: BALL_SVG, name: 'big'}, {});
+check('action "new" 追加造型并切成当前造型',
     !addedCostume.isError && /"big"/.test(addedCostume.content) &&
   ball.getCostumes().length === 2 && ball.getCostumes()[ball.currentCostume].name === 'big',
     String(addedCostume.content));
 check('加造型的 undo 句柄带下标',
     addedCostume.undo && addedCostume.undo.kind === 'costume' && addedCostume.undo.index === 1,
     JSON.stringify(addedCostume.undo));
+const createdAlias = await editCostumeTool.handler(
+    {sprite: 'Ball', action: 'create', svg: BALL_SVG, name: 'alias'}, {});
+check('action "create" 等同于 "new"',
+    !createdAlias.isError && ball.getCostumes().length === 3 &&
+  ball.getCostumes()[2].name === 'alias');
+port.undoAction(createdAlias.undo);
+check('撤销 create 换回两枚造型', ball.getCostumes().length === 2);
+
+const badAction = await editCostumeTool.handler({sprite: 'Ball', action: 'delete', svg: BALL_SVG}, {});
+check('未知 action 被拒并列出两种',
+    badAction.isError === true && /"new"/.test(badAction.content) && /"edit"/.test(badAction.content));
+
+// edit 的撤销：换回旧内容
+const editAgain = await editCostumeTool.handler(
+    {sprite: 'Ball', action: 'edit', costume: 'big', svg: BALL_SVG.replace('circle', 'rect')}, {});
+check('edit 已有矢量造型成功', !editAgain.isError && /"big"/.test(editAgain.content),
+    String(editAgain.content).slice(0, 80));
+port.undoAction(editAgain.undo);
+check('撤销 edit 把旧内容摆回去（又有 circle 了）',
+    ball.getCostumes()[1].asset.decodeText().includes('circle'));
+
+// 删除造型：留一枚就不许再删；删掉的那枚能撤销回来
+const onlyGuard = ball.getCostumes().length;
+const deleted = await deleteCostumeTool.handler({sprite: 'Ball', costume: 'big'}, {});
+check('删除指定造型', !deleted.isError && ball.getCostumes().length === onlyGuard - 1,
+    String(deleted.content).slice(0, 80));
+check('删除的 undo 是 costumeRestore 且带造型对象',
+    deleted.undo && deleted.undo.kind === 'costumeRestore' && !!deleted.undo.costume);
+await port.undoAction(deleted.undo);
+check('撤销删除把造型摆回原下标（含名字）',
+    ball.getCostumes().length === onlyGuard && ball.getCostumes()[1].name === 'big');
+
+// （「最后一枚造型删不得」放在读造型那一段之后 —— 它会把 big 永久删掉，先让读取类测试跑完）
+
+// 从 URL 加造型：无头环境没有 canvas，位图落在 no-canvas 分支；SVG 走矢量通道。
+// 网络部分用假 fetch 顶掉（真下载不在单测里做）。
+const realFetch = globalThis.fetch;
+globalThis.fetch = async url => {
+    if (String(url).includes('bad')) return {ok: false, status: 404};
+    if (String(url).includes('page')) {
+        return {
+            ok: true,
+            status: 200,
+            headers: {get: () => 'text/html; charset=utf-8'},
+            arrayBuffer: async () => new TextEncoder().encode('<html><body>hi</body></html>').buffer
+        };
+    }
+    if (String(url).includes('vector')) {
+        const svg = BALL_SVG;
+        return {
+            ok: true,
+            status: 200,
+            headers: {get: () => 'image/svg+xml'},
+            arrayBuffer: async () => new TextEncoder().encode(svg).buffer
+        };
+    }
+    // 一个最小的 PNG（1x1 透明），魔数齐所以会被认成 png
+    const png = Uint8Array.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137]);
+    return {ok: true, status: 200, headers: {get: () => 'image/png'}, arrayBuffer: async () => png.buffer};
+};
+const urlVector = await fromUrlTool.handler({sprite: 'Ball', url: 'https://x.test/vector.svg', name: 'web'}, {});
+check('从 URL 加 SVG 走矢量通道',
+    !urlVector.isError && ball.getCostumes().some(c => c.name === 'web'),
+    String(urlVector.content).slice(0, 90));
+port.undoAction(urlVector.undo);
+const urlBitmap = await fromUrlTool.handler({sprite: 'Ball', url: 'https://x.test/pic.png'}, {});
+check('无 canvas 环境里位图明确报 no-canvas（不静默）',
+    urlBitmap.isError === true && /canvas/.test(urlBitmap.content),
+    String(urlBitmap.content).slice(0, 90));
+const urlPage = await fromUrlTool.handler({sprite: 'Ball', url: 'https://x.test/page'}, {});
+check('URL 是网页不是图片时说明白',
+    urlPage.isError === true && /usable image/.test(urlPage.content),
+    String(urlPage.content).slice(0, 90));
+const urlFail = await fromUrlTool.handler({sprite: 'Ball', url: 'https://x.test/bad.png'}, {});
+check('下载失败原样报 HTTP', urlFail.isError === true && /HTTP 404/.test(urlFail.content));
+globalThis.fetch = realFetch;
+
+// 位图造型不能 edit（没有源码）；用假 port 直接验分支
+const editWith = readCostumeSvg => createTools({port: {...port, readCostumeSvg}})
+    .find(t => t.name === 'xce_edit_costume');
+const bitmapEdit = await editWith(async () => ({bitmap: true, name: 'photo', index: 0, size: [40, 40]}))
+    .handler({sprite: 'Ball', action: 'edit', svg: BALL_SVG}, {});
+check('位图造型 edit 被拒并指路 action new',
+    bitmapEdit.isError === true && /bitmap image/.test(bitmapEdit.content) &&
+  /action "new"/.test(bitmapEdit.content),
+    String(bitmapEdit.content).slice(0, 90));
+const missingEdit = await editWith(async () => null)
+    .handler({sprite: 'Ball', action: 'edit', svg: BALL_SVG}, {});
+check('edit 指了不存在的造型时报清楚', missingEdit.isError === true && /No such costume/.test(missingEdit.content));
 
 // 矢量造型：默认直接给 SVG 源码（不栅格化）。用户 2026-10-04 要的 —— 是矢量图就给源码，
 // 太长才退回图片；顺带让非视觉模型也能读到造型。
@@ -657,6 +768,14 @@ check('超长矢量造型：显式要 svg 时说清超限并指路 image',
     !hugeWanted.isError && /over the/.test(hugeWanted.content) && /format "image"/.test(hugeWanted.content),
     String(hugeWanted.content).slice(0, 90));
 
+// 最后一枚造型删不得（放这里：它会把 big 永久删掉）
+const lastOne = await deleteCostumeTool.handler({sprite: 'Ball', costume: 'big'}, {});
+await deleteCostumeTool.handler({sprite: 'Ball', costume: 0}, {});
+const cannotLast = await deleteCostumeTool.handler({sprite: 'Ball'}, {});
+check('最后一枚造型删不得，且告诉模型先去加一枚',
+    lastOne.isError !== true && cannotLast.isError === true && /only one/.test(cannotLast.content),
+    String(cannotLast.content).slice(0, 100));
+
 // 快照要带的 SVG 资产：收集 + 塞回（刷新恢复靠它，见 project-persistence.jsx）。
 // 得赶在撤销之前做 —— 撤销会把 Ball 整个删掉，那时项目里就没有 AI 画的造型了。
 const collected = collectSvgAssets(vm);
@@ -684,19 +803,17 @@ check('资产塞回去之后读档，造型不再是 broken（刷新恢复的关
     !!restored && !restored.getCostumes()[0].broken,
     restored && `broken=${!!restored.getCostumes()[0].broken}`);
 
-// 撤销：加造型 -> 删造型；新建角色 -> 删角色
-check('undoAction 收得回加造型',
-    port.undoAction(addedCostume.undo) === true && ball.getCostumes().length === 1);
+// 撤销：新建角色 -> 删角色（造型那条路前面已经逐个验过：edit/new/delete 各自的 undo）
 check('undoAction 收得回新建角色',
     port.undoAction(created.undo) === true &&
   !vm.runtime.targets.find(t => t.getName && t.getName() === 'Ball'));
 
-// ls 要带上造型名（加造型 / 看造型都按名字指认）
+// ls 要带上造型名（编辑造型 / 查看造型都按名字指认）
 const lsWithCostumes = await listSpritesTool.handler({}, {});
 check('ls 带上造型名与当前造型',
     /costumes: /.test(lsWithCostumes.content),
     String(lsWithCostumes.content).split('\n')
-        .filter(line => line.includes('NoSize'))[0]);
+        .filter(line => line.includes('costumes:'))[0]);
 
 // 纯函数：SVG 尺寸解析（最常踩的那个坑）
 check('svgCanvasSize 读得出普通数字', JSON.stringify(svgCanvasSize(BALL_SVG)) === '{"width":120,"height":80}');
@@ -849,6 +966,33 @@ check('角色不存在时报错并给出现有角色', noSpriteNote.isError === 
   /No sprite named/.test(noSpriteNote.content));
 const blankNote = await executeTool({name: 'xce_note', input: {sprite: 'Sprite1', text: '   '}}, tools, {});
 check('空正文被拒', blankNote.isError === true && /empty/.test(blankNote.content));
+
+// === xce_delete_note：删注释（id 来自 :: note 行 / 撤销原样摆回 / 保留角色拒绝）===
+const deleteNoteTool = tools.find(t => t.name === 'xce_delete_note');
+check('工具表里有删注释工具', !!deleteNoteTool);
+const doomed = await executeTool(
+    {name: 'xce_note', input: {sprite: 'Sprite1', text: '这条注释马上要被删掉。'}}, tools, {});
+const doomedId = doomed.undo.commentId;
+check('注释清单带 :: note 行的 id（AI 拿它指认要删哪条）',
+    port.readNotes('Sprite1').some(note => note.id === doomedId),
+    JSON.stringify(port.readNotes('Sprite1').map(note => note.id)));
+const delNote = await executeTool({name: 'xce_delete_note', input: {sprite: 'Sprite1', noteId: doomedId}}, tools, {});
+check('删除成功并留下 noteDel 句柄',
+    !delNote.isError && delNote.undo.kind === 'noteDel' &&
+    Object.keys(noteSprite.comments).length === 0, String(delNote.content));
+check('撤销删注释 = 原样摆回（含正文）', port.undoAction(delNote.undo) === true &&
+    noteSprite.comments[doomedId] && noteSprite.comments[doomedId].text.includes('马上要被删掉'),
+    JSON.stringify(Object.keys(noteSprite.comments)));
+check('摆回的注释还挂在原来的积木上', !!noteSprite.comments[doomedId].blockId &&
+    !!noteSprite.blocks.getBlock(noteSprite.comments[doomedId].blockId));
+const delReserved = await executeTool(
+    {name: 'xce_delete_note', input: {sprite: 'XCEAGENT', noteId: 'whatever'}}, tools, {});
+check('保留角色（记忆存储）上的注释被拒并指路 xce_delete_memory',
+    delReserved.isError === true && /reserved sprite/.test(delReserved.content) &&
+    /xce_delete_memory/.test(delReserved.content), String(delReserved.content).slice(0, 70));
+const delMissingNote = await executeTool(
+    {name: 'xce_delete_note', input: {sprite: 'Sprite1', noteId: 'note-nope'}}, tools, {});
+check('id 不存在时干净报错', delMissingNote.isError === true, String(delMissingNote.content).slice(0, 60));
 
 // === xce_write_agent：项目级 XCEAGENT（建角色 + 一条注释，readAgentNote 读出来进提示词）===
 check('工具表里有项目级说明工具', tools.some(t => t.name === 'xce_write_agent'));
@@ -1026,6 +1170,33 @@ check('点击不存在的角色被拒', noSpriteClick.isError === true && /No sp
 const firedFlag = await executeTool({name: 'xce_trigger_event', input: {type: 'green-flag'}}, tools, {});
 check('绿旗拉起（立即返回不等待）', !firedFlag.isError && /Green flag clicked/.test(firedFlag.content) &&
   /without waiting|immediately/.test(firedFlag.content));
+
+// === xce_rename_sprite：改名（脚本不受影响；保留名拦住；可撤销）===
+check('工具表里有重命名角色工具', tools.some(tool => tool.name === 'xce_rename_sprite'));
+const renameNope = await executeTool(
+    {name: 'xce_rename_sprite', input: {sprite: '没有这角色', newName: 'X'}}, tools, {});
+check('改不存在的角色被拒', renameNope.isError === true && /No sprite named/.test(renameNope.content));
+const renameReserved = await executeTool(
+    {name: 'xce_rename_sprite', input: {sprite: 'XCEAGENT', newName: '别的名字'}}, tools, {});
+check('保留角色不许改名', renameReserved.isError === true && /reserved/i.test(renameReserved.content));
+const renameTake = await executeTool(
+    {name: 'xce_rename_sprite', input: {sprite: 'Sprite1', newName: 'xceagent'}}, tools, {});
+check('不许占用保留名（大小写不敏感）', renameTake.isError === true && /reserved/i.test(renameTake.content));
+const renamed = await executeTool(
+    {name: 'xce_rename_sprite', input: {sprite: 'Sprite1', newName: '小球'}}, tools, {});
+check('改名成功且 undo 是 rename 句柄',
+    !renamed.isError && renamed.undo.kind === 'rename' &&
+  renamed.undo.from === 'Sprite1' && renamed.undo.to === '小球',
+    String(renamed.content).slice(0, 80));
+check('新名字读得到、旧名字没了、脚本原样',
+    !!port.readTarget('小球') && !port.readTarget('Sprite1') &&
+  port.readTarget('小球').text.includes('move (10) steps'));
+const renameDup = await executeTool(
+    {name: 'xce_rename_sprite', input: {sprite: '小球', newName: 'stage'}}, tools, {});
+check('新名跟现有角色撞车（大小写不敏感）被拒',
+    renameDup.isError === true && /already exists/.test(renameDup.content));
+port.undoAction(renamed.undo);
+check('撤销改名后名字回来', !!port.readTarget('Sprite1') && !port.readTarget('小球'));
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

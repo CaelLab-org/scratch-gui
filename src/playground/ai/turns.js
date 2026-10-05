@@ -67,6 +67,9 @@ export const summarizeChanges = items => {
         } else if (action.kind === 'note') {
             // 写注释：Scratch 原生注释（xce_note），数量上跟造型同理
             entry.notes += 1;
+        } else if (action.kind === 'noteDel') {
+            // 删注释：往回扣一条（界面上显示 −N 注释）
+            entry.notes -= 1;
         } else if (action.kind === 'del') {
             if (typeof action.removed === 'number') entry.removed += action.removed;
             else entry.known = false;

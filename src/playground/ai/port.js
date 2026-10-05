@@ -345,6 +345,9 @@ export const createScratchPort = ({vm, getWorkspace}) => {
     };
 
     // 造型名跟编辑器一致用「造型N」：用户会在造型标签页里看到它
+
+    // —— 造型的编辑 / 删除 / 从图片建（xce_edit_costume / xce_delete_costume / xce_add_costume_from_url）——
+
     const defaultCostumeName = target => `造型${target.getCostumes().length + 1}`;
 
     // 造型截图的挑法：不传 = 当前造型；数字当下标，字符串当名字（不分大小写）
@@ -354,6 +357,154 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         const wanted = String(which).trim()
             .toLowerCase();
         return costumes.findIndex(entry => String(entry.name).toLowerCase() === wanted);
+    };
+
+    // 这几个都靠 pickCostume 认造型，所以定义放在它后面（见下面的定义位置）。
+
+    /**
+     * 位图造型：把 dataURL（统一转成 PNG）变成 storage 资产 + costume 对象。
+     * 下载来的 webp/jpeg 都先经 canvas 归一成 PNG（Scratch 不认 webp；jpeg 统一转 PNG 省一个分支）。
+     * 要 Image / canvas，浏览器（含桌面渲染进程）才有；无头环境返回 no-canvas。
+     * @param {string} dataUrl 图片的 data URL
+     * @param {string} name 造型名
+     * @returns {Promise<object>} {ok, costume?, width?, height?} / {ok: false, reason}
+     */
+    const bitmapCostumeFromDataUrl = dataUrl => new Promise(resolve => {
+        if (typeof Image === 'undefined' || typeof document === 'undefined' ||
+            !document.createElement) {
+            resolve({ok: false, reason: 'no-canvas'});
+            return;
+        }
+        const image = new Image();
+        image.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = image.naturalWidth || image.width;
+                canvas.height = image.naturalHeight || image.height;
+                canvas.getContext('2d').drawImage(image, 0, 0);
+                const png = canvas.toDataURL('image/png');
+                const storage = runtime().storage;
+                if (!storage || !storage.createAsset) {
+                    resolve({ok: false, reason: 'no-storage'});
+                    return;
+                }
+                const bytes = Uint8Array.from(atob(png.split(',')[1]), char => char.charCodeAt(0));
+                const asset = storage.createAsset(
+                    storage.AssetType.ImageBitmap, storage.DataFormat.PNG, bytes, null, true);
+                if (storage.cache) {
+                    storage.cache(storage.AssetType.ImageBitmap, storage.DataFormat.PNG, bytes, asset.assetId);
+                }
+                const md5ext = `${asset.assetId}.png`;
+                resolve({
+                    ok: true,
+                    width: canvas.width,
+                    height: canvas.height,
+                    costume: {
+                        name: '',
+                        asset,
+                        assetId: asset.assetId,
+                        dataFormat: 'png',
+                        md5: md5ext,
+                        md5ext,
+                        bitmapResolution: 1,
+                        rotationCenterX: canvas.width / 2,
+                        rotationCenterY: canvas.height / 2,
+                        size: [canvas.width, canvas.height]
+                    }
+                });
+            } catch (e) {
+                resolve({ok: false, reason: 'decode-failed'});
+            }
+        };
+        image.onerror = () => resolve({ok: false, reason: 'decode-failed'});
+        image.src = dataUrl;
+    });
+
+    /**
+     * 替换一个已有**矢量**造型的内容（xce_edit_costume 的 edit）。
+     * **就地换**，不删不加 —— 删了再加的话，Scratch 的 addCostumeAt 会把重名的新造型改成
+     * 「xxx2」（名字被工具改掉了），而且只剩一个造型时 VM 根本不肯删（单空白造型是常态）。
+     * 做法照 vm.updateSvg 那套（画图编辑器也是这么改造型的），但直接对造型对象操作，
+     * 不经过 editingTarget，免得把用户正看的工作区切走。
+     * @param {string} spriteName 角色名
+     * @param {string|number} which 造型名/下标（默认当前）
+     * @param {string} svg 新内容
+     * @param {string} [newName] 新造型名（缺省沿用旧的）
+     * @returns {object} {ok, index?, name?, oldName?} / {ok: false, reason}
+     */
+    const replaceCostumeContent = (spriteName, which, svg, newName) => {
+        const target = findTarget(spriteName);
+        if (!target) return {ok: false, reason: 'missing', sprites: spriteNames()};
+        const costumes = target.getCostumes();
+        const index = pickCostume(costumes, target.currentCostume, which);
+        const old = costumes[index];
+        if (!old) return {ok: false, reason: 'no-costume'};
+        if (old.dataFormat !== 'svg') return {ok: false, reason: 'bitmap', name: old.name};
+        const size = svgCanvasSize(svg);
+        if (!size) return {ok: false, reason: 'bad-size'};
+        const oldName = old.name;
+        const asset = svgAssetOf(svg);
+        old.asset = asset;
+        old.assetId = asset.assetId;
+        old.dataFormat = 'svg';
+        old.md5 = `${asset.assetId}.svg`;
+        old.md5ext = old.md5;
+        old.rotationCenterX = size.width / 2;
+        old.rotationCenterY = size.height / 2;
+        old.size = [size.width, size.height];
+        delete old.broken;
+        try {
+            const renderer = runtime().renderer;
+            if (renderer && renderer.updateSVGSkin && old.skinId !== void 0 && old.skinId !== null) {
+                renderer.updateSVGSkin(old.skinId, svg, [old.rotationCenterX, old.rotationCenterY]);
+                if (renderer.getSkinSize) old.size = renderer.getSkinSize(old.skinId);
+            }
+        } catch (e) {
+            // 皮肤换不动（无头环境）不影响数据面 —— 项目里已经是新内容了
+        }
+        const wanted = String(newName || '').trim();
+        if (wanted && wanted !== oldName) target.renameCostume(index, wanted);
+        if (target.blocks && target.blocks.resetCache) target.blocks.resetCache();
+        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+        if (runtime().requestRedraw) runtime().requestRedraw();
+        return {ok: true, index, name: old.name, oldName};
+    };
+
+    /**
+     * 删除造型前抓快照（撤销用）：留下 costume 对象引用、原下标和当时选中的是哪一枚。
+     * @param {string} spriteName 角色名
+     * @param {string|number} [which] 造型名/下标（默认当前）
+     * @returns {object|null} {index, costume, current}；没这个角色/造型返回 null
+     */
+    const captureCostume = (spriteName, which) => {
+        const target = findTarget(spriteName);
+        if (!target) return null;
+        const costumes = target.getCostumes();
+        const index = pickCostume(costumes, target.currentCostume, which);
+        return costumes[index] ?
+            {index, costume: costumes[index], current: target.currentCostume} : null;
+    };
+
+    /**
+     * 把快照的造型摆回原位（撤销删除）：先 append（loadCostume 会重建 skin），
+     * 再把同一对象挪回原下标，最后把「当前造型」也指回去。
+     * @param {string} spriteName 角色名
+     * @param {object} entry captureCostume 留下的快照
+     * @returns {Promise<boolean>} 摆回来了没有
+     */
+    const restoreCostume = async (spriteName, entry) => {
+        const target = findTarget(spriteName);
+        if (!target || !entry || !entry.costume) return false;
+        await vm.addCostume(entry.costume.md5ext, entry.costume, target.id);
+        const end = target.getCostumes().length - 1;
+        const wanted = Math.min(Math.max(Number(entry.index) || 0, 0), end);
+        if (wanted !== end) {
+            target.addCostume(entry.costume, wanted); // 同一引用插到原位
+            target.deleteCostume(target.getCostumes().length - 1); // 摘掉末尾那个
+        }
+        if (Number.isInteger(entry.current)) target.setCostume(entry.current);
+        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+        return true;
     };
 
     // 造型画到 canvas 上再导 PNG。SVG 没写 width/height 时浏览器给 0，
@@ -387,10 +538,38 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         const costumes = target.getCostumes();
         // 角色的最后一个造型删不得（删光了角色就没法渲染）
         if (costumes.length <= 1 || !(index >= 0 && index < costumes.length)) return false;
-        vm.setEditingTarget(target.id);
-        vm.deleteCostume(index);
+        target.deleteCostume(index);
         if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
         return true;
+    };
+
+    // 保留角色名：XCEAGENT 和 XCEMEMORY 两条是 AI 的功能部件，不许被改名，也不许被占用
+    const RESERVED_SPRITE_NAMES = () => [AGENT_SPRITE_NAME, MEMORY_INDEX_SPRITE, MEMORY_CONTENT_SPRITE];
+
+    /**
+     * 重命名角色（xce_rename_sprite）。走 vm.renameSprite，跟用户在角色面板改名是同一条路；
+     * 名字冲突、空名、保留名在这里先拦。改名不影响脚本（积木引用的是角色本体，不是名字）。
+     * @param {string} oldName 现名
+     * @param {string} newName 新名
+     * @returns {object} {ok, from?, to?} / {ok: false, reason, sprites?}
+     */
+    const renameSprite = (oldName, newName) => {
+        const target = findTarget(oldName);
+        if (!target) return {ok: false, reason: 'no-sprite', sprites: spriteNames()};
+        if (target.isStage) return {ok: false, reason: 'stage'};
+        const wanted = String(newName === void 0 || newName === null ? '' : newName).trim();
+        if (!wanted) return {ok: false, reason: 'no-name'};
+        if (RESERVED_SPRITE_NAMES().includes(target.getName()) ||
+            RESERVED_SPRITE_NAMES().some(reserved => reserved.toLowerCase() === wanted.toLowerCase())) {
+            return {ok: false, reason: 'reserved'};
+        }
+        const taken = realTargets().find(other =>
+            other !== target && other.getName().toLowerCase() === wanted.toLowerCase());
+        if (taken) return {ok: false, reason: 'duplicate', sprites: spriteNames()};
+        const from = target.getName();
+        vm.renameSprite(target.id, wanted);
+        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+        return {ok: true, from, to: wanted};
     };
 
     // —— Scratch 原生注释（xce_note）——
@@ -478,6 +657,40 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         const block = comment.blockId ? target.blocks.getBlock(comment.blockId) : null;
         if (block) delete block.comment;
         delete target.comments[commentId];
+        if (target.blocks.resetCache) target.blocks.resetCache();
+        refreshWorkspace();
+        return true;
+    };
+
+    // 删注释前抓快照：注释跟脚本一样是用户能看见的东西，删错了得能摆回去。
+    // createComment 的参数形态就是注释的全部状态（见 createNote 里怎么建的）。
+    const captureNote = (spriteName, commentId) => {
+        const target = findTarget(spriteName);
+        if (!target || !commentId || !target.comments[commentId]) return null;
+        const comment = target.comments[commentId];
+        return {
+            id: commentId,
+            blockId: comment.blockId || null,
+            text: String(comment.text || ''),
+            x: comment.x,
+            y: comment.y,
+            width: comment.width,
+            height: comment.height
+        };
+    };
+
+    // 把 captureNote 的快照原样摆回去（xce_delete_note 的撤销）。createComment 会把
+    // blockId 重新挂回对应积木的 block.comment 上（跟 createNote 同一条路）。
+    const restoreNote = (spriteName, snapshot) => {
+        const target = findTarget(spriteName);
+        if (!target || !snapshot || !snapshot.id || target.comments[snapshot.id]) return false;
+        target.createComment(
+            snapshot.id,
+            snapshot.blockId || null,
+            snapshot.text,
+            snapshot.x, snapshot.y, snapshot.width, snapshot.height,
+            false
+        );
         if (target.blocks.resetCache) target.blocks.resetCache();
         refreshWorkspace();
         return true;
@@ -899,6 +1112,11 @@ export const createScratchPort = ({vm, getWorkspace}) => {
 
         deleteNote,
 
+        // 删注释的快照与恢复（xce_delete_note 的撤销）
+        captureNote,
+
+        restoreNote,
+
         // 项目级 XCEAGENT（写那条注释 / 读出来给系统提示词用）
         writeAgentNote,
 
@@ -965,6 +1183,22 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             if (action.kind === 'sprite') return removeSpriteByName(action.sprite);
             if (action.kind === 'costume') return removeCostumeAt(action.sprite, action.index);
             if (action.kind === 'note') return deleteNote(action.sprite, action.commentId);
+            if (action.kind === 'rename') return renameSprite(action.to, action.from);
+            if (action.kind === 'costumeContent') {
+                // 撤销「编辑造型内容」= 用旧 SVG 原样替换回去（旧 SVG 没快照到就撤不了）
+                if (!action.oldSvg) return false;
+                return !!replaceCostumeContent(action.sprite, action.index, action.oldSvg,
+                    action.oldName).ok;
+            }
+            if (action.kind === 'costumeRestore') {
+                return restoreCostume(action.sprite, {
+                    costume: action.costume,
+                    index: action.index,
+                    current: action.current
+                });
+            }
+            // 撤销「删注释」= 把快照原样摆回去
+            if (action.kind === 'noteDel') return restoreNote(action.sprite, action.comment);
             if (action.kind === 'memory' && action.phase === 'write') {
                 let ok = true;
                 // 这次顺带建出来的保留角色整只摘掉（里面只有这一次写的东西）
@@ -1155,18 +1389,15 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         // —— 角色 / 造型：AI 自己新建角色、画造型 ——
 
         /**
-         * 新建一个角色。带 svg 就用它当第一个造型（编辑器给的空白造型会被摘掉 —— 那个是
-         * 0x0，放在舞台上看不见），不带就是一个等用户自己画的空角色。
-         * @param {object} input {name, svg?, x?, y?, size?, direction?, visible?}
-         * @returns {Promise<object>} {ok, reason?, name?, costume?} —— 失败时 reason 说明原因
+         * 新建一个角色，带编辑器默认的那张空白造型（0x0）。画内容由 xce_edit_costume 负责
+         * （action "edit" 就地画掉这张空白造型，或 "new" 追加新的）。
+         * @param {object} input {name, x?, y?, size?, direction?, visible?}
+         * @returns {Promise<object>} {ok, reason?, name?} —— 失败时 reason 说明原因
          */
-        addSprite: async ({name, svg, x, y, size, direction, visible} = {}) => {
+        addSprite: async ({name, x, y, size, direction, visible} = {}) => {
             const wanted = String(name || '').trim();
             if (!wanted) return {ok: false, reason: 'no-name'};
             if (findTarget(wanted)) return {ok: false, reason: 'duplicate', sprites: spriteNames()};
-            if (svg && !(runtime().storage && runtime().storage.createAsset)) {
-                return {ok: false, reason: 'no-storage'};
-            }
 
             // 新角色 = 「加进来那一个」：按 id 差集认，比按名字靠得住
             const before = new Set(realTargets().map(t => t.id));
@@ -1183,22 +1414,10 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             }
             if (typeof visible === 'boolean') target.setVisible(visible);
 
-            let costume = null;
-            if (svg) {
-                costume = await attachSvgCostume(target, svg, defaultCostumeName(target));
-                if (costume) {
-                    // 摘掉编辑器给的空白造型：留着它，用户点开造型页第一个看到的是张白纸
-                    vm.setEditingTarget(target.id);
-                    vm.deleteCostume(0);
-                } else {
-                    // 造型没画成（多半是 SVG 缺 width/height），角色仍然建出来了
-                    return {ok: true, name: target.getName(), costume: null, costumeFailed: true};
-                }
-            }
             // 跟编辑器的「绘制」按钮一样，新建完就选中它
             vm.setEditingTarget(target.id);
             if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
-            return {ok: true, name: target.getName(), costume};
+            return {ok: true, name: target.getName()};
         },
 
         /**
@@ -1226,6 +1445,35 @@ export const createScratchPort = ({vm, getWorkspace}) => {
 
         // 删造型（撤销「加造型」用）。角色的最后一个造型删不得，返回 false 让调用方知道了。
         removeCostume: removeCostumeAt,
+
+        // 替换已有矢量造型的内容（xce_edit_costume 的 edit / 其撤销）
+        replaceCostume: replaceCostumeContent,
+
+        // 位图造型（xce_add_costume_from_url 的落点）：dataURL → PNG 资产 → 追加为最后一个造型
+        addBitmapCostume: async (spriteName, {dataUrl, name} = {}) => {
+            const target = findTarget(spriteName);
+            if (!target) return {ok: false, reason: 'missing', sprites: spriteNames()};
+            const made = await bitmapCostumeFromDataUrl(dataUrl);
+            if (!made.ok) return made;
+            made.costume.name = String(name || '').trim() || defaultCostumeName(target);
+            await vm.addCostume(made.costume.md5ext, made.costume, target.id);
+            return {
+                ok: true,
+                sprite: target.getName(),
+                index: target.getCostumes().length - 1,
+                name: made.costume.name,
+                width: made.width,
+                height: made.height
+            };
+        },
+
+        // 删除造型的快照 / 恢复（xce_delete_costume 及其撤销）
+        captureCostume,
+
+        restoreCostume,
+
+        // 重命名角色（xce_rename_sprite / 撤销）
+        renameSprite,
 
         listCostumes: spriteName => {
             const target = findTarget(spriteName);

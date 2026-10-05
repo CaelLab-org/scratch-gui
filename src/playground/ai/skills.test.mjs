@@ -76,7 +76,7 @@ check('名字就是目录名', mismatched.length === 0, JSON.stringify(mismatche
 // 一级能力的名称统一带 xce_ 前缀（用户定的），四份资料都得在
 check('名称统一带 xce_ 前缀', skills.every(s => s.name.startsWith('xce_')), JSON.stringify(skills.map(s => s.name)));
 check('caellab / engine / xcc / xf 都在',
-    ['xce_caellab', 'xce_engine', 'xce_xcc', 'xce_xf'].every(name => skills.some(s => s.name === name)),
+    ['xce_fastdocs_caellab', 'xce_fastdocs_engine', 'xce_fastdocs_xcc', 'xce_fastdocs_xf'].every(name => skills.some(s => s.name === name)),
     JSON.stringify(skills.map(s => s.name)));
 
 // 正文不带 frontmatter，也不该残留 --- 头
@@ -97,7 +97,7 @@ check('清单里不带正文（正文要按需取）',
     !skills.some(s => index.content.includes(s.body.slice(0, 40))));
 check('清单里指路 xce_read_fast_docs', index.content.includes('xce_read_fast_docs'));
 
-const loaded = await readFastDocs.handler({name: 'xce_engine'}, {});
+const loaded = await readFastDocs.handler({name: 'xce_fastdocs_engine'}, {});
 check('xce_read_fast_docs 读得到指定文档的正文',
     !loaded.isError && loaded.content.includes('engine.xmuer.online'),
     String(loaded.content).slice(0, 60));
@@ -119,20 +119,20 @@ check('空库时读文档不炸', emptyDoc.isError === true, String(emptyDoc.con
 check('加载器把详细文档挂到 skill 上',
     skills.some(s => (s.docs || []).length > 0),
     JSON.stringify(skills.map(s => `${s.name}:${(s.docs || []).length}`)));
-const engine = skills.find(s => s.name === 'xce_engine');
-check('xce_engine 有 write-scripts 详细文档',
+const engine = skills.find(s => s.name === 'xce_fastdocs_engine');
+check('xce_fastdocs_engine 有 write-scripts 详细文档',
     !!engine && (engine.docs || []).some(d => d.name === 'write-scripts'),
     JSON.stringify(engine && (engine.docs || []).map(d => d.name)));
-const brief = await readFastDocs.handler({name: 'xce_engine'}, {});
+const brief = await readFastDocs.handler({name: 'xce_fastdocs_engine'}, {});
 check('读 skill 得到简略版并列出详细文档名',
-    !brief.isError && brief.content.includes('Detailed docs') && brief.content.includes('xce_engine/write-scripts'),
+    !brief.isError && brief.content.includes('Detailed docs') && brief.content.includes('xce_fastdocs_engine/write-scripts'),
     String(brief.content).slice(-140));
-const deep = await readFastDocs.handler({name: 'xce_engine/write-scripts'}, {});
+const deep = await readFastDocs.handler({name: 'xce_fastdocs_engine/write-scripts'}, {});
 check('"skill/doc" 读到详细文档',
     !deep.isError && deep.content.includes('`script` parameter') &&
     deep.content.includes('Parameters — exactly two'),
     String(deep.content).slice(0, 60));
-const missingDoc = await readFastDocs.handler({name: 'xce_engine/nope'}, {});
+const missingDoc = await readFastDocs.handler({name: 'xce_fastdocs_engine/nope'}, {});
 check('详细文档不存在时报出可选项',
     missingDoc.isError === true && missingDoc.content.includes('write-scripts'),
     String(missingDoc.content).slice(0, 90));

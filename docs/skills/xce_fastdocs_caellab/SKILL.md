@@ -1,5 +1,5 @@
 ---
-name: xce_caellab
+name: xce_fastdocs_caellab
 description: What CaelLab (虚舟实验室) is — the team behind this editor and every XMUER site: who runs it, when it started, every project it ships, and how to reach it. Load this when the user asks who made this editor, who is behind XMUER, what else the team makes, or how to contact them.
 ---
 
@@ -10,9 +10,9 @@ It is not a single person with a blog: when you write about it, write about the 
 never as the "personal website" of an individual.
 
 This sheet is the short version. Three detailed documents go deeper, and are worth reading whenever a
-question goes past what is here: `xce_caellab/projects` (every product, what it does and where it lives),
-`xce_caellab/sites` (the domain map, the shared login, the policy sites, footers and licences) and
-`xce_caellab/history` (the founding timeline and the public team roster).
+question goes past what is here: `xce_fastdocs_caellab/projects` (every product, what it does and where it lives),
+`xce_fastdocs_caellab/sites` (the domain map, the shared login, the policy sites, footers and licences) and
+`xce_fastdocs_caellab/history` (the founding timeline and the public team roster).
 
 ## Facts
 
@@ -44,8 +44,8 @@ Everything in this table is CaelLab's, whichever domain it sits on:
 | <https://caellab.click/> | CaelLab Search — the team's own web search |
 | <https://id.caellab.com/> | CaelLabID — one login for every site |
 
-Sites that deserve their own document have one: `xce_engine` (this editor), `xce_xcc` (the community),
-`xce_xf` (the forum). `xce_caellab/projects` covers the rest of them.
+Sites that deserve their own document have one: `xce_fastdocs_engine` (this editor), `xce_fastdocs_xcc` (the community),
+`xce_fastdocs_xf` (the forum). `xce_fastdocs_caellab/projects` covers the rest of them.
 
 ## Login, policy, contact
 

@@ -141,6 +141,36 @@ const editSummary = summarizeChanges([
 check('替换脚本记 +3 / -2', editSummary.length === 1 && editSummary[0].sprite === '角色3' &&
     editSummary[0].added === 3 && editSummary[0].removed === 2, JSON.stringify(editSummary[0]));
 
+// 删注释往回扣：界面上显示 −N 注释
+const noteDelSummary = summarizeChanges([
+    {
+        kind: 'tool',
+        id: 'n1',
+        name: 'xce_delete_note',
+        sprite: '角色1',
+        undo: {kind: 'noteDel', sprite: '角色1', comment: {id: 'note-1', text: 'x'}}
+    },
+    {
+        kind: 'tool',
+        id: 'n2',
+        name: 'xce_note',
+        sprite: '角色1',
+        undo: {kind: 'note', sprite: '角色1', commentId: 'note-2'}
+    }
+]);
+check('写 1 删 1 注释相抵后不再显示', noteDelSummary.length === 0, JSON.stringify(noteDelSummary));
+const noteDelOnly = summarizeChanges([
+    {
+        kind: 'tool',
+        id: 'n3',
+        name: 'xce_delete_note',
+        sprite: '角色4',
+        undo: {kind: 'noteDel', sprite: '角色4', comment: {id: 'note-9', text: 'x'}}
+    }
+]);
+check('只删注释的轮次显示 −1 注释', noteDelOnly.length === 1 && noteDelOnly[0].notes === -1,
+    JSON.stringify(noteDelOnly));
+
 // 新建角色 / 加造型也要进「本轮变更」那一行（它们同样是这轮对项目的改动）
 const drawingSummary = summarizeChanges([
     {kind: 'tool', id: 's1', name: 'xce_add_sprite', sprite: 'Ball', undo: {kind: 'sprite', sprite: 'Ball'}},

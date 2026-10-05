@@ -1,5 +1,5 @@
 ---
-name: xce_xcc
+name: xce_fastdocs_xcc
 description: XMUER Coding Community (XCC) — the Scratch project sharing site in the CaelLab family. Load this when the user asks where to publish or share a project they made in this editor, or about that community.
 ---
 

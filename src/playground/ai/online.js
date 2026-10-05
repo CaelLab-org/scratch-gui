@@ -266,3 +266,134 @@ export const fetchOnline = async (url, {timeoutMs = DEFAULT_TIMEOUT_MS, signal} 
 
     return {content: sections.join('\n\n').trim(), truncated: bodyTruncated || rawTruncated};
 };
+
+// ---- 图片下载（xce_add_costume_from_url）----
+
+// 图片字节数上限：造型资产再大也只会拖慢项目，10MB 是宽松的天花板
+export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+const MIME_OF_KIND = {png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp'};
+
+/**
+ * 认图片类型：先看魔数（可靠），认不出再借 content-type 兜底。
+ * 只认这个功能支持的四种；GIF / BMP / AVIF 之类一律 null（列在报错里让模型自己换格式）。
+ * @param {Uint8Array|ArrayBuffer} bytes 响应字节
+ * @param {string} [contentType] 服务器声明的 content-type
+ * @returns {'png'|'jpeg'|'webp'|'svg'|null} 认出来的类型；认不出返回 null
+ */
+export const sniffImageType = (bytes, contentType = '') => {
+    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    let head = '';
+    for (let i = 0; i < Math.min(u8.length, 512); i++) head += String.fromCharCode(u8[i]);
+    if (u8.length > 12 && u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4E && u8[3] === 0x47) return 'png';
+    if (u8.length > 3 && u8[0] === 0xFF && u8[1] === 0xD8 && u8[2] === 0xFF) return 'jpeg';
+    if (u8.length > 12 && head.slice(0, 4) === 'RIFF' && head.slice(8, 12) === 'WEBP') return 'webp';
+    if (/<svg[\s>]/i.test(head)) return 'svg';
+    if (/svg/i.test(contentType)) return 'svg';
+    if (/png/i.test(contentType)) return 'png';
+    if (/jpe?g/i.test(contentType)) return 'jpeg';
+    if (/webp/i.test(contentType)) return 'webp';
+    return null;
+};
+
+const bytesToBase64 = u8 => {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < u8.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+};
+
+/**
+ * 下载一张图片，给造型功能用。识别后的三种返回：
+ *   {kind: 'svg', svg}                      —— 矢量图源码，直接走造型的矢量通道
+ *   {kind: 'bitmap', mime, dataUrl}         —— 位图原样给（webp 由调用方经 canvas 转 PNG）
+ *   抛错                                     —— 不支持的类型 / 超限 / 下载失败
+ * 通道：桌面版有 `EditorPreload.fetchBinary` 就交主进程（net.fetch，无 CORS）；
+ * 否则页面里的 fetch（CORS 照旧是主要拦路虎）。没有桌面桥时桌面老版本也会落到浏览器通道。
+ * @param {string} url 图片地址（http/https）
+ * @param {object} opts {timeoutMs, signal}
+ * @returns {Promise<object>} {kind: 'svg', svg} 或 {kind: 'bitmap', mime, dataUrl}
+ */
+export const fetchImage = async (url, {timeoutMs = 10000, signal} = {}) => {
+    const target = String(url || '').trim();
+    if (!/^https?:\/\/\S+/i.test(target)) {
+        throw new Error(`Not a fetchable URL: ${target || '(empty)'}. It must be a full URL starting with http(s).`);
+    }
+
+    let bytes;
+    let contentType = '';
+    const bridge = desktopBridge();
+    if (bridge && typeof bridge.fetchBinary === 'function') {
+        const controller = new AbortController();
+        if (signal) {
+            if (signal.aborted) controller.abort();
+            else signal.addEventListener('abort', () => controller.abort(), {once: true});
+        }
+        const result = await Promise.race([
+            bridge.fetchBinary(target, timeoutMs),
+            new Promise((resolve, reject) => {
+                controller.signal.addEventListener('abort', () => reject(new Error('aborted')), {once: true});
+            })
+        ]);
+        if (signal && signal.aborted) throw new Error('The download was interrupted by the user.');
+        if (result && result.networkError) {
+            throw new Error(`Could not download this image (${result.networkError}). The desktop app fetches ` +
+                'itself, so CORS is not involved — this looks like a network-level failure.');
+        }
+        if (result && result.notImage) {
+            throw new Error(`That URL serves a web page (${result.notImage}), not an image file. Point at the ` +
+                'image file itself — pages have no single content type to hand to a costume.');
+        }
+        if (result && result.tooLarge) {
+            throw new Error(`This image is too large (over the ${Math.round(IMAGE_MAX_BYTES / 1024 / 1024)}MB ` +
+                'ceiling for a costume asset). Find a smaller one.');
+        }
+        if (!result || !result.ok) throw new Error(`HTTP ${result ? result.status : '?'}`);
+        contentType = result.contentType || '';
+        bytes = Uint8Array.from(atob(result.base64), char => char.charCodeAt(0));
+    } else {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        if (signal) {
+            if (signal.aborted) controller.abort();
+            else signal.addEventListener('abort', () => controller.abort(), {once: true});
+        }
+        try {
+            const response = await fetch(target, {signal: controller.signal});
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            contentType = response.headers.get('content-type') || '';
+            bytes = new Uint8Array(await response.arrayBuffer());
+            clearTimeout(timer);
+        } catch (fetchError) {
+            clearTimeout(timer);
+            if (signal && signal.aborted) throw new Error('The download was interrupted by the user.');
+            if (controller.signal.aborted) {
+                throw new Error(`Download timed out (no response within ${timeoutMs / 1000}s).`);
+            }
+            if (/^HTTP \d+$/.test(fetchError.message)) throw fetchError;
+            throw new Error(`Could not download this image (${fetchError.message}). The usual cause is CORS: ` +
+                'the site does not allow browser pages to read its files. Try a direct image URL from a site ' +
+                'that allows it, or ask the user to save the file and import it by hand. On the web this is ' +
+                'common and not something anyone did wrong.');
+        }
+    }
+
+    if (bytes.length > IMAGE_MAX_BYTES) {
+        throw new Error(`This image is ${Math.round(bytes.length / 1024 / 1024)}MB — over the ` +
+            `${Math.round(IMAGE_MAX_BYTES / 1024 / 1024)}MB ceiling for a costume asset. Find a smaller one.`);
+    }
+    const kind = sniffImageType(bytes, contentType);
+    if (!kind) {
+        throw new Error('That URL does not return a usable image. Costumes can be built from webp, png, ' +
+            'jpeg or svg files — gif, bmp and everything else are not supported here.');
+    }
+    if (kind === 'svg') {
+        return {kind: 'svg', svg: new TextDecoder().decode(bytes), contentType};
+    }
+    const mime = MIME_OF_KIND[kind];
+    return {kind: 'bitmap', mime, dataUrl: `data:${mime};base64,${bytesToBase64(bytes)}`, contentType};
+};

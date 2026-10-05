@@ -11,7 +11,7 @@
  * 只有当前模型收图片时才会被填上（见 xce_read_stage）。
  */
 
-import {fetchOnline, isDesktopMode} from './online.js';
+import {fetchImage, fetchOnline, isDesktopMode} from './online.js';
 import {searchCaelLab, MAX_RESULTS, TITLE_CAP, DESC_CAP} from './search.js';
 import {MEMORY_LIMITS, MEMORY_TYPES, memoryIndexText, findMemory, saveMemory, deleteMemory} from './memory.js';
 import {AGENT_SPRITE_NAME, AGENT_NOTE_MAX_CHARS, MEMORY_INDEX_SPRITE, MEMORY_CONTENT_SPRITE} from './port.js';
@@ -30,7 +30,7 @@ const listSpritesDetailed = port => port.listSpritesDetailed()
     .map(t => {
         const head = `- ${t.name}${t.isStage ? ' (the stage)' : ''}: ${t.scriptCount} ` +
             `script${t.scriptCount === 1 ? '' : 's'}`;
-        // 造型名要给：加造型（xce_add_costume）和看造型（xce_read_costume）都按名字指认它
+        // 造型名要给：加造型（xce_edit_costume）和看造型（xce_read_costume）都按名字指认它
         const costumes = t.costumes && t.costumes.length ?
             `, costumes: ${t.costumes.map(name =>
                 (name === t.currentCostume ? `${name} (current)` : name)).join(', ')}` : '';
@@ -488,7 +488,8 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 'when they fit naturally (CaelLabSearch, CaelLabID, the CaelLab sites), stamp the date ' +
                 'when it will matter later — and otherwise follow your own creativity. Calling this again ' +
                 'on the same block REWRITES that comment rather than adding a second one — so update it ' +
-                'when the script changes, instead of leaving stale notes around.\n' +
+                'when the script changes, instead of leaving stale notes around; a note that should just go ' +
+                'away is xce_delete_note\'s job.\n' +
                 'Write for the user, in the user\'s language: short, concrete, no jargon, no notes to yourself.',
             inputSchema: {
                 type: 'object',
@@ -562,6 +563,47 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 }
                 if (!wanted.length) return ok(`"${sprite}" has no comments.`);
                 return ok(wanted.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n'));
+            }
+        },
+
+        {
+            name: 'xce_delete_note',
+            description:
+                'Delete ONE Scratch comment (注释) from a sprite, by the id on its `:: note <id>` line ' +
+                '(from xce_read_notes or the notes section of xce_read_project). The user can also delete ' +
+                'comments by hand — prefer this when they ask you to clean one up. ' +
+                `Comments inside the reserved sprites 「${AGENT_SPRITE_NAME}」, ` +
+                `「${MEMORY_INDEX_SPRITE}」 and 「${MEMORY_CONTENT_SPRITE}」 are the assistant's own memory ` +
+                'storage and are refused here; use xce_delete_memory for those.',
+            destructive: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name.'},
+                    noteId: {type: 'string', description: 'Id of the note (from a `:: note <id>` line).'}
+                },
+                required: ['sprite', 'noteId']
+            },
+            handler: ({sprite, noteId}) => {
+                if (!sprite) return fail('A sprite name is required.');
+                if (!noteId) return fail('A note id is required — it is on the `:: note <id>` line.');
+                if (sprite === AGENT_SPRITE_NAME || sprite === MEMORY_INDEX_SPRITE ||
+                    sprite === MEMORY_CONTENT_SPRITE) {
+                    return fail(`"${sprite}" is a reserved sprite — its comments are the assistant's memory ` +
+                        'storage, not the user\'s notes. To remove a memory, call xce_delete_memory instead.');
+                }
+                // 先抓快照再删：删错了要能原样摆回去
+                const snapshot = port.captureNote(sprite, noteId);
+                if (!snapshot) {
+                    return fail(`No note "${noteId}" in "${sprite}". Note ids are on the ` +
+                        '`:: note <id>` lines of xce_read_notes — read them again; the user may have ' +
+                        'deleted it by hand already.');
+                }
+                port.deleteNote(sprite, noteId);
+                return {
+                    content: `Deleted note ${noteId} from "${sprite}".`,
+                    undo: {kind: 'noteDel', sprite, comment: snapshot}
+                };
             }
         },
 
@@ -831,26 +873,70 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
         },
 
         {
+            name: 'xce_rename_sprite',
+            description:
+                'Rename a sprite (角色). The user\'s sprite list updates immediately, and every script ' +
+                'keeps working — blocks reference the sprite itself, not its name.\n' +
+                'Check xce_list_sprites first: the new name must not be taken (spelling differences in ' +
+                'letter case count as taken), and the reserved sprites 「XCEAGENT」, ' +
+                '「XCEMEMORY_index」 and 「XCEMEMORY_content」 can neither be renamed nor have their names ' +
+                'reused — they are the editor\'s own machinery.\n' +
+                'A suggestion, not a rule: if the project note (XCEAGENT) or a project memory mentions the ' +
+                'old name, updating it with xce_write_agent / xce_write_project_memory keeps them accurate.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Current name of the sprite (see xce_list_sprites).'},
+                    newName: {
+                        type: 'string',
+                        description: 'The new name. Must not be taken, and must not be one of the ' +
+                            'reserved names.'
+                    }
+                },
+                required: ['sprite', 'newName']
+            },
+            handler: ({sprite, newName}) => {
+                const made = port.renameSprite(sprite, newName);
+                if (!made.ok) {
+                    if (made.reason === 'no-sprite') {
+                        return fail(`No sprite named "${sprite}". Existing sprites: ${made.sprites}`);
+                    }
+                    if (made.reason === 'no-name') {
+                        return fail('The newName parameter is required and cannot be empty.');
+                    }
+                    if (made.reason === 'duplicate') {
+                        return fail(`A sprite named "${newName}" already exists. Sprites: ${made.sprites}. ` +
+                            'Choose a different name.');
+                    }
+                    if (made.reason === 'reserved') {
+                        return fail('That name is reserved: 「XCEAGENT」, 「XCEMEMORY_index」 and ' +
+                            '「XCEMEMORY_content」 are the editor\'s own sprites — they cannot be renamed ' +
+                            'and their names cannot be reused.');
+                    }
+                    if (made.reason === 'stage') return fail('The stage cannot be renamed.');
+                    return fail('Could not rename the sprite.');
+                }
+                return {
+                    content: `Renamed "${made.from}" to "${made.to}". The sprite list already shows the ` +
+                        'new name, and all scripts still work.',
+                    undo: {kind: 'rename', from: made.from, to: made.to}
+                };
+            }
+        },
+
+        {
             name: 'xce_add_sprite',
             description:
                 'Create a NEW sprite (角色) in the project and select it — the user\'s sprite list grows by one.\n' +
-                'Pass `svg` to give it a look you drew yourself: a complete, self-contained SVG document that ' +
-                'becomes the sprite\'s first costume (the blank costume the editor would otherwise make is ' +
-                'removed). **Read the drawing skill before you draw**: xce_read_skill lists it, ' +
-                'xce_read_fast_docs opens it, and it has the rules that make an SVG this editor can show.\n' +
-                'The name must not already be taken — check with xce_list_sprites. Without `svg` you get an ' +
-                'empty sprite for the user to draw in, which is rarely what was asked for.\n' +
-                'After creating it, look at the costume with xce_read_costume (vision models only) before ' +
-                'telling the user it is done.',
+                'It starts with ONE blank costume (0x0, invisible on the stage — that is normal, not a bug). ' +
+                'Drawing is a separate step: call `xce_edit_costume` afterwards with action "new" to add a ' +
+                'costume you drew, or action "edit" to redraw the blank one in place. For a picture from the ' +
+                'web, use `xce_add_costume_from_url`.\n' +
+                'The name must not already be taken — check with xce_list_sprites.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     name: {type: 'string', description: 'Name for the new sprite. Must not already exist.'},
-                    svg: {
-                        type: 'string',
-                        description: 'The sprite\'s first costume: a complete SVG document. The root <svg> ' +
-                            'must carry width and height; nothing may be loaded from outside the document.'
-                    },
                     x: {type: 'number', description: 'Stage x position. Default 0 (centre).'},
                     y: {type: 'number', description: 'Stage y position. Default 0 (centre).'},
                     size: {type: 'number', description: 'Size in percent. Default 100.'},
@@ -859,84 +945,254 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 },
                 required: ['name']
             },
-            handler: async ({name, svg, x, y, size, direction, visible}) => {
-                const result = await port.addSprite({name, svg, x, y, size, direction, visible});
+            handler: async ({name, x, y, size, direction, visible}) => {
+                const result = await port.addSprite({name, x, y, size, direction, visible});
                 if (!result.ok) {
                     if (result.reason === 'duplicate') {
                         return fail(`A sprite named "${name}" already exists. Sprites: ${result.sprites}. ` +
-                            'Choose a different name, or add the costume to that sprite with xce_add_costume.');
+                            'Choose a different name.');
                     }
                     if (result.reason === 'no-name') return fail('The name parameter is required and cannot be empty.');
-                    if (result.reason === 'no-storage') {
-                        return fail('The editor is not ready to hold image assets yet — nothing was created.');
-                    }
                     return fail(`Could not create a sprite named "${name}".`);
                 }
-                const lines = [`Created sprite "${result.name}" and selected it.`];
-                if (result.costume) {
-                    lines.push(`Its costume is your drawing (${result.costume.width}x${result.costume.height}), ` +
-                        'and the editor\'s blank costume was removed.');
-                    if (result.costume.broken) {
-                        lines.push('The editor could not render that SVG, so the sprite shows as a blank shape. ' +
-                            'Fix the drawing (see the drawing skill) and add a corrected costume with ' +
-                            'xce_add_costume.');
-                    }
-                } else if (result.costumeFailed) {
-                    // 角色确实建出来了，只是图没挂上 —— undo 还是要给，不然用户没法把空角色撤掉
-                    return {
-                        content: `Created the sprite "${result.name}", but your SVG was not used. ` +
-                            `${SVG_SIZE_HINT} Fix that and call xce_add_costume to give the sprite its look.`,
-                        isError: true,
-                        undo: {kind: 'sprite', sprite: result.name}
-                    };
-                } else {
-                    lines.push('It starts with the editor\'s blank costume, waiting for the user to draw in it.');
-                }
-                return {content: lines.join('\n'), undo: {kind: 'sprite', sprite: result.name}};
+                return {
+                    content: `Created sprite "${result.name}" and selected it. It has one blank costume ` +
+                        '(0x0, so nothing shows on the stage yet) — draw it with xce_edit_costume: ' +
+                        'action "new" for a costume you drew, or action "edit" to redraw the blank one in place.',
+                    undo: {kind: 'sprite', sprite: result.name}
+                };
             }
         },
 
         {
-            name: 'xce_add_costume',
+            name: 'xce_edit_costume',
             description:
-                'Add one more costume to an existing sprite, drawn as an SVG document you write. The costume ' +
-                'is appended at the end and becomes the sprite\'s current one, so the sprite\'s look on the ' +
-                'stage changes immediately.\n' +
-                'Same SVG rules as xce_add_sprite — **read the drawing skill first** (xce_read_skill, then ' +
-                'xce_read_fast_docs): the root <svg> needs width and height, and the document must be ' +
-                'self-contained.\n' +
-                'Use it to give a sprite several looks (walk cycles, open/closed states) that the user can ' +
-                'switch between with the 「下一个造型」 block.',
+                'Draw or redraw ONE costume of an existing sprite as an SVG document you write. Two actions:\n' +
+                '- action "new" (or "create"): append a NEW costume at the end; it becomes the sprite\'s ' +
+                'current one, so the sprite\'s look on the stage changes immediately. Use this for extra ' +
+                'looks (walk cycles, open/closed states) the user can switch with 「下一个造型」.\n' +
+                '- action "edit": REPLACE the content of one existing costume (pass `costume`, name or ' +
+                'index; default the current one). Vector costumes and the blank one can be edited this way; ' +
+                'bitmap costumes have no SVG source, so the result tells you to use action "new" instead. ' +
+                'The old look is kept for undo.\n' +
+                '**Read the drawing fastdoc first** (xce_read_skill, then xce_read_fast_docs): the root ' +
+                '<svg> needs width and height, and the document must be self-contained. After drawing, ' +
+                'check the costume with xce_read_costume before telling the user it is done.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     sprite: {type: 'string', description: 'Sprite name (see xce_list_sprites).'},
+                    action: {
+                        type: 'string',
+                        enum: ['new', 'create', 'edit'],
+                        description: '"new" (or "create") appends a new costume; "edit" replaces the ' +
+                            'content of an existing vector costume.'
+                    },
                     svg: {
                         type: 'string',
-                        description: 'The new costume: a complete SVG document, root <svg> with width and height.'
+                        description: 'The costume content: a complete SVG document, root <svg> with ' +
+                            'width and height.'
+                    },
+                    costume: {
+                        type: 'string',
+                        description: 'For action "edit": which costume to replace (name or index). ' +
+                            'Default the current one.'
                     },
                     name: {type: 'string', description: 'Name for the costume, e.g. "walking". Default 造型N.'}
                 },
-                required: ['sprite', 'svg']
+                required: ['sprite', 'action', 'svg']
             },
-            handler: async ({sprite, svg, name}) => {
-                const result = await port.addCostume(sprite, {svg, name});
+            handler: async ({sprite, action, svg, costume, name}) => {
+                const mode = action === 'create' ? 'new' : action;
+                if (mode !== 'new' && mode !== 'edit') {
+                    return fail('action must be "new" (append a new costume) or "edit" (replace the ' +
+                        'content of an existing vector costume).');
+                }
+                if (!svg || !String(svg).trim()) {
+                    return fail('The svg parameter is required — the costume content is a complete SVG ' +
+                        'document.');
+                }
+                if (mode === 'new') {
+                    const result = await port.addCostume(sprite, {svg, name});
+                    if (!result.ok) {
+                        if (result.reason === 'missing') {
+                            return fail(`No sprite named "${sprite}". Existing sprites: ${result.sprites}`);
+                        }
+                        if (result.reason === 'bad-size') return fail(SVG_SIZE_HINT);
+                        if (result.reason === 'no-storage') {
+                            return fail('The editor is not ready to hold image assets yet — no costume was added.');
+                        }
+                        return fail(`Could not add a costume to "${sprite}".`);
+                    }
+                    return {
+                        content: `Added costume "${result.costume.name}" (${result.costume.width}x` +
+                            `${result.costume.height}) to "${result.sprite}"; it is now the current costume ` +
+                            `(index ${result.costume.index}). Check it with xce_read_costume.`,
+                        undo: {kind: 'costume', sprite: result.sprite, index: result.costume.index}
+                    };
+                }
+                // edit：先抓旧 SVG 快照（撤销要摆回去），再替换
+                const before = await port.readCostumeSvg(sprite, costume);
+                if (!before) {
+                    return fail(`No such costume in "${sprite}" (asked for ` +
+                        `${costume === void 0 || costume === '' ? 'the current costume' : `"${costume}"`}). ` +
+                        'See what exists with xce_read_costume.');
+                }
+                if (before.bitmap) {
+                    return fail(`Costume "${before.name}" of "${sprite}" is a bitmap image, so it has no SVG ` +
+                        'source to edit. Use action "new" to add a costume on top of it instead.');
+                }
+                if (!before.svg) {
+                    return fail(`Costume "${before.name}" of "${sprite}" is vector, but its SVG source could ` +
+                        'not be read out of the project file — replacing it could not be undone, so nothing ' +
+                        'was changed. Use action "new" instead.');
+                }
+                const result = await port.replaceCostume(sprite, costume, svg, name);
                 if (!result.ok) {
                     if (result.reason === 'missing') {
                         return fail(`No sprite named "${sprite}". Existing sprites: ${result.sprites}`);
                     }
-                    if (result.reason === 'bad-size') return fail(SVG_SIZE_HINT);
-                    if (result.reason === 'no-svg') return fail('The svg parameter is required.');
-                    if (result.reason === 'no-storage') {
-                        return fail('The editor is not ready to hold image assets yet — no costume was added.');
+                    if (result.reason === 'no-costume') {
+                        return fail(`No such costume in "${sprite}". See what exists with xce_read_costume.`);
                     }
-                    return fail(`Could not add a costume to "${sprite}".`);
+                    if (result.reason === 'bitmap') {
+                        return fail(`Costume "${result.name}" of "${sprite}" is a bitmap image, so it has no ` +
+                            'SVG source to edit. Use action "new" to add a costume on top of it instead.');
+                    }
+                    if (result.reason === 'bad-size') return fail(SVG_SIZE_HINT);
+                    return fail(`Could not edit the costume of "${sprite}".`);
                 }
                 return {
-                    content: `Added costume "${result.costume.name}" (${result.costume.width}x` +
-                        `${result.costume.height}) to "${result.sprite}"; it is now the current costume ` +
-                        `(index ${result.costume.index}).`,
-                    undo: {kind: 'costume', sprite: result.sprite, index: result.costume.index}
+                    content: `Replaced the content of costume "${result.oldName}" (now "${result.name}") in ` +
+                        `"${sprite}" (index ${result.index}). The old look is kept for undo. Check it with ` +
+                        'xce_read_costume.',
+                    undo: {
+                        kind: 'costumeContent',
+                        sprite,
+                        index: result.index,
+                        oldSvg: before.svg,
+                        oldName: before.name
+                    }
+                };
+            }
+        },
+
+        {
+            name: 'xce_delete_costume',
+            description:
+                'Delete ONE costume from a sprite, by name or index (default the current one). A sprite ' +
+                'needs at least one costume, so the last one standing cannot be deleted — the result says ' +
+                'so. The deleted costume is kept for undo. Prefer this over leaving a bad drawing around ' +
+                'when the user says a look is not wanted any more.',
+            destructive: true,
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name (see xce_list_sprites).'},
+                    costume: {
+                        type: 'string',
+                        description: 'Which costume to delete: name or index. Default the current one.'
+                    }
+                },
+                required: ['sprite']
+            },
+            handler: ({sprite, costume}) => {
+                if (!sprite) return fail('A sprite name is required.');
+                const snapshot = port.captureCostume(sprite, costume);
+                if (!snapshot) {
+                    return fail(`No such costume in "${sprite}" (asked for ` +
+                        `${costume === void 0 || costume === '' ? 'the current costume' : `"${costume}"`}). ` +
+                        'See what exists with xce_read_costume.');
+                }
+                if (!port.removeCostume(sprite, snapshot.index)) {
+                    return fail(`Costume "${snapshot.costume.name}" of "${sprite}" is the sprite's only one — ` +
+                        'a sprite needs at least one costume, so it cannot be deleted. Add a replacement ' +
+                        'with xce_edit_costume (action "new") first if the user wants it gone.');
+                }
+                return {
+                    content: `Deleted costume "${snapshot.costume.name}" (index ${snapshot.index}) from ` +
+                        `"${sprite}". It is kept for undo.`,
+                    undo: {
+                        kind: 'costumeRestore',
+                        sprite,
+                        costume: snapshot.costume,
+                        index: snapshot.index,
+                        current: snapshot.current
+                    }
+                };
+            }
+        },
+
+        {
+            name: 'xce_add_costume_from_url',
+            description:
+                'Download one image from a URL and add it as a NEW costume of an existing sprite — the ' +
+                'costume is appended at the end and becomes the current one. It never replaces or overwrites ' +
+                'an existing look; to redraw one, use xce_edit_costume with action "edit".\n' +
+                'Supported formats: webp, png, jpeg and svg. A webp is converted to a PNG bitmap on the way ' +
+                'in (Scratch cannot read webp); png and jpeg land as bitmap costumes; svg lands as a vector ' +
+                'costume (its root <svg> must carry width and height — without them the result says so). ' +
+                'gif, bmp and other formats are not supported. The image is capped at 10MB.\n' +
+                'Give `sprite` and `url`; `name` names the costume (default 造型N). Check the result with ' +
+                'xce_read_costume — a downloaded picture can be anything.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name (see xce_list_sprites).'},
+                    url: {type: 'string', description: 'Full http(s) URL of the image file itself.'},
+                    name: {type: 'string', description: 'Name for the costume. Default 造型N.'}
+                },
+                required: ['sprite', 'url']
+            },
+            handler: async ({sprite, url, name}, ctx = {}) => {
+                if (!sprite) return fail('A sprite name is required.');
+                if (!url || !String(url).trim()) return fail('The url parameter is required.');
+                let image;
+                try {
+                    image = await fetchImage(url, {signal: ctx.signal});
+                } catch (e) {
+                    return fail((e && e.message) || String(e));
+                }
+                if (image.kind === 'svg') {
+                    const result = await port.addCostume(sprite, {svg: image.svg, name});
+                    if (!result.ok) {
+                        if (result.reason === 'missing') {
+                            return fail(`No sprite named "${sprite}". Existing sprites: ${result.sprites}`);
+                        }
+                        if (result.reason === 'bad-size') {
+                            return fail(`${SVG_SIZE_HINT} The downloaded SVG has this problem — find another ` +
+                                'image or draw one yourself.');
+                        }
+                        return fail(`Could not add a costume to "${sprite}".`);
+                    }
+                    return {
+                        content: `Downloaded the SVG from the URL and added it as costume ` +
+                            `"${result.costume.name}" (${result.costume.width}x${result.costume.height}) of ` +
+                            `"${result.sprite}" (index ${result.costume.index}); it is now the current costume. ` +
+                            'Check it with xce_read_costume.',
+                        undo: {kind: 'costume', sprite: result.sprite, index: result.costume.index}
+                    };
+                }
+                // 位图：webp 已由本工具的调用方转 PNG（canvas 归一在 port.addBitmapCostume 里）
+                const result = await port.addBitmapCostume(sprite, {dataUrl: image.dataUrl, name});
+                if (!result.ok) {
+                    if (result.reason === 'missing') {
+                        return fail(`No sprite named "${sprite}". Existing sprites: ${result.sprites}`);
+                    }
+                    if (result.reason === 'no-canvas') {
+                        return fail('This environment cannot decode bitmap images (no canvas) — the download ' +
+                            'worked, but nothing was added.');
+                    }
+                    if (result.reason === 'no-storage') {
+                        return fail('The editor is not ready to hold image assets yet — nothing was added.');
+                    }
+                    return fail('The image was downloaded but could not be turned into a costume.');
+                }
+                return {
+                    content: `Downloaded the image from the URL and added it as bitmap costume ` +
+                        `"${result.name}" (${result.width}x${result.height}) of "${result.sprite}" ` +
+                        `(index ${result.index}); it is now the current costume. Check it with xce_read_costume.`,
+                    undo: {kind: 'costume', sprite: result.sprite, index: result.index}
                 };
             }
         },
@@ -951,8 +1207,8 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 'drawing; the picture is what you want when judging how it actually looks.\n' +
                 '- A **bitmap** costume (a PNG or JPG imported from somewhere) has no source, so you get the ' +
                 'picture.\n' +
-                'Use it right after drawing a costume with xce_add_sprite or xce_add_costume — that is how you ' +
-                'check your own drawing came out right before you tell the user it is done. It shows the ' +
+                'Use it right after drawing a costume with xce_edit_costume, or after importing one with ' +
+                'xce_add_costume_from_url, to check the look before you tell the user it is done. It shows the ' +
                 'costume on its own (not the stage), so it works before the project is even run.\n' +
                 'Whether a picture actually reaches you depends on the model: on a text-only model the picture ' +
                 'is not passed on and the result says so — never describe a drawing you have not seen. Vector ' +
@@ -1275,8 +1531,12 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
         {
             name: 'xce_read_skill',
             description:
-                'List the reference documents ("skills") that exist for this editor and the team and sites ' +
-                'around it — one line each. Takes no arguments.\n' +
+                'List the RAG reference documents (fastdocs) that exist for this editor, the team behind ' +
+                'it and its sister sites — one line each. Takes no arguments.\n' +
+                'Terminology, so it does not get muddled: these documents are NOT "skills". A skill is ' +
+                'something you can do — writing blocks, drawing sprites, firing events — and this lookup ' +
+                'itself is one of your skills. What you read here is reference material, and the names ' +
+                'all start with xce_fastdocs_ for exactly that reason.\n' +
                 'Call this FIRST, before answering anything about the editor itself, CaelLab, or those ' +
                 'sites: the documents are deliberately kept out of the prompt, so this is the only way to ' +
                 'know what is available, and they beat anything you only half-remember. To actually read ' +
@@ -1286,7 +1546,7 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
             handler: () => {
                 if (!skills.length) return ok('No reference documents are loaded.');
                 const lines = skills.map(skill => `- \`${skill.name}\` — ${skill.description}`);
-                return ok(`Available skills (read one in full with xce_read_fast_docs and its name):\n` +
+                return ok('Available fastdocs (read one in full with xce_read_fast_docs and its name):\n' +
                     `${lines.join('\n')}`);
             }
         },
@@ -1294,9 +1554,11 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
         {
             name: 'xce_read_fast_docs',
             description:
-                'Read one reference document in full, by name (get the names from xce_read_skill).\n' +
-                'Each skill is a SHORT overview; when it is not enough, pass "<skill>/<doc>" to read one ' +
-                'of its detailed documents (a skill lists the detailed docs it has).\n' +
+                'Read one reference document (fastdoc) in full, by name — get the names from ' +
+                'xce_read_skill. What you read here is RAG reference material, not a skill: it exists so ' +
+                'you can look facts up before answering.\n' +
+                'Each fastdoc is a SHORT overview; when it is not enough, pass "<fastdoc>/<doc>" to read ' +
+                'one of its detailed documents (a fastdoc lists the detailed docs it has).\n' +
                 'One call per document; do not fetch documents you do not need, and never answer a ' +
                 'question the documents cover without reading them first.',
             readOnly: true,
@@ -1305,8 +1567,8 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 properties: {
                     name: {
                         type: 'string',
-                        description: 'Document name: a skill ("xce_engine"), or one of its detailed ' +
-                            'docs ("xce_engine/write-scripts"). Skills available: ' +
+                        description: 'Document name: a fastdoc ("xce_fastdocs_engine"), or one of its ' +
+                            'detailed docs ("xce_fastdocs_engine/write-scripts"). Fastdocs available: ' +
                             `${skills.map(skill => skill.name).join(', ') || '(none loaded)'}`
                     }
                 },
@@ -1325,7 +1587,7 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                         const own = skill ?
                             `"${skillName}" has these detailed docs: ` +
                             `${(skill.docs || []).map(entry => entry.name).join(', ') || '(none)'}` :
-                            `There is no skill called "${skillName}" — call xce_read_skill first.`;
+                            `There is no fastdoc called "${skillName}" — call xce_read_skill first.`;
                         return fail(`No such detailed doc: ${wanted}. ${own}`);
                     }
                     return ok(doc.body);
@@ -1334,7 +1596,7 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 if (!skill) {
                     return fail(
                         skills.length ?
-                            `There is no skill called "${wanted}". Call xce_read_skill to see what exists; ` +
+                            `There is no fastdoc called "${wanted}". Call xce_read_skill to see what exists; ` +
                             `available: ${skills.map(entry => entry.name).join(', ')}` :
                             'No reference documents are loaded.'
                     );
