@@ -1,7 +1,7 @@
 // xce_read_online 的无头自测：HTML 提取、head 摘要规则、抓取链路（用假 fetch）
 // 用法：node src/playground/ai/online.test.mjs
 /* eslint-disable no-console */
-import {htmlToText, extractHead, fetchOnline, HEAD_CAP, BODY_CAP} from './online.js';
+import {htmlToText, extractHead, fetchOnline, fetchImage, sniffImageType, HEAD_CAP, BODY_CAP} from './online.js';
 import {createTools} from './tools.js';
 
 const failures = [];
@@ -242,6 +242,90 @@ try {
         /20KB/.test(desktopTool.description) && /5 second/.test(desktopTool.description));
 } finally {
     delete globalThis.window;
+}
+
+// ---------- 6. sniffImageType：魔数优先，content-type 兜底 ----------
+const PNG_BYTES = Uint8Array.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4, 5]);
+const JPEG_BYTES = Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4, 5]);
+const ascii = str => [...str].map(c => c.charCodeAt(0));
+const WEBP_BYTES = Uint8Array.from([...ascii('RIFF'), 0, 0, 0, 0, ...ascii('WEBP'), 1, 2]);
+const SVG_BYTES = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>');
+check('认得出 PNG 魔数', sniffImageType(PNG_BYTES, '') === 'png');
+check('认得出 JPEG 魔数', sniffImageType(JPEG_BYTES, '') === 'jpeg');
+check('认得出 WEBP（RIFF....WEBP）', sniffImageType(WEBP_BYTES, '') === 'webp');
+check('认得出 SVG（开头的 <svg）', sniffImageType(SVG_BYTES, '') === 'svg');
+check('魔数认不出时看 content-type',
+    sniffImageType(Uint8Array.from([1, 2, 3]), 'image/png') === 'png' &&
+    sniffImageType(Uint8Array.from([1, 2, 3]), 'image/svg+xml') === 'svg' &&
+    sniffImageType(Uint8Array.from([1, 2, 3]), 'image/jpeg; charset=binary') === 'jpeg');
+check('不支持的格式一律 null（gif / bmp / octet-stream）',
+    sniffImageType(Uint8Array.from(ascii('GIF89a')), 'image/gif') === null &&
+    sniffImageType(Uint8Array.from([0x42, 0x4D]), 'image/bmp') === null &&
+    sniffImageType(new Uint8Array(0), 'application/octet-stream') === null);
+
+// ---------- 7. fetchImage：SVG 直给源码、位图转 dataURL、坏情况报清楚 ----------
+const realFetch = globalThis.fetch;
+const routeFetch = handlers => {
+    globalThis.fetch = async url => {
+        const found = handlers[String(url)];
+        if (!found) throw new TypeError('Failed to fetch');
+        return found;
+    };
+};
+try {
+    routeFetch({
+        'https://x.test/a.png': {
+            ok: true,
+            status: 200,
+            headers: {get: () => 'image/png'},
+            arrayBuffer: async () => PNG_BYTES.buffer
+        },
+        'https://x.test/a.svg': {
+            ok: true,
+            status: 200,
+            headers: {get: () => 'image/svg+xml'},
+            arrayBuffer: async () => SVG_BYTES.buffer
+        },
+        'https://x.test/page': {
+            ok: true,
+            status: 200,
+            headers: {get: () => 'text/html'},
+            arrayBuffer: async () => new TextEncoder().encode('<html></html>').buffer
+        }
+    });
+    const bitmap = await fetchImage('https://x.test/a.png');
+    check('位图返回 dataURL 与 mime',
+        bitmap.kind === 'bitmap' && bitmap.mime === 'image/png' &&
+            bitmap.dataUrl.startsWith('data:image/png;base64,'),
+        JSON.stringify({kind: bitmap.kind, mime: bitmap.mime}));
+    const svg = await fetchImage('https://x.test/a.svg');
+    check('SVG 直接给源码，不转图片', svg.kind === 'svg' && svg.svg.includes('<svg'));
+
+    let pageError = '';
+    try {
+        await fetchImage('https://x.test/page');
+    } catch (e) {
+        pageError = e.message;
+    }
+    check('URL 是网页时报「不是图片」', /usable image/.test(pageError), pageError.slice(0, 60));
+
+    let netError = '';
+    try {
+        await fetchImage('https://x.test/nope.png');
+    } catch (e) {
+        netError = e.message;
+    }
+    check('连不上时说明 CORS 这类原因', /CORS/.test(netError), netError.slice(0, 60));
+
+    let badUrl = '';
+    try {
+        await fetchImage('not-a-url');
+    } catch (e) {
+        badUrl = e.message;
+    }
+    check('非 http(s) 地址直接拒', /full URL/.test(badUrl));
+} finally {
+    globalThis.fetch = realFetch;
 }
 
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);

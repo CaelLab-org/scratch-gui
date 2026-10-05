@@ -69,7 +69,8 @@ clearUserSkills();
 saveUserSkill({name: 'my_guide', description: '我的笔记', body: '# 正文'});
 
 const config = collectConfig();
-check('带格式标记与版本', config.format === 'xce-ai-config' && config.version === 1 &&
+check('带格式标记、类型与版本', config.format === 'xce-ai-config' && config.type === 'config' &&
+    config.version === 1 && typeof config.appVersion === 'string' &&
     config.app === 'XMUER Coding Engine');
 check('设置本体在（不含密钥字段）',
     config.settings.providerId === 'deepseek' &&
@@ -95,6 +96,8 @@ check('能序列化成 JSON 文本', typeof JSON.parse(text) === 'object');
 check('不是 JSON 直接拒', !!parseConfig('这不是 json').error);
 const alien = parseConfig(JSON.stringify({format: 'something-else', version: 1}));
 check('format 不对拒掉并说明', !!alien.error && /不是 XCE/.test(alien.error), alien.error);
+const chatAsConfig = parseConfig(JSON.stringify({format: 'xce-ai-chat', type: 'chat', version: 1, conversations: []}));
+check('拿对话文件导配置给指路', !!chatAsConfig.error && /对话文件/.test(chatAsConfig.error), chatAsConfig.error);
 const future = parseConfig(JSON.stringify({format: 'xce-ai-config', version: 99}));
 check('版本比编辑器新就拒掉', !!future.error && /版本/.test(future.error), future.error);
 check('自家文件认得出来', !parseConfig(text).error);
@@ -197,7 +200,8 @@ saveConversation(idY, {messages: [{role: 'user', content: '第二条'}], toolCal
 const single = collectChatFile([idX]);
 check('单条导出只带一条', single.conversations.length === 1 &&
     single.conversations[0].messages[0].content === '第一条');
-check('导出文件带格式标记与版本', single.format === 'xce-ai-chat' && single.version === 1);
+check('导出文件带格式标记、类型与版本', single.format === 'xce-ai-chat' && single.type === 'chat' &&
+    single.version === 1 && typeof single.appVersion === 'string');
 check('整库导出条数不少于库里两条', collectChatFile(null).conversations.length >= 2);
 
 check('认得出自家的对话文件', parseChat(JSON.stringify(single)).conversations.length === 1);

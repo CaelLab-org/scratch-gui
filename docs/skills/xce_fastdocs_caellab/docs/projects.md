@@ -6,14 +6,14 @@ something that this editor does not do. The grouping below is the official site'
 ## Community
 
 - **轻之舟百科** — <https://130.wiki/> — the encyclopedia CaelLab creates and operates.
-- **XMUER Forum (XF)** — <https://forum.xmuer.online/> — the discussion forum. Detailed doc: `xce_xf`.
+- **XMUER Forum (XF)** — <https://forum.xmuer.online/> — the discussion forum. Detailed doc: `xce_fastdocs_xf`.
 - **XMUER Coding Community (XCC)** — <https://coding.xmuer.online/> — where people share finished
-  projects, under a team section called 「共创世界」. Detailed doc: `xce_xcc`.
+  projects, under a team section called 「共创世界」. Detailed doc: `xce_fastdocs_xcc`.
 
 ## Tools
 
 - **XMUER Coding Engine (XCE)** — <https://engine.xmuer.online/> — the editor you are running inside.
-  Detailed doc: `xce_engine`.
+  Detailed doc: `xce_fastdocs_engine`.
   - **XCE Desktop** — <https://engine.xmuer.online/desktop/> — the same editor packaged as a Windows
     application, so projects run offline and the browser cannot throttle or discard a tab. Same features as
     the web version, plus native-desktop performance. The download page is the `/desktop/` page on the

@@ -88,7 +88,10 @@ const TOOL_LABELS = {
     xce_read_state: '读取状态',
     xce_read_stage: '截取舞台',
     xce_add_sprite: '新增角色',
-    xce_add_costume: '添加造型',
+    xce_rename_sprite: '重命名角色',
+    xce_edit_costume: '编辑造型',
+    xce_delete_costume: '删除造型',
+    xce_add_costume_from_url: '从网页加造型',
     xce_read_costume: '查看造型',
     xce_get_time: '获取时间',
     xce_read_env: '读取运行环境',
@@ -723,7 +726,9 @@ const TurnChanges = ({changes, onRevert}) => {
                     {change.sprites ? <span className={styles.changePlus}>{'新角色'}</span> : null}
                     {change.added ? <span className={styles.changePlus}>{`+${change.added}`}</span> : null}
                     {change.costumes ? <span className={styles.changePlus}>{`+${change.costumes} 造型`}</span> : null}
-                    {change.notes ? <span className={styles.changePlus}>{`+${change.notes} 注释`}</span> : null}
+                    {change.notes > 0 ? <span className={styles.changePlus}>{`+${change.notes} 注释`}</span> : null}
+                    {change.notes < 0 ?
+                        <span className={styles.changeMinus}>{`\u2212${-change.notes} 注释`}</span> : null}
                     {change.removed ? <span className={styles.changeMinus}>{`\u2212${change.removed}`}</span> : null}
                     {change.added || change.removed ? <span className={styles.changeUnit}>{'积木'}</span> : null}
                 </span>
@@ -1524,10 +1529,11 @@ const BackupSection = ({onBack}) => {
                         >{`导入失败：${outcome.error}`}</span>
                     ) : null}
                     {outcome && outcome.summary ? (() => {
-                        const {settings, keys, providers, memories, skills, warnings} = outcome.summary;
+                        const {sourceVersion, settings, keys, providers, memories, skills, warnings} = outcome.summary;
                         return (
                             <div className={styles.importSummary}>
                                 <span className={styles.importTitle}>{'导入完成（合并）'}</span>
+                                {sourceVersion ? <span>{`这份文件由 XCE ${sourceVersion} 导出`}</span> : null}
                                 <span>{`设置：${settings.join('、') || '没动'}`}</span>
                                 <span>{`密钥：认了 ${keys} 把`}</span>
                                 <span>{`自己加的供应商：新增 ${providers.added} / 更新 ${providers.updated}`}</span>

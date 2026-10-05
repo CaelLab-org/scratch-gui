@@ -220,15 +220,46 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.2.0 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.3.0 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
+                    <h2>4.3.0</h2>
+                    <span class="date">2026-10-06</span>
+                    <span class="latest">最新</span>
+                </header>
+
+                <p>这一版把 AI 手里「图形」那一半补完整了：以前它只会往项目里添新东西，现在画过的能改、不要的能删、网上的图也能拿来用。</p>
+
+                <h3>AI 能改它画过的、也能清理了</h3>
+                <ul>
+                    <li><strong>就地编辑造型</strong>：AI 可以重画一个已有的矢量造型（比如把自己画歪的手改对），原来的样子会留着用于撤销。</li>
+                    <li><strong>删除造型</strong>：不想要的造型 AI 能直接删掉（每个角色至少要留一个），删错可撤销。</li>
+                    <li><strong>从网址导入图片</strong>：给 AI 一个图片链接（webp / png / jpeg / svg），它会下载下来当作新造型 —— webp 会自动转成 PNG。桌面版由应用自己下载，不受浏览器跨域限制；图片上限 10MB。</li>
+                    <li><strong>重命名角色</strong>：AI 可以给角色改名，所有脚本照常工作；「XCEAGENT」这类保留名不能占用。</li>
+                    <li><strong>删除便签</strong>：AI 留的注释（xce_note）现在也能按编号删掉，同样可撤销。</li>
+                    <li>新建角色的流程顺了一下：新角色先带一个空白造型，画造型是独立的下一步 —— AI 不会再在建角色那一步被图卡住。</li>
+                </ul>
+
+                <h3>导出文件知道自己是哪一版的</h3>
+                <ul>
+                    <li>配置（<code>.output.xce</code>）和对话记录（<code>.chat.xce</code>）导出时记下应用版本，导入时会告诉你是哪一版导的 —— 以后翻旧备份出了问题能一眼对上。</li>
+                    <li>两类文件拿错时（拿配置文件去导对话、或反过来）提示说得更明白，会直接告诉你该用哪一栏。</li>
+                </ul>
+
+                <h3>其他</h3>
+                <ul>
+                    <li>AI 的参考文档库改叫 <strong>fastdocs</strong> 并扩充了内容（编辑器、虚舟实验室、扩展相关），「查资料」和「会做的事」在 AI 那边分得更清。</li>
+                    <li>提示词与实际能力对齐了几处（比如造型编辑），AI 描述自己能做什么时不再自相矛盾。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
                     <h2>4.2.0</h2>
                     <span class="date">2026-10-05</span>
-                    <span class="latest">最新</span>
                 </header>
 
                 <p>AI 终端这一版补上了「长期陪你用」需要的几块：AI 会记事了、配置能搬走了、对话能导出了，还多了一批更好用的工具。</p>

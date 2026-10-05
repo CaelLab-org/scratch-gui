@@ -1,9 +1,15 @@
 # Drawing a costume as SVG
 
-How to make a sprite look like something, using `xce_add_sprite` (a new sprite) or
-`xce_add_costume` (one more costume on an existing sprite). Both take the costume as an SVG document
-**you write yourself**, so this page is the difference between a drawing that shows up and one that
-comes out blank.
+How to make a sprite look like something, using `xce_edit_costume`: action `"new"` appends a costume,
+action `"edit"` redraws the content of an existing (vector) one in place — including the blank
+costume every new sprite starts with. It takes the costume as an SVG document **you write yourself**,
+so this page is the difference between a drawing that shows up and one that comes out blank.
+For a picture that already exists on the web, `xce_add_costume_from_url` downloads it instead
+(webp/png/jpeg/svg; webp becomes a PNG bitmap, and a downloaded picture is whatever it is —
+look at it before saying it is right).
+
+The standard flow: `xce_add_sprite` (one blank costume is normal) → read this page → `xce_edit_costume`
+→ `xce_read_costume` to check → tell the user what it looks like.
 
 Afterwards, look at what you drew with `xce_read_costume` before you tell the user it is done.
 
@@ -68,9 +74,11 @@ Note where the centre is (60, 60) and that the shape nearly fills the canvas on 
   percentage. Add plain numbers and call the tool again.
 - **The tool says the editor could not render the SVG** — the document used something outside the
   list above (usually `<text>`, a filter, or an external reference). Simplify it to plain shapes and
-  add a corrected costume.
-- **"A sprite named … already exists"** — sprite names are unique. Pick another, or add the costume
-  to the existing sprite.
+  call `xce_edit_costume` again.
+- **"A sprite named … already exists"** — sprite names are unique. Pick another (`xce_rename_sprite`
+  renames an existing one), or put the costume on the existing sprite.
+- **Action "edit" is refused because the costume is a bitmap** — a downloaded or hand-imported
+  picture has no SVG source to redraw. Use action "new" to add a costume on top of it instead.
 - **Nothing visible but no error** — check the canvas centre and that the colour is not white on a
   transparent background; then look at it with `xce_read_costume`.
 

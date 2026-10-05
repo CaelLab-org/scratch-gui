@@ -1,5 +1,5 @@
 ---
-name: xce_memory
+name: xce_fastdocs_memory
 description: How the assistant's long-term memory works in this editor — what belongs in it, how to write a memory that is still useful weeks later, and how memories interact with skills and the user's own settings. Load this when you are about to save, rewrite or delete a memory, or when the user asks what you remember about them.
 ---
 

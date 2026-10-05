@@ -23,10 +23,15 @@ import {loadMemories, saveMemory} from './memory.js';
 import {loadUserSkills, saveUserSkill} from './user-skills.js';
 import {exportConversation, exportAllConversations} from './store.js';
 
-// 认这个标记才算自家文件：别人家的 json / 随便一个文件丢进来，宁可不认也不要乱写
+// 认这个标记才算自家文件：别人家的 json / 随便一个文件丢进来，宁可不认也不要乱写。
+// 两个格式标记放一起：两个解析器都要拿它们互相指路（拿了对话文件来导配置之类）
 const FORMAT = 'xce-ai-config';
 const VERSION = 1;
 export const CONFIG_EXTENSION = '.output.xce';
+const CHAT_FORMAT = 'xce-ai-chat';
+
+// 导出文件里带上导出时的应用版本（构建时由 webpack 注入），以后翻老文件不用猜是哪一版导的
+const APP_VERSION = process.env.XCE_VERSION || '';
 
 /**
  * 把当前这台机器上的 AI 配置收成一份可导出的对象
@@ -37,7 +42,9 @@ export const collectConfig = ({includeKeys = true} = {}) => {
     const settings = loadSettings();
     return {
         format: FORMAT,
+        type: 'config',
         version: VERSION,
+        appVersion: APP_VERSION,
         app: 'XMUER Coding Engine',
         exportedAt: new Date().toISOString(),
         settings: {
@@ -105,6 +112,10 @@ export const parseConfig = text => {
     }
     if (!parsed || typeof parsed !== 'object') return {error: '文件内容不是一个配置对象'};
     if (parsed.format !== FORMAT) {
+        // 拿错文件是高频操作（两类都是 .xce），type / format 有一个能对上就指路
+        if (parsed.type === 'chat' || parsed.format === CHAT_FORMAT) {
+            return {error: '这是对话文件（.chat.xce），对话记录要用同一页下面的「导入对话记录」'};
+        }
         return {error: `看起来不是 XCE 的配置文件（format 是 ${JSON.stringify(parsed.format)}）`};
     }
     const version = Number(parsed.version);
@@ -126,6 +137,8 @@ export const parseConfig = text => {
  */
 export const mergeConfig = config => {
     const summary = {
+        // 文件是哪一版导的（老文件没这个字段就是空串），导入完报给用户 —— 出问题时能一眼对上是哪一代产物
+        sourceVersion: config.appVersion || '',
         settings: [],
         keys: 0,
         providers: {added: 0, updated: 0},
@@ -227,7 +240,6 @@ export const mergeConfig = config => {
 // 文件里是完整聊天记录，可能带私密内容 —— 导出页上要提醒一句。
 // ---------------------------------------------------------------------------
 
-const CHAT_FORMAT = 'xce-ai-chat';
 const CHAT_VERSION = 1;
 export const CHAT_EXTENSION = '.chat.xce';
 
@@ -242,7 +254,9 @@ export const collectChatFile = ids => {
         exportAllConversations();
     return {
         format: CHAT_FORMAT,
+        type: 'chat',
         version: CHAT_VERSION,
+        appVersion: APP_VERSION,
         app: 'XMUER Coding Engine',
         exportedAt: new Date().toISOString(),
         conversations
@@ -306,7 +320,9 @@ export const parseChat = text => {
     if (!parsed || typeof parsed !== 'object') return {error: '文件内容不是一个对话对象'};
     if (parsed.format !== CHAT_FORMAT) {
         // 帮一把拿错文件的人：配置文件和对话文件都是 .xce，别让 ta 对着「格式不对」发懵
-        if (parsed.format === FORMAT) return {error: '这是配置文件（.output.xce），对话记录要在备份页用对话导入那一栏'};
+        if (parsed.type === 'config' || parsed.format === FORMAT) {
+            return {error: '这是配置文件（.output.xce），配置要用同一页上面的「导入」'};
+        }
         return {error: `看起来不是 XCE 的对话文件（format 是 ${JSON.stringify(parsed.format)}）`};
     }
     const version = Number(parsed.version);
