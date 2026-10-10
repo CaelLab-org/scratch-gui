@@ -2348,7 +2348,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
         ...loadSettings(),
         customProviders: loadCustomProviders()
     }));
-    // 正在就地改的那条用户消息：{id, text}。null = 没在改（学 ZCode：只有最后一条有铅笔）
+    // 正在改的那条用户消息：{id, text}。null = 没在改（每条提问都能改，见 handleEditStart）
     const [editing, setEditing] = useState(null);
     const [context, setContext] = useState(null);
     const [showJump, setShowJump] = useState(false);
@@ -2463,7 +2463,13 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         saveTimerRef.current = setTimeout(() => {
             saveTimerRef.current = 0;
-            saveConversation(conversationIdRef.current, sessionRef.current, items);
+            // 会话上挂着「来处」的话（改第一句分叉出来的空对话，见 forkInto）第一轮一并写进去，
+            // 写完就摘掉；挂在会话对象上，切走这条会话自然就丢了，不会串到别人身上
+            const session = sessionRef.current;
+            const pending = session.forkOf || null;
+            const saved = saveConversation(conversationIdRef.current, session, items,
+                pending ? {forkOf: pending} : null);
+            if (pending && saved) delete session.forkOf;
         }, 600);
         return () => {
             if (saveTimerRef.current) {
@@ -2943,14 +2949,14 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     }, []);
 
     // ------------------------------------------------------------------
-    // 改上一轮发言 / 分叉（都学 ZCode，见 _refstudy/zcode 的 fork-edit-retry）
+    // 改这条提问 / 分叉（都学 ZCode，见 _refstudy/zcode 的 fork-edit-retry）
     // ------------------------------------------------------------------
 
-    // 改：**只有最后一条提问带铅笔**。这不是省事 —— 改中间那条的话，它后面几轮里模型说过的
-    // 结论都已经脏了，而 Scratch 这边没有「把项目一起回滚」的机制，改了反而更难收拾。
-    // 想改更早的走「分叉」：从那一轮之后另起一条对话，原对话一个字都不动。
+    // 改 = **从这条上面分叉 + 立刻重发**。在原来那条上原地截断看着更省事，代价是这条后面
+    // 那几轮（连着 AI 的答复）当场就没了；分叉把它整条留在历史里，随时点得回去。
+    // 任意一条提问都能改 —— 截断点按 id 找，别按下标数（compactSession 会重写 messages，下标会漂）。
     //
-    // 跑着的时候两个动作都不给（按钮直接不出现）：这一轮还在往 items 和 session.messages 里写，
+    // 跑着的时候不给改（按钮直接不出现）：这一轮还在往 items 和 session.messages 里写，
     // 中途截断会留下半截的「调用+结果」，下一轮请求直接非法。等它跑完再改，最坏多等几秒。
     const handleEditStart = useCallback(item => {
         if (busy || !item || !item.id) return;
@@ -2959,31 +2965,63 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
 
     const handleEditCancel = useCallback(() => setEditing(null), []);
 
+    // 把「这段截好的历史」复制成一条新对话并切过去 —— 「改这条」与「从这一轮分叉」共用。
+    // 复制不是搬家：先按完整状态把当前这条落盘，原来那条在历史里一个字都不动
+    // （跟 ZCode 的 fork 一样，新那条记着来处）。
+    const forkInto = useCallback((messages, keptItems) => {
+        saveConversation(conversationIdRef.current, sessionRef.current, items);
+        const all = loadConversationIndex();
+        const parentId = conversationIdRef.current;
+        const parent = all.conversations.find(entry => entry.id === parentId);
+        const parentTitle = (parent && parent.title) || '对话';
+        const newId = newConversationId();
+        const forked = {...createSession(), messages, model: sessionRef.current.model || null};
+        saveFork(newId, forked, keptItems, {id: parentId, title: parentTitle});
+        // 上面还没内容（改的是第一句）时新对话是空的、存不进库，来处先挂在会话上，
+        // 等第一轮落盘时补写进去（见落盘防抖那段）
+        if (!messages.length) forked.forkOf = {id: parentId, title: parentTitle};
+        conversationIdRef.current = newId;
+        sessionRef.current = forked;
+        setItemsState(keptItems);
+        setEditing(null);
+        setContext(null);
+        setUsageStats(null);
+        stickRef.current = true;
+        setShowJump(false);
+        setStatusError(false);
+    }, [items]);
+
     const handleEditSubmit = useCallback(() => {
         if (!editing) return;
         const item = items.find(entry => entry.kind === 'user' && entry.id === editing.id);
         const text = String(editing.text || '').trim();
-        setEditing(null);
         // 没改内容就当成取消，别白跑一轮（还要多烧一次 token）
-        if (!item || !text || text === item.text) return;
+        if (!item || !text || text === item.text) {
+            setEditing(null);
+            return;
+        }
         const turn = turns.find(entry => entry.user && entry.user.id === editing.id);
         // 会话那边按 id 截断。老对话被压缩过的话这条可能已经不在数组里了（见 compact.js），
         // 那就别硬改 —— 让用户直接发一句新的，别在这里猜。
         const messages = messagesBefore(sessionRef.current.messages, editing.id);
         if (!turn || !messages) {
+            setEditing(null);
             setStatus('这条已经被上下文压缩带走了，改不了；直接发一句新的吧');
             setStatusError(true);
             return;
         }
-        sessionRef.current.messages = messages;
-        setItemsState(itemsBeforeTurn(items, turn));
-        setStatusError(false);
-        setStatus('已按新内容重发');
+        forkInto(messages, itemsBeforeTurn(items, turn));
+        // 状态行马上会被 sendText 的「思考中…」盖掉，所以在转录里也留一句：
+        // 这段历史是从中间切出来的，得让人知道原来那条（连同它后面几轮）没丢
+        setItemsState(prev => prev.concat([{
+            kind: 'notice',
+            text: '已从这条提问上面分叉出新对话并重发，原来那条留在历史列表里。'
+        }]));
+        setStatus('已从这条分叉出新对话并重发，原来那条还在历史里');
         sendText(text);
-    }, [editing, items, sendText, turns]);
+    }, [editing, forkInto, items, sendText, turns]);
 
-    // 分叉：以「这一轮干完」为切点，把这段历史**复制**成一条新对话并切过去。
-    // 复制不是搬家 —— 原来那条完整留在历史里，点回去就能看（跟 ZCode 的 fork 一样）。
+    // 分叉：以「这一轮干完」为切点，把这段历史**复制**成一条新对话并切过去（不重发任何东西）。
     const handleFork = useCallback(turn => {
         if (busy || !turn || !turn.user) return;
         const index = turns.indexOf(turn);
@@ -2994,26 +3032,9 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
             setStatusError(true);
             return;
         }
-        const keptItems = itemsUpToTurn(items, turn);
-        // 先按防抖窗口里可能还没落的那点尾巴把当前这条补写一把，再去列表里取它的标题
-        saveConversation(conversationIdRef.current, sessionRef.current, items);
-        const all = loadConversationIndex();
-        const parent = all.conversations.find(entry => entry.id === conversationIdRef.current);
-        const parentTitle = (parent && parent.title) || '对话';
-        const newId = newConversationId();
-        const forked = {...createSession(), messages, model: sessionRef.current.model || null};
-        saveFork(newId, forked, keptItems, {id: conversationIdRef.current, title: parentTitle});
-        conversationIdRef.current = newId;
-        sessionRef.current = forked;
-        setItemsState(keptItems);
-        setEditing(null);
-        setContext(null);
-        setUsageStats(null);
-        stickRef.current = true;
-        setShowJump(false);
+        forkInto(messages, itemsUpToTurn(items, turn));
         setStatus('已分叉出新对话，原来那条还在历史里');
-        setStatusError(false);
-    }, [busy, items, turns]);
+    }, [busy, forkInto, items, turns]);
 
     // 渲染一条转录条目。用户消息不经过这里 —— 它挂在「轮」上，由分组那层画。
     const renderItem = (item, key) => {
@@ -3235,14 +3256,6 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
 
     const full = mode === 'full';
     const ratio = context ? context.ratio || 0 : 0;
-    // 最后一条提问（只有它有铅笔，学 ZCode 的「只改最新一句」）
-    let lastUser = null;
-    for (let i = items.length - 1; i >= 0; i--) {
-        if (items[i].kind === 'user') {
-            lastUser = items[i];
-            break;
-        }
-    }
     // 底栏只有 ~310px 宽，「供应商 · 模型」这种全称一定被截断，只留模型名
     const modelLabel = hasApiKey(settings) ?
         ((resolveModel(settings) || {}).name || settings.modelId) : '本地演示模型';
@@ -3379,7 +3392,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                     >
                                         {turn.user ? (
                                             editing && editing.id === turn.user.id ? (
-                                                /* 就地改：气泡变成输入框（学 ZCode 的 ChatPromptEditor），
+                                                /* 改这条：气泡就地变成输入框（学 ZCode 的 ChatPromptEditor），
                                                    不占用底部那个输入区 —— 改的是历史，不是新的一轮 */
                                                 <div className={styles.userEdit}>
                                                     <textarea
@@ -3403,7 +3416,9 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                                         value={editing.text}
                                                     />
                                                     <div className={styles.userEditActions}>
-                                                        <span className={styles.userEditHint}>{'回车重发 · Esc 取消'}</span>
+                                                        <span className={styles.userEditHint}>
+                                                            {'回车分叉重发 · Esc 取消'}
+                                                        </span>
                                                         <button
                                                             className={styles.msgAction}
                                                             onClick={handleEditCancel}
@@ -3421,15 +3436,13 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                                     <div className={styles.user}>{turn.user.text}</div>
                                                     {turn.user.id && !busy ? (
                                                         <div className={styles.userActions}>
-                                                            {turn.user === lastUser ? (
-                                                                <button
-                                                                    aria-label="改这条并重答"
-                                                                    className={styles.msgAction}
-                                                                    onClick={() => handleEditStart(turn.user)}
-                                                                    title="改这条提问并让 AI 重答（已经写进项目的积木不会跟着撤销）"
-                                                                    type="button"
-                                                                ><Icon name="pencil" /></button>
-                                                            ) : null}
+                                                            <button
+                                                                aria-label="改这条并重发"
+                                                                className={styles.msgAction}
+                                                                onClick={() => handleEditStart(turn.user)}
+                                                                title="改这条并从这条上面分叉重发（原来那条留在历史里；已经写进项目的积木不会撤销）"
+                                                                type="button"
+                                                            ><Icon name="pencil" /></button>
                                                             <button
                                                                 aria-label="从这一轮分叉"
                                                                 className={styles.msgAction}
