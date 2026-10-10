@@ -162,7 +162,7 @@ const readTextInBrowser = async (target, {timeoutMs, signal}) => {
             `happens a lot, and it is not something you or the user did wrong. You can try another URL, or ` +
             `answer from what you already know and say where it came from. If a page like this is genuinely ` +
             `what the user needs, it is fine to mention once, in plain words, that the desktop app fetches ` +
-            `pages itself and has no such browser restriction (engine.xmuer.online/engine) — state it as a ` +
+            `pages itself and has no such browser restriction (engine.xmuer.online/desktop/) — state it as a ` +
             `fact if it is relevant, do not turn it into a sales pitch. Never present remembered content as ` +
             `if it came from the page.`);
     }

@@ -80,7 +80,7 @@ try {
     }
     check('CORS 拒读时报人话（含桌面端出口）',
         !!message && /CORS/.test(message) && /remembered content/i.test(message) &&
-        /engine\.xmuer\.online\/engine/.test(message), message);
+        /engine\.xmuer\.online\/desktop\//.test(message), message);
 } finally {
     globalThis.fetch = originalFetch;
 }

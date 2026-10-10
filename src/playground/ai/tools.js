@@ -212,7 +212,7 @@ export const createTools = ({port, skills = []}) => {
         'On the web, most sites block a browser page from reading them (CORS), and pages behind a login or ' +
         'drawn entirely by JavaScript come back empty — failed fetches are normal here, not a sign that ' +
         'something was done wrong. The desktop app fetches pages itself and has no such restriction ' +
-        '(engine.xmuer.online/engine); no need to bring that up unprompted, it becomes relevant only when a ' +
+        '(engine.xmuer.online/desktop/); no need to bring that up unprompted, it becomes relevant only when a ' +
         'page the user actually needs cannot be read.';
     // 逐段拼成一篇，段间换行；「哪一级环境」那句是变量，拼在数组里而不是串接，免得踩 prefer-template
     const readOnlineDescription = [
@@ -851,7 +851,7 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                             'the user is away, so this is most likely the cause. You can put a question to the ' +
                             'user with xce_ask_user: it sends a notification that brings them back, and then a ' +
                             'retry should work. If this keeps happening, it is fine to mention once, plainly, ' +
-                            'that the desktop app keeps rendering in the background (engine.xmuer.online/engine).');
+                            'that the desktop app keeps rendering in the background (engine.xmuer.online/desktop/).');
                     }
                     return fail('Screenshot failed: the renderer produced no frame before the timeout. The ' +
                         'project may not have rendered a single frame yet — call xce_run_project first, then retry.');
