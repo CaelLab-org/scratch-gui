@@ -149,6 +149,12 @@ const shrinkImage = dataUrl => new Promise(resolve => {
 // 机器细节刻意**不进系统提示词**（用户 2026-10-04 定的）：提示词里只有「桌面客户端 / 网页」两态，
 // 要系统、版本、窗口大小就现取一次。无头环境（单测）没有 window / navigator，每一项都必须能缺。
 
+// 版本由 webpack 构建时从 package.json 注入（见 webpack.config.js），桌面版用的是同一份
+// 网页产物（桌面仓库的 copy-web-build.mjs），所以这一个值对两态都对。无头测试里没有它。
+const APP_VERSION = process.env.XCE_VERSION || '';
+const EDITOR_URL = 'https://engine.xmuer.online/';
+const DESKTOP_URL = 'https://engine.xmuer.online/desktop/';
+
 // UA 里的系统：能识别的就识别，认不出就留空（不猜）
 const UA_OS = [
     [/Windows NT 10\.0/i, 'Windows 10 or 11'],
@@ -1647,11 +1653,14 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
             name: 'xce_read_env',
             description:
                 'Where this editor is running, and the machine around it: which build (the desktop client or ' +
-                'the web page), operating system, app or browser version, window size, whether the user is on ' +
-                'a touch screen, and the interface language.\n' +
+                'the web page), the editor version, how it is licensed, its official page, operating system, ' +
+                'app or browser version, window size, whether the user is on a touch screen, and the interface ' +
+                'language.\n' +
                 'The system prompt only says which of the two builds this is. Call this when the difference ' +
                 'actually matters for what you are about to say or write — for example before you tell the ' +
-                'user how to open a file, or when a layout has to work in a small window.\n' +
+                'user how to open a file, or when a layout has to work in a small window — and whenever the ' +
+                'user asks which version they are on, what the licence is, or where the official page is: ' +
+                'those are facts to read here, not to recall.\n' +
                 'It says nothing about the project; use xce_list_sprites for that.',
             readOnly: true,
             inputSchema: {type: 'object', properties: {}},
@@ -1666,6 +1675,14 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                         'cross-origin rules do not apply.' :
                     'the web version of XCE, running inside a browser page. Reading a web page with ' +
                         'xce_read_online is done from the page, so most sites block it (CORS).'}`];
+                lines.push(`Version: XMUER Coding Engine ${APP_VERSION || 'unknown'}`);
+                lines.push('Licence: GPL-3.0-only — free software under the GNU General Public License ' +
+                    'version 3; the source is open, so the user may copy, change and share it, and a ' +
+                    'distributed copy has to keep the same licence.');
+                lines.push(`Official page: ${desktop ?
+                    `${DESKTOP_URL} (the desktop client's own page — where it is downloaded from and what ` +
+                        'each release changed)' :
+                    `${EDITOR_URL} (this editor's own page — the "/" the user is on)`}`);
                 const os = osFromUserAgent(ua);
                 if (os) lines.push(`Operating system: ${os}`);
                 const engine = engineFromUserAgent(ua);

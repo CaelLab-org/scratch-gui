@@ -13,7 +13,7 @@ import {parse as parseScratchblocks} from 'scratchblocks/syntax/index.js';
 import * as psb from 'parse-sb3-blocks';
 import meta from './tables/blocks-meta.js';
 
-const {idToOpcode, spec, shadows, menuValues, menuShadowByArg} = meta;
+const {idToOpcode, spec, shadows, menuValues, menuValuesByBlock, menuShadowByArg} = meta;
 
 // 上游 parse-sb3-blocks 的 bug：这几个条目 noTranslation、缺 defaultMessage，
 // 渲染器第一行就 `s.defaultMessage.includes(...)`，遇到就崩。
@@ -36,7 +36,17 @@ const blockName = block => {
     return words.length ? words.join(' ') : void 0;
 };
 
-const resolveMenuValue = display => (display in menuValues ? menuValues[display] : display);
+// 下拉框里写的显示文字 -> 该块真正要存的值。
+// **必须按块查**：同一段显示文字在不同块里可以是不同的值 —— 核心的「当按下按键」菜单
+// 显示 'right arrow' 值也是 'right arrow'，Makey Makey 的同类菜单显示同一段文字、值却是 'RIGHT'。
+// 只按显示文字查一张全局表，先扫到的那个扩展就会把核心块顶掉，写出永远不触发的按键积木。
+// 全局表只作最后兜底（按块的表没有这条显示文字时才查它）。
+const menuValueFor = (opcode, shadowOpcode, display) => {
+    const byBlock = (opcode && menuValuesByBlock[opcode]) ||
+        (shadowOpcode && menuValuesByBlock[shadowOpcode]);
+    if (byBlock && display in byBlock) return byBlock[display];
+    return display in menuValues ? menuValues[display] : display;
+};
 
 // ---------------------------------------------------------------------------
 // 正向：文本 -> sb3 blocks
@@ -156,7 +166,7 @@ export const textToBlocks = (text, ctx = {}) => {
                         next: null,
                         parent: blockId,
                         inputs: {},
-                        fields: {[fieldName]: [resolveMenuValue(display), null]},
+                        fields: {[fieldName]: [menuValueFor(opcode, shadowOpcode, display), null]},
                         shadow: true,
                         topLevel: false
                     };
@@ -179,7 +189,7 @@ export const textToBlocks = (text, ctx = {}) => {
                     return;
                 }
                 // 是菜单槽但表里没有影子积木：退化成普通字段
-                block.fields[slotName] = [resolveMenuValue(display), null];
+                block.fields[slotName] = [menuValueFor(opcode, shadowOpcode, display), null];
                 return;
             }
             if (child.shape === 'number') {
@@ -315,6 +325,41 @@ export const textToBlocks = (text, ctx = {}) => {
         }
         topLevelIds.push(firstId);
         column++;
+    }
+
+    // 下拉框的值必须真的落在那张菜单里。
+    // 写过一次菜单里没有的值，得到的就是一块**永远不触发**的积木，而工具回报「写入成功」——
+    // 用户按半天键盘才发现（实际踩到过：按键菜单被译成 'RIGHT'，Scratch 只认 'right arrow'）。
+    // 两道避雷：
+    //   1. 只查「普通下拉字段」。造型 / 声音 / 目标 / 碰到 / 克隆对象这些是「输入槽 + 影子菜单」，
+    //      值里可以写项目里任意一个角色名、造型名，天生不在 fields 里。
+    //   2. 带哨兵值的菜单（_mouse_/_edge_/_random_/_stage_/_myself_）同样接受项目名字，一律跳过 ——
+    //      这是 Scratch 自己的约定：菜单里出现哨兵，就说明这一栏要由编辑器补上项目里的名字。
+    const DROPDOWN_FIELD_TYPES = new Set(['field_dropdown', 'field_numberdropdown']);
+    const SENTINEL_VALUE = /^_.*_$/;
+    const reported = new Set();
+    for (const block of Object.values(blocks)) {
+        const s = spec[block.opcode];
+        const menu = menuValuesByBlock[block.opcode];
+        if (!s || !s.fields || !menu) continue;
+        const values = Object.values(menu);
+        if (values.some(v => typeof v === 'string' && SENTINEL_VALUE.test(v))) continue;
+        const allowed = new Set(values);
+        for (const [name, field] of Object.entries(block.fields || {})) {
+            if (!DROPDOWN_FIELD_TYPES.has(s.fields[name])) continue;
+            const value = field && field[0];
+            if (typeof value !== 'string' || allowed.has(value)) continue;
+            const key = `${block.opcode}.${name}=${value}`;
+            if (reported.has(key)) continue;
+            reported.add(key);
+            const sample = [...allowed].slice(0, 16);
+            warnings.push(
+                `Invalid dropdown value: ${block.opcode}.${name} = ${JSON.stringify(value)} — ` +
+                `that value is not one of this block's menu options, so the block will silently do nothing. ` +
+                `Valid values: ${sample.map(v => JSON.stringify(v)).join(', ')}` +
+                `${allowed.size > sample.length ? ` (+${allowed.size - sample.length} more)` : ''}.`
+            );
+        }
     }
 
     return {blocks, topLevelIds, variables, lists, warnings};

@@ -208,9 +208,15 @@ const resolveVmExtensions = () => {
 };
 const VM_EXT_DIR = resolveVmExtensions();
 
-// 这三张表在核心积木和扩展积木两边都要写，所以先声明
+// 这几张表在核心积木和扩展积木两边都要写，所以先声明
 const spec = {};
 const menuValues = {};
+// 菜单值**必须按块分开**：不同的块可以共用同一段显示文字、值却不同。
+// 典型：核心的「当按下按键」菜单显示 'right arrow'、值就是 'right arrow'，
+// 而 Makey Makey 的同类菜单显示同一段文字、值是 'RIGHT'。
+// 早先只有一张全局的「显示名 -> 值」表，先扫的扩展先占坑，于是核心块被译成 'RIGHT' ——
+// Scratch 只认小写，那个按键块永远不会触发（用户实际踩到过）。
+const menuValuesByBlock = {};
 const idToOpcode = {};
 // 扩展先扫（要拿菜单值），但 id -> opcode 的映射**必须核心优先**：
 // 有些扩展积木的文本跟核心积木一模一样（Makey Makey 的「当按下按键」= 事件类的「当按下按键」），
@@ -281,6 +287,21 @@ const extractExtensions = () => {
       for (const [argName, argDef] of Object.entries(block.arguments || {})) {
         if (argDef && argDef.menu) menuOf[argName] = `${info.id}_menu_${argDef.menu}`;
       }
+      // 扩展块的菜单挂在影子菜单积木上（如 makeymakey_menu_KEY），就登记在那个 opcode 下 ——
+      // 转换器拿到的正是影子 opcode，按块取才不会跟核心的同名菜单互相串味
+      for (const [argName, shadowOpcode] of Object.entries(menuOf)) {
+        const menuName = shadowOpcode.slice(`${info.id}_menu_`.length);
+        const items = (menus[menuName] && menus[menuName].items) || [];
+        const map = {};
+        for (const item of items) {
+          const display = typeof item === 'string' ? item : item.text;
+          const value = typeof item === 'string' ? item : item.value;
+          if (typeof display === 'string' && !display.includes('{')) map[display] = value;
+        }
+        if (Object.keys(map).length) {
+          menuValuesByBlock[shadowOpcode] = {...(menuValuesByBlock[shadowOpcode] || {}), ...map};
+        }
+      }
       blocks[opcode] = {sbId: sbByNormText[norm(block.text)] || null, args, menus: menuOf};
 
       const sbId = blocks[opcode].sbId;
@@ -324,13 +345,72 @@ for (const [sbId, opcode] of Object.entries(extIdToOpcode)) {
   idToOpcode[sbId] = opcode;
 }
 
-// 菜单显示文本 -> 内部值（英文）
-for (const menus of Object.values(psb.allMenus || {})) {
+// 菜单显示文本 -> 内部值（英文）。
+// 全局这张只留作兜底（按块的表没有时才查它），按块的表才是准的 —— 见 menuValuesByBlock 的说明。
+for (const [blockOpcode, menus] of Object.entries(psb.allMenus || {})) {
   for (const [internal, def] of Object.entries(menus)) {
     const display = def && def.defaultMessage;
-    if (typeof display === 'string' && !display.includes('{') && !(display in menuValues)) {
-      menuValues[display] = internal;
+    if (typeof display !== 'string' || display.includes('{')) continue;
+    if (!(display in menuValues)) menuValues[display] = internal;
+    const byBlock = (menuValuesByBlock[blockOpcode] = menuValuesByBlock[blockOpcode] || {});
+    if (!(display in byBlock)) byBlock[display] = internal;
+  }
+}
+
+const shadows = extractShadows();
+
+// scratch-blocks 的积木定义里也写着菜单项（jsonInit 的 options），而且比 psb 全：
+// psb 那侧只收了「有文案」的几项（空格 / 四个方向键 / 任意），字母键 a-z 是硬写在定义里的
+// （['a','a'] …），psb 的数据里根本没有。只按 psb 建表，校验时会把
+// `when [w v] key pressed` 这种完全合法的写法当成非法值。
+// 但定义里的 options 也**不能全信**：造型名、声音名这类菜单在定义里只是一串占位项
+// （looks_costume -> costume1/costume2，sound_sounds_menu -> 0/1/2…），真正的内容是编辑器
+// 运行期填的。所以下面分两步：**只补已有的菜单，绝不造新的**。
+// 模板串（Blockly.Msg.XXX）在桩里是代理对象、不是字符串，只认字面量字符串的项。
+const harvestDropdownOptions = rec => {
+  const out = {};
+  if (!rec.json) return out;
+  for (let i = 0; i <= 5; i++) {
+    for (const a of (rec.json[`args${i}`] || [])) {
+      if (!a || a.type !== 'field_dropdown' || !Array.isArray(a.options)) continue;
+      for (const opt of a.options) {
+        const display = Array.isArray(opt) ? opt[0] : opt;
+        const value = Array.isArray(opt) ? opt[1] : opt;
+        if (typeof display !== 'string' || display.includes('{') || typeof value !== 'string') continue;
+        out[display] = value;
+      }
     }
+  }
+  return out;
+};
+const harvestedByOpcode = {};
+for (const [opcode, rec] of Object.entries(defs)) {
+  const harvested = harvestDropdownOptions(rec);
+  if (Object.keys(harvested).length) harvestedByOpcode[opcode] = harvested;
+}
+// psb / 扩展已经认下的菜单（= 有文案、给人看的静态菜单）才用定义里的选项补齐
+for (const [opcode, harvested] of Object.entries(harvestedByOpcode)) {
+  if (!menuValuesByBlock[opcode]) continue;
+  menuValuesByBlock[opcode] = {...harvested, ...menuValuesByBlock[opcode]};
+}
+
+// 菜单影子积木（sensing_keyoptions 之于 sensing_keypressed）跟宿主是**同一张菜单**，
+// 两边都得是完整的一张：宿主那份来自 psb，影子那份来自定义，合起来才全。
+// 只处理**下拉菜单**影子 —— 值影子（math_number / text / colour_picker）是几十个积木共用的，
+// 把合并结果写回去会把所有宿主的菜单都吸进那一个影子，再靠「哨兵跳过」把校验静默关掉。
+const isDropdownBlock = opcode => {
+  const s = spec[opcode];
+  return !!s && Object.values(s.fields || {}).some(t => t === 'field_dropdown' || t === 'field_numberdropdown');
+};
+const menuSource = opcode => ({...(harvestedByOpcode[opcode] || {}), ...(menuValuesByBlock[opcode] || {})});
+for (const [ownerOpcode, bySlot] of Object.entries(shadows)) {
+  for (const shadowOpcode of Object.values(bySlot)) {
+    if (!isDropdownBlock(shadowOpcode)) continue;
+    // 两边都没有已知菜单 = 运行期才填的菜单（造型名 / 声音名），碰不得
+    if (!menuValuesByBlock[ownerOpcode] && !menuValuesByBlock[shadowOpcode]) continue;
+    const merged = {...menuSource(shadowOpcode), ...menuSource(ownerOpcode)};
+    menuValuesByBlock[ownerOpcode] = merged;
+    menuValuesByBlock[shadowOpcode] = merged;
   }
 }
 
@@ -364,9 +444,10 @@ const out = {
   _source: 'scratch-blocks 积木定义 + scratch-vm 扩展定义 + parse-sb3-blocks 翻译键 + default_toolbox.xml（自动生成，勿手改）',
   idToOpcode,
   spec,
-  shadows: extractShadows(),
+  shadows,
   menuShadowByArg,
   menuValues,
+  menuValuesByBlock,
   messagePatches,
   sbBlocks
 };
@@ -382,6 +463,7 @@ console.log(`  spec(opcode):    ${specCount}`);
 console.log(`  shadows:         ${Object.keys(out.shadows).length}`);
 console.log(`  menuShadowByArg: ${Object.keys(menuShadowByArg).length}`);
 console.log(`  menuValues:      ${Object.keys(menuValues).length}`);
+console.log(`  menuValuesByBlock: ${Object.keys(menuValuesByBlock).length}`);
 console.log(`  messagePatches:  ${Object.keys(messagePatches).length}`);
 console.log(`  sbBlocks:        ${Object.keys(sbBlocks).length}`);
 console.log(`  扩展积木:        ${Object.keys(extensionBlocks).length}（对上 scratchblocks id 的：${Object.values(extensionBlocks).filter(b => b.sbId).length}）`);

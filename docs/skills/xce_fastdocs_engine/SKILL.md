@@ -13,7 +13,7 @@ A Scratch-based block programming editor, forked from **TurboWarp**, which is it
 technically it IS built on Scratch. It is a **CaelLab** project; do not claim it is scratch.org itself.
 
 Its own selling points, as the project describes them: projects are compiled to JavaScript so they run much
-faster than in the standard editor, plus dark mode, addons, and this built-in AI assistant.
+faster than in the standard editor, plus dark mode, addons, and this built-in AI assistant (XCE Agent).
 
 ## Using the tools correctly (common mistake)
 

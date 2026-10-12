@@ -140,6 +140,7 @@ const Footer = () => (
                     </a>
                 </div>
                 <div className={styles.footerSection}>
+                    <a href="/xce-agent/">{'XCE Agent'}</a>
                     <a href="/desktop/">{'XCE Desktop'}</a>
                     <a href="https://packager.xmuer.online/">{'XMUER Coding Packager'}</a>
                     <a href="https://coding.xmuer.online/">{'XMUER Coding Community'}</a>
@@ -318,7 +319,7 @@ class Interface extends React.Component {
                                 <h1 className={styles.heroTitle}>{APP_NAME}</h1>
                                 <p className={styles.heroSubtitle}>
                                     <FormattedMessage
-                                        defaultMessage="An online block coding editor from CaelLab, with a built-in AI terminal that writes and edits blocks for you. Projects compile to JavaScript and run faster."
+                                        defaultMessage="An online block coding editor from CaelLab, with a built-in AI agent (XCE Agent) that writes and edits blocks for you. Projects compile to JavaScript and run faster."
                                         description="Hero subtitle on homepage"
                                         id="tw.hero.subtitle"
                                     />
@@ -406,11 +407,14 @@ class Interface extends React.Component {
 
                             {/* Features Section */}
                             <div className={styles.featuresSection}>
-                                <div className={styles.featureCard}>
+                                <a
+                                    className={styles.featureCard}
+                                    href="/xce-agent/"
+                                >
                                     <div className={styles.featureIcon}>{'\uD83E\uDD16'}</div>
                                     <div className={styles.featureTitle}>
                                         <FormattedMessage
-                                            defaultMessage="AI Terminal"
+                                            defaultMessage="XCE Agent"
                                             description="Feature card title"
                                             id="tw.feature.ai"
                                         />
@@ -418,12 +422,12 @@ class Interface extends React.Component {
                                     <div className={styles.featureDesc}>
                                         {/* eslint-disable-next-line max-len */}
                                         <FormattedMessage
-                                            defaultMessage="Chat with the built-in AI and it makes the change for you — writing blocks, drawing costumes, reading your project — not just handing out advice."
+                                            defaultMessage="Chat with XCE Agent and it makes the change for you — writing blocks, drawing costumes, reading your project — not just handing out advice."
                                             description="Feature card description"
                                             id="tw.feature.ai.desc"
                                         />
                                     </div>
-                                </div>
+                                </a>
                                 <div className={styles.featureCard}>
                                     <div className={styles.featureIcon}>{'\u26A1'}</div>
                                     <div className={styles.featureTitle}>

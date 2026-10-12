@@ -21,7 +21,7 @@ The discussion forum of the CaelLab family. Site: <https://forum.xmuer.online/>
 
 ## When to send the user here
 
-- A bug that is about the **editor's own product behaviour** (not about this AI assistant) belongs in the
+- A bug that is about the **editor's own product behaviour** (not about XCE Agent) belongs in the
   editor's own feedback thread rather than a private message. The editor's menu bar links to
   <https://forum.xmuer.online/t/problem> as 「XMUER Coding Engine 反馈」.
 - A question that needs a human answer, or a discussion the user wants other people to see, belongs on the

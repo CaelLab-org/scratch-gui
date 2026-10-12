@@ -1,6 +1,6 @@
 /* 自动生成，请勿手改：由 build-tables.mjs 从 scratch-blocks 的积木定义、scratch-vm 的扩展定义、parse-sb3-blocks 的翻译键、default_toolbox.xml 抽出 */
 export default {
- "_generated": "2026-10-03",
+ "_generated": "2026-10-12",
  "_source": "scratch-blocks 积木定义 + scratch-vm 扩展定义 + parse-sb3-blocks 翻译键 + default_toolbox.xml（自动生成，勿手改）",
  "idToOpcode": {
   "MOTION_MOVESTEPS": "motion_movesteps",
@@ -3463,6 +3463,1074 @@ export default {
   "Uzbek": "uz",
   "Portuguese (European)": "pt",
   "Spanish (European)": "es"
+ },
+ "menuValuesByBlock": {
+  "boost_menu_MOTOR_ID": {
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D",
+   "AB": "AB",
+   "ABCD": "ABCD"
+  },
+  "boost_menu_MOTOR_DIRECTION": {
+   "this way": "this way",
+   "that way": "that way",
+   "reverse": "reverse"
+  },
+  "boost_menu_MOTOR_REPORTER_ID": {
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D"
+  },
+  "boost_menu_COLOR": {
+   "red": "red",
+   "blue": "blue",
+   "green": "green",
+   "yellow": "yellow",
+   "white": "white",
+   "black": "black",
+   "any color": "any"
+  },
+  "boost_menu_TILT_DIRECTION_ANY": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "boost_menu_TILT_DIRECTION": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right"
+  },
+  "ev3_menu_motorPorts": {
+   "A": "0",
+   "B": "1",
+   "C": "2",
+   "D": "3"
+  },
+  "ev3_menu_sensorPorts": {
+   "1": "0",
+   "2": "1",
+   "3": "2",
+   "4": "3"
+  },
+  "gdxfor_menu_gestureOptions": {
+   "shaken": "shaken",
+   "started falling": "started falling",
+   "turned face up": "turned face up",
+   "turned face down": "turned face down"
+  },
+  "gdxfor_menu_pushPullOptions": {
+   "pushed": "pushed",
+   "pulled": "pulled"
+  },
+  "gdxfor_menu_tiltAnyOptions": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "gdxfor_menu_tiltOptions": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right"
+  },
+  "gdxfor_menu_axisOptions": {
+   "x": "x",
+   "y": "y",
+   "z": "z"
+  },
+  "makeymakey_menu_KEY": {
+   "space": "SPACE",
+   "up arrow": "UP",
+   "down arrow": "DOWN",
+   "right arrow": "RIGHT",
+   "left arrow": "LEFT",
+   "w": "w",
+   "a": "a",
+   "s": "s",
+   "d": "d",
+   "f": "f",
+   "g": "g"
+  },
+  "makeymakey_menu_SEQUENCE": {
+   "left up right": "LEFT UP RIGHT",
+   "right up left": "RIGHT UP LEFT",
+   "left right": "LEFT RIGHT",
+   "right left": "RIGHT LEFT",
+   "up down": "UP DOWN",
+   "down up": "DOWN UP",
+   "up right down left": "UP RIGHT DOWN LEFT",
+   "up left down right": "UP LEFT DOWN RIGHT",
+   "up up down down left right left right": "UP UP DOWN DOWN LEFT RIGHT LEFT RIGHT"
+  },
+  "microbit_menu_buttons": {
+   "A": "A",
+   "B": "B",
+   "any": "any"
+  },
+  "microbit_menu_gestures": {
+   "moved": "moved",
+   "shaken": "shaken",
+   "jumped": "jumped"
+  },
+  "microbit_menu_tiltDirectionAny": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "microbit_menu_tiltDirection": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right"
+  },
+  "microbit_menu_touchPins": {
+   "0": "0",
+   "1": "1",
+   "2": "2"
+  },
+  "music_menu_DRUM": {
+   "(1) Snare Drum": "1",
+   "(2) Bass Drum": "2",
+   "(3) Side Stick": "3",
+   "(4) Crash Cymbal": "4",
+   "(5) Open Hi-Hat": "5",
+   "(6) Closed Hi-Hat": "6",
+   "(7) Tambourine": "7",
+   "(8) Hand Clap": "8",
+   "(9) Claves": "9",
+   "(10) Wood Block": "10",
+   "(11) Cowbell": "11",
+   "(12) Triangle": "12",
+   "(13) Bongo": "13",
+   "(14) Conga": "14",
+   "(15) Cabasa": "15",
+   "(16) Guiro": "16",
+   "(17) Vibraslap": "17",
+   "(18) Cuica": "18"
+  },
+  "music_menu_INSTRUMENT": {
+   "(1) Piano": "1",
+   "(2) Electric Piano": "2",
+   "(3) Organ": "3",
+   "(4) Guitar": "4",
+   "(5) Electric Guitar": "5",
+   "(6) Bass": "6",
+   "(7) Pizzicato": "7",
+   "(8) Cello": "8",
+   "(9) Trombone": "9",
+   "(10) Clarinet": "10",
+   "(11) Saxophone": "11",
+   "(12) Flute": "12",
+   "(13) Wooden Flute": "13",
+   "(14) Bassoon": "14",
+   "(15) Choir": "15",
+   "(16) Vibraphone": "16",
+   "(17) Music Box": "17",
+   "(18) Steel Drum": "18",
+   "(19) Marimba": "19",
+   "(20) Synth Lead": "20",
+   "(21) Synth Pad": "21"
+  },
+  "pen_menu_colorParam": {
+   "color": "color",
+   "saturation": "saturation",
+   "brightness": "brightness",
+   "transparency": "transparency"
+  },
+  "text2speech_menu_voices": {
+   "alto": "ALTO",
+   "tenor": "TENOR",
+   "squeak": "SQUEAK",
+   "giant": "GIANT",
+   "kitten": "KITTEN"
+  },
+  "text2speech_menu_languages": {
+   "Arabic": "ar",
+   "Chinese (Mandarin)": "zh-cn",
+   "Danish": "da",
+   "Dutch": "nl",
+   "English": "en",
+   "French": "fr",
+   "German": "de",
+   "Hindi": "hi",
+   "Icelandic": "is",
+   "Italian": "it",
+   "Japanese": "ja",
+   "Korean": "ko",
+   "Norwegian": "nb",
+   "Polish": "pl",
+   "Portuguese (Brazilian)": "pt-br",
+   "Portuguese": "pt",
+   "Romanian": "ro",
+   "Russian": "ru",
+   "Spanish": "es",
+   "Spanish (Latin American)": "es-419",
+   "Swedish": "sv",
+   "Turkish": "tr",
+   "Welsh": "cy"
+  },
+  "translate_menu_languages": {
+   "Amharic": "am",
+   "Arabic": "ar",
+   "Azerbaijani": "az",
+   "Basque": "eu",
+   "Bulgarian": "bg",
+   "Catalan": "ca",
+   "Chinese (Simplified)": "zh-cn",
+   "Chinese (Traditional)": "zh-tw",
+   "Croatian": "hr",
+   "Czech": "cs",
+   "Danish": "da",
+   "Dutch": "nl",
+   "English": "en",
+   "Estonian": "et",
+   "Finnish": "fi",
+   "French": "fr",
+   "Galician": "gl",
+   "German": "de",
+   "Greek": "el",
+   "Hebrew": "he",
+   "Hungarian": "hu",
+   "Icelandic": "is",
+   "Indonesian": "id",
+   "Irish Gaelic": "ga",
+   "Italian": "it",
+   "Japanese": "ja",
+   "Korean": "ko",
+   "Kurdish (Sorani)": "ckb",
+   "Latvian": "lv",
+   "Lithuanian": "lt",
+   "Maori": "mi",
+   "Norwegian": "nb",
+   "Persian": "fa",
+   "Polish": "pl",
+   "Portuguese": "pt",
+   "Romanian": "ro",
+   "Russian": "ru",
+   "Scots Gaelic": "gd",
+   "Serbian": "sr",
+   "Slovak": "sk",
+   "Slovenian": "sl",
+   "Spanish": "es",
+   "Swedish": "sv",
+   "Thai": "th",
+   "Turkish": "tr",
+   "Ukrainian": "uk",
+   "Vietnamese": "vi",
+   "Welsh": "cy",
+   "Zulu": "zu"
+  },
+  "videoSensing_menu_ATTRIBUTE": {
+   "motion": "motion",
+   "direction": "direction"
+  },
+  "videoSensing_menu_SUBJECT": {
+   "sprite": "this sprite",
+   "stage": "Stage"
+  },
+  "videoSensing_menu_VIDEO_STATE": {
+   "off": "off",
+   "on": "on",
+   "on flipped": "on-flipped"
+  },
+  "wedo2_menu_MOTOR_ID": {
+   "motor": "motor",
+   "motor A": "motor A",
+   "motor B": "motor B",
+   "all motors": "all motors"
+  },
+  "wedo2_menu_MOTOR_DIRECTION": {
+   "this way": "this way",
+   "that way": "that way",
+   "reverse": "reverse"
+  },
+  "wedo2_menu_OP": {
+   "<": "<",
+   ">": ">"
+  },
+  "wedo2_menu_TILT_DIRECTION_ANY": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "wedo2_menu_TILT_DIRECTION": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right"
+  },
+  "tw_menu_mouseButton": {
+   "(0) primary": "0",
+   "(1) middle": "1",
+   "(2) secondary": "2"
+  },
+  "motion_pointtowards": {
+   "mouse-pointer": "_mouse_",
+   "random position": "_random_"
+  },
+  "motion_goto": {
+   "mouse-pointer": "_mouse_",
+   "random position": "_random_"
+  },
+  "motion_glideto": {
+   "mouse-pointer": "_mouse_",
+   "random position": "_random_"
+  },
+  "motion_setrotationstyle": {
+   "left-right": "left-right",
+   "don't rotate": "don't rotate",
+   "all around": "all around"
+  },
+  "looks_changeeffectby": {
+   "color": "COLOR",
+   "fisheye": "FISHEYE",
+   "whirl": "WHIRL",
+   "pixelate": "PIXELATE",
+   "mosaic": "MOSAIC",
+   "brightness": "BRIGHTNESS",
+   "ghost": "GHOST"
+  },
+  "looks_seteffectto": {
+   "color": "COLOR",
+   "fisheye": "FISHEYE",
+   "whirl": "WHIRL",
+   "pixelate": "PIXELATE",
+   "mosaic": "MOSAIC",
+   "brightness": "BRIGHTNESS",
+   "ghost": "GHOST"
+  },
+  "looks_switchbackdropto": {
+   "backdrop1": "BACKDROP1",
+   "next backdrop": "next backdrop",
+   "previous backdrop": "previous backdrop",
+   "random backdrop": "random backdrop"
+  },
+  "looks_gotofrontback": {
+   "front": "front",
+   "back": "back"
+  },
+  "looks_goforwardbackwardlayers": {
+   "forward": "forward",
+   "backward": "backward"
+  },
+  "looks_backdropnumbername": {
+   "number": "number",
+   "name": "name"
+  },
+  "looks_costumenumbername": {
+   "number": "number",
+   "name": "name"
+  },
+  "looks_switchbackdroptoandwait": {
+   "backdrop1": "BACKDROP1",
+   "next backdrop": "next backdrop",
+   "previous backdrop": "previous backdrop",
+   "random backdrop": "random backdrop"
+  },
+  "sound_seteffectto": {
+   "pitch": "PITCH",
+   "pan": "PAN"
+  },
+  "sound_changeeffectby": {
+   "pitch": "PITCH",
+   "pan": "PAN"
+  },
+  "event_whengreaterthan": {
+   "loudness": "LOUDNESS",
+   "timer": "TIMER"
+  },
+  "event_whenkeypressed": {
+   "0": "0",
+   "1": "1",
+   "2": "2",
+   "3": "3",
+   "4": "4",
+   "5": "5",
+   "6": "6",
+   "7": "7",
+   "8": "8",
+   "9": "9",
+   "a": "a",
+   "b": "b",
+   "c": "c",
+   "d": "d",
+   "e": "e",
+   "f": "f",
+   "g": "g",
+   "h": "h",
+   "i": "i",
+   "j": "j",
+   "k": "k",
+   "l": "l",
+   "m": "m",
+   "n": "n",
+   "o": "o",
+   "p": "p",
+   "q": "q",
+   "r": "r",
+   "s": "s",
+   "t": "t",
+   "u": "u",
+   "v": "v",
+   "w": "w",
+   "x": "x",
+   "y": "y",
+   "z": "z",
+   "space": "space",
+   "up arrow": "up arrow",
+   "down arrow": "down arrow",
+   "right arrow": "right arrow",
+   "left arrow": "left arrow",
+   "any": "any"
+  },
+  "control_stop": {
+   "all": "all",
+   "this script": "this script",
+   "other scripts in sprite": "other scripts in sprite"
+  },
+  "control_create_clone_of": {
+   "myself": "_myself_"
+  },
+  "sensing_touchingobject": {
+   "mouse-pointer": "_mouse_",
+   "edge": "_edge_"
+  },
+  "sensing_distanceto": {
+   "mouse-pointer": "_mouse_"
+  },
+  "sensing_keypressed": {
+   "0": "0",
+   "1": "1",
+   "2": "2",
+   "3": "3",
+   "4": "4",
+   "5": "5",
+   "6": "6",
+   "7": "7",
+   "8": "8",
+   "9": "9",
+   "a": "a",
+   "b": "b",
+   "c": "c",
+   "d": "d",
+   "e": "e",
+   "f": "f",
+   "g": "g",
+   "h": "h",
+   "i": "i",
+   "j": "j",
+   "k": "k",
+   "l": "l",
+   "m": "m",
+   "n": "n",
+   "o": "o",
+   "p": "p",
+   "q": "q",
+   "r": "r",
+   "s": "s",
+   "t": "t",
+   "u": "u",
+   "v": "v",
+   "w": "w",
+   "x": "x",
+   "y": "y",
+   "z": "z",
+   "space": "space",
+   "up arrow": "up arrow",
+   "down arrow": "down arrow",
+   "right arrow": "right arrow",
+   "left arrow": "left arrow",
+   "any": "any"
+  },
+  "sensing_setdragmode": {
+   "draggable": "draggable",
+   "not draggable": "not draggable"
+  },
+  "sensing_of": {
+   "Sprite1": "Sprite1",
+   "Stage": "_stage_",
+   "x position": "x position",
+   "y position": "y position",
+   "direction": "direction",
+   "costume #": "costume #",
+   "costume name": "costume name",
+   "size": "size",
+   "volume": "volume",
+   "backdrop #": "backdrop #",
+   "backdrop name": "backdrop name"
+  },
+  "sensing_current": {
+   "year": "YEAR",
+   "month": "MONTH",
+   "date": "DATE",
+   "day of week": "DAYOFWEEK",
+   "hour": "HOUR",
+   "minute": "MINUTE",
+   "second": "SECOND"
+  },
+  "operator_mathop": {
+   "abs": "abs",
+   "floor": "floor",
+   "ceiling": "ceiling",
+   "sqrt": "sqrt",
+   "sin": "sin",
+   "cos": "cos",
+   "tan": "tan",
+   "asin": "asin",
+   "acos": "acos",
+   "atan": "atan",
+   "ln": "ln",
+   "log": "log",
+   "e ^": "e ^",
+   "10 ^": "10 ^"
+  },
+  "pen_changePenColorParamBy": {
+   "color": "color",
+   "saturation": "saturation",
+   "brightness": "brightness",
+   "transparency": "transparency"
+  },
+  "pen_setPenColorParamTo": {
+   "color": "color",
+   "saturation": "saturation",
+   "brightness": "brightness",
+   "transparency": "transparency"
+  },
+  "music_playDrumForBeats": {
+   "(1) Snare Drum": "1",
+   "(2) Bass Drum": "2",
+   "(3) Side Stick": "3",
+   "(4) Crash Cymbal": "4",
+   "(5) Open Hi-Hat": "5",
+   "(6) Closed Hi-Hat": "6",
+   "(7) Tambourine": "7",
+   "(8) Hand Clap": "8",
+   "(9) Claves": "9",
+   "(10) Wood Block": "10",
+   "(11) Cowbell": "11",
+   "(12) Triangle": "12",
+   "(13) Bongo": "13",
+   "(14) Conga": "14",
+   "(15) Cabasa": "15",
+   "(16) Guiro": "16",
+   "(17) Vibraslap": "17",
+   "(18) Cuica": "18"
+  },
+  "music_setInstrument": {
+   "(1) Piano": "1",
+   "(2) Electric Piano": "2",
+   "(3) Organ": "3",
+   "(4) Guitar": "4",
+   "(5) Electric Guitar": "5",
+   "(6) Bass": "6",
+   "(7) Pizzicato": "7",
+   "(8) Cello": "8",
+   "(9) Trombone": "9",
+   "(10) Clarinet": "10",
+   "(11) Saxophone": "11",
+   "(12) Flute": "12",
+   "(13) Wooden Flute": "13",
+   "(14) Bassoon": "14",
+   "(15) Choir": "15",
+   "(16) Vibraphone": "16",
+   "(17) Music Box": "17",
+   "(18) Steel Drum": "18",
+   "(19) Marimba": "19",
+   "(20) Synth Lead": "20",
+   "(21) Synth Pad": "21"
+  },
+  "videoSensing_videoOn": {
+   "motion": "motion",
+   "direction": "direction",
+   "stage": "Stage",
+   "sprite": "this sprite"
+  },
+  "videoSensing_videoToggle": {
+   "off": "off",
+   "on": "on",
+   "on flipped": "on-flipped"
+  },
+  "translate_getTranslate": {
+   "Albanian": "sq",
+   "Amharic": "am",
+   "Arabic": "ar",
+   "Armenian": "hy",
+   "Azerbaijani": "az",
+   "Basque": "eu",
+   "Belarusian": "be",
+   "Bulgarian": "bg",
+   "Catalan": "ca",
+   "Chinese (Traditional)": "zh-tw",
+   "Croatian": "hr",
+   "Czech": "cs",
+   "Danish": "da",
+   "Dutch": "nl",
+   "English": "en",
+   "Esperanto": "eo",
+   "Estonian": "et",
+   "Finnish": "fi",
+   "French": "fr",
+   "Galician": "gl",
+   "German": "de",
+   "Greek": "el",
+   "Haitian Creole": "ht",
+   "Hindi": "hi",
+   "Hungarian": "hu",
+   "Icelandic": "is",
+   "Indonesian": "id",
+   "Irish": "ga",
+   "Italian": "it",
+   "Japanese": "ja",
+   "Kannada": "kn",
+   "Korean": "ko",
+   "Kurdish (Kurmanji)": "ku",
+   "Latin": "la",
+   "Latvian": "lv",
+   "Lithuanian": "lt",
+   "Macedonian": "mk",
+   "Malay": "ms",
+   "Malayalam": "ml",
+   "Maltese": "mt",
+   "Maori": "mi",
+   "Marathi": "mr",
+   "Mongolian": "mn",
+   "Myanmar (Burmese)": "my",
+   "Persian": "fa",
+   "Polish": "pl",
+   "Portuguese": "pt",
+   "Romanian": "ro",
+   "Russian": "ru",
+   "Scots Gaelic": "gd",
+   "Serbian": "sr",
+   "Slovak": "sk",
+   "Slovenian": "sl",
+   "Spanish": "es",
+   "Swedish": "sv",
+   "Telugu": "te",
+   "Thai": "th",
+   "Turkish": "tr",
+   "Ukrainian": "uk",
+   "Uzbek": "uz",
+   "Vietnamese": "vi",
+   "Welsh": "cy",
+   "Zulu": "zu",
+   "Hebrew": "he",
+   "Chinese (Simplified)": "zh-cn"
+  },
+  "text2speech_setLanguage": {
+   "Arabic": "ar",
+   "Chinese (Mandarin)": "zh-cn",
+   "Danish": "da",
+   "Dutch": "nl",
+   "English": "en",
+   "French": "fr",
+   "German": "de",
+   "Hindi": "hi",
+   "Icelandic": "is",
+   "Italian": "it",
+   "Japanese": "ja",
+   "Korean": "ko",
+   "Norwegian": "nb",
+   "Polish": "pl",
+   "Portuguese (Brazilian)": "pt-br",
+   "Portuguese (European)": "pt",
+   "Romanian": "ro",
+   "Russian": "ru",
+   "Spanish (European)": "es",
+   "Spanish (Latin American)": "es-419",
+   "Swedish": "sv",
+   "Turkish": "tr",
+   "Welsh": "cy"
+  },
+  "text2speech_setVoice": {
+   "alto": "ALTO",
+   "tenor": "TENOR",
+   "squeak": "SQUEAK",
+   "giant": "GIANT",
+   "kitten": "KITTEN"
+  },
+  "boost_motorOnFor": {
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D",
+   "AB": "AB",
+   "ABCD": "ALL"
+  },
+  "boost_motorOnForRotation": {
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D",
+   "AB": "AB",
+   "ABCD": "ALL"
+  },
+  "boost_motorOn": {
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D",
+   "AB": "AB",
+   "ABCD": "ALL"
+  },
+  "boost_motorOff": {
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D",
+   "AB": "AB",
+   "ABCD": "ALL"
+  },
+  "boost_setMotorPower": {
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D",
+   "AB": "AB",
+   "ABCD": "ALL"
+  },
+  "boost_setMotorDirection": {
+   "this way": "this way",
+   "that way": "that way",
+   "reverse": "reverse",
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D",
+   "AB": "AB",
+   "ABCD": "ALL"
+  },
+  "boost_getMotorPosition": {
+   "A": "A",
+   "B": "B",
+   "C": "C",
+   "D": "D"
+  },
+  "boost_whenColor": {
+   "red": "red",
+   "blue": "blue",
+   "green": "green",
+   "yellow": "yellow",
+   "white": "white",
+   "black": "black",
+   "any color": "any"
+  },
+  "boost_seeingColor": {
+   "red": "red",
+   "blue": "blue",
+   "green": "green",
+   "yellow": "yellow",
+   "white": "white",
+   "black": "black",
+   "any color": "any"
+  },
+  "boost_whenTilted": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "boost_getTiltAngle": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right"
+  },
+  "ev3_motorTurnClockwise": {
+   "A": "0",
+   "B": "1",
+   "C": "2",
+   "D": "3"
+  },
+  "ev3_motorTurnCounterClockwise": {
+   "A": "0",
+   "B": "1",
+   "C": "2",
+   "D": "3"
+  },
+  "ev3_motorSetPower": {
+   "A": "0",
+   "B": "1",
+   "C": "2",
+   "D": "3"
+  },
+  "ev3_getMotorPosition": {
+   "A": "0",
+   "B": "1",
+   "C": "2",
+   "D": "3"
+  },
+  "ev3_whenButtonPressed": {
+   "1": "0",
+   "2": "1",
+   "3": "2",
+   "4": "3"
+  },
+  "ev3_buttonPressed": {
+   "1": "0",
+   "2": "1",
+   "3": "2",
+   "4": "3"
+  },
+  "gdxfor_whenGesture": {
+   "shaken": "shaken",
+   "started falling": "started falling",
+   "turned face up": "turned face up",
+   "turned face down": "turned face down"
+  },
+  "gdxfor_whenForcePushedOrPulled": {
+   "pushed": "pushed",
+   "pulled": "pulled"
+  },
+  "gdxfor_whenTilted": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "gdxfor_isTilted": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "gdxfor_getTilt": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right"
+  },
+  "gdxfor_getSpinSpeed": {
+   "x": "x",
+   "y": "y",
+   "z": "z"
+  },
+  "gdxfor_getAcceleration": {
+   "x": "x",
+   "y": "y",
+   "z": "z"
+  },
+  "makeymakey_whenMakeyKeyPressed": {
+   "space": "SPACE",
+   "up arrow": "UP",
+   "down arrow": "DOWN",
+   "right arrow": "RIGHT",
+   "left arrow": "LEFT",
+   "w": "w",
+   "a": "a",
+   "s": "s",
+   "d": "d",
+   "f": "f",
+   "g": "g"
+  },
+  "makeymakey_whenCodePressed": {
+   "left up right": "LEFT UP RIGHT",
+   "right up left": "RIGHT UP LEFT",
+   "left right": "LEFT RIGHT",
+   "right left": "RIGHT LEFT",
+   "up down": "UP DOWN",
+   "down up": "DOWN UP",
+   "up right down left": "UP RIGHT DOWN LEFT",
+   "up left down right": "UP LEFT DOWN RIGHT",
+   "up up down down left right left right": "UP UP DOWN DOWN LEFT RIGHT LEFT RIGHT"
+  },
+  "microbit_whenButtonPressed": {
+   "A": "A",
+   "B": "B",
+   "any": "any"
+  },
+  "microbit_isButtonPressed": {
+   "A": "A",
+   "B": "B",
+   "any": "any"
+  },
+  "microbit_whenGesture": {
+   "moved": "moved",
+   "shaken": "shaken",
+   "jumped": "jumped"
+  },
+  "microbit_whenTilted": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "microbit_isTilted": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "microbit_getTiltAngle": {
+   "front": "front",
+   "back": "back",
+   "left": "left",
+   "right": "right"
+  },
+  "microbit_whenPinConnected": {
+   "0": "0",
+   "1": "1",
+   "2": "2"
+  },
+  "wedo2_motorOnFor": {
+   "motor": "motor",
+   "motor A": "motor A",
+   "motor B": "motor B",
+   "all motors": "all motors"
+  },
+  "wedo2_motorOn": {
+   "motor": "motor",
+   "motor A": "motor A",
+   "motor B": "motor B",
+   "all motors": "all motors"
+  },
+  "wedo2_motorOff": {
+   "motor": "motor",
+   "motor A": "motor A",
+   "motor B": "motor B",
+   "all motors": "all motors"
+  },
+  "wedo2_startMotorPower": {
+   "motor": "motor",
+   "motor A": "motor A",
+   "motor B": "motor B",
+   "all motors": "all motors"
+  },
+  "wedo2_setMotorDirection": {
+   "motor": "motor",
+   "motor A": "motor A",
+   "motor B": "motor B",
+   "all motors": "all motors",
+   "this way": "this way",
+   "that way": "that way",
+   "reverse": "reverse"
+  },
+  "wedo2_whenDistance": {
+   "<": "<",
+   ">": ">"
+  },
+  "wedo2_whenTilted": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "wedo2_isTilted": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right",
+   "any": "any"
+  },
+  "wedo2_getTiltAngle": {
+   "up": "up",
+   "down": "down",
+   "left": "left",
+   "right": "right"
+  },
+  "motion_pointtowards_menu": {
+   "mouse-pointer": "_mouse_",
+   "random position": "_random_"
+  },
+  "motion_goto_menu": {
+   "mouse-pointer": "_mouse_",
+   "random position": "_random_"
+  },
+  "motion_glideto_menu": {
+   "mouse-pointer": "_mouse_",
+   "random position": "_random_"
+  },
+  "looks_backdrops": {
+   "backdrop1": "BACKDROP1",
+   "next backdrop": "next backdrop",
+   "previous backdrop": "previous backdrop",
+   "random backdrop": "random backdrop"
+  },
+  "control_create_clone_of_menu": {
+   "myself": "_myself_"
+  },
+  "sensing_touchingobjectmenu": {
+   "mouse-pointer": "_mouse_",
+   "edge": "_edge_"
+  },
+  "sensing_distancetomenu": {
+   "mouse-pointer": "_mouse_"
+  },
+  "sensing_keyoptions": {
+   "0": "0",
+   "1": "1",
+   "2": "2",
+   "3": "3",
+   "4": "4",
+   "5": "5",
+   "6": "6",
+   "7": "7",
+   "8": "8",
+   "9": "9",
+   "a": "a",
+   "b": "b",
+   "c": "c",
+   "d": "d",
+   "e": "e",
+   "f": "f",
+   "g": "g",
+   "h": "h",
+   "i": "i",
+   "j": "j",
+   "k": "k",
+   "l": "l",
+   "m": "m",
+   "n": "n",
+   "o": "o",
+   "p": "p",
+   "q": "q",
+   "r": "r",
+   "s": "s",
+   "t": "t",
+   "u": "u",
+   "v": "v",
+   "w": "w",
+   "x": "x",
+   "y": "y",
+   "z": "z",
+   "space": "space",
+   "up arrow": "up arrow",
+   "down arrow": "down arrow",
+   "right arrow": "right arrow",
+   "left arrow": "left arrow",
+   "any": "any"
+  },
+  "sensing_of_object_menu": {
+   "Sprite1": "Sprite1",
+   "Stage": "_stage_",
+   "x position": "x position",
+   "y position": "y position",
+   "direction": "direction",
+   "costume #": "costume #",
+   "costume name": "costume name",
+   "size": "size",
+   "volume": "volume",
+   "backdrop #": "backdrop #",
+   "backdrop name": "backdrop name"
+  }
  },
  "messagePatches": {
   "data_variable": "{VARIABLE}",

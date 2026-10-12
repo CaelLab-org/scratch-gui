@@ -20,7 +20,14 @@ const base = {
 const plain = buildSystemPrompt(base);
 check('认领 XMUER Coding Engine', plain.includes('XMUER Coding Engine'));
 check('写明基于 Scratch（TurboWarp fork）', /based on Scratch/.test(plain) && /TurboWarp/.test(plain));
-check('环境快照在提示词里', plain.includes('<current-sprite>角色1</current-sprite>') && plain.includes('<date>2026-10-04</date>'));
+check('环境快照在提示词里', plain.includes('<current-sprite>角色1</current-sprite>') && plain.includes('<date'));
+// 注入的是 UTC 日期，且必须自报时区 + 指明「要准确时间去调工具」（用户 2026-10-11 定的）
+check('日期标注为 UTC 日期段',
+    /<date zone="UTC"[^>]*>2026-10-04<\/date>/.test(plain) && /not the user's local date/.test(plain));
+check('日期那一行指路 xce_get_time，并要求面对用户时先读准确时间',
+    /<date[^>]*note="[^"]*xce_get_time[^"]*"/.test(plain) &&
+    /Before you put a date or a time in front of the user/.test(plain) &&
+    /if you do use this one, say that it is the UTC date/.test(plain));
 check('工具面说死（六个工具都点到）',
     ['xce_read_project', 'xce_write_script', 'xce_delete_script', 'xce_run_project', 'xce_read_state', 'xce_read_stage']
         .every(name => plain.includes(name)));

@@ -3,3 +3,5 @@ Disallow: /*/embed
 Disallow: /embed
 # bingbot moment
 Crawl-Delay: 30
+
+Sitemap: https://engine.xmuer.online/sitemap.xml

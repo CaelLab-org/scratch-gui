@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>XCE Agent · XMUER Coding Engine 的内置 AI 助手</title>
+        <meta name="description" content="XCE Agent 是虚舟实验室（CaelLab）XMUER Coding Engine 编辑器内置的 AI 助手：用对话直接生成和修改积木、绘制造型、读懂并运行你的项目，不只是给建议。">
+        <link rel="icon" href="/favicon.ico" type="image/x-icon">
+        <link rel="canonical" href="https://engine.xmuer.online/xce-agent/">
+        <meta property="og:type" content="website">
+        <meta property="og:site_name" content="XMUER Coding Engine">
+        <meta property="og:title" content="XCE Agent · 内置在编辑器里的 AI 助手">
+        <meta property="og:description" content="用对话直接生成和修改积木、绘制造型、读懂并运行你的项目。虚舟实验室（CaelLab）出品。">
+        <meta property="og:url" content="https://engine.xmuer.online/xce-agent/">
+        <meta property="og:image" content="https://engine.xmuer.online/xce-logo.png">
+        <meta name="twitter:card" content="summary">
+        <meta name="twitter:title" content="XCE Agent · 内置在编辑器里的 AI 助手">
+        <meta name="twitter:description" content="用对话直接生成和修改积木、绘制造型、读懂并运行你的项目。虚舟实验室（CaelLab）出品。">
+        <meta name="twitter:image" content="https://engine.xmuer.online/xce-logo.png">
+        <style>
+            :root {
+                --primary: #2b6fec;
+                --primary-hover: #1d5bd6;
+                --accent: #f08c00;
+                --bg: #f5f6f8;
+                --card: #ffffff;
+                --border: #e4e7ec;
+                --text: #101828;
+                --text-muted: #5a6472;
+                --text-faint: #98a2b3;
+                --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.06);
+            }
+
+            * { box-sizing: border-box; }
+
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+                    "Helvetica Neue", Arial, sans-serif;
+                line-height: 1.7;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            a { color: var(--primary); }
+
+            .nav {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                max-width: 960px;
+                margin: 0 auto;
+                padding: 20px 24px;
+            }
+            .nav img { width: 32px; height: 32px; }
+            .nav .name {
+                font-weight: 600;
+                color: var(--text);
+                text-decoration: none;
+                letter-spacing: 0.2px;
+            }
+            .nav .links {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                margin-left: auto;
+                font-size: 14px;
+            }
+            .nav .links a { color: var(--text-muted); text-decoration: none; }
+            .nav .links a:hover { color: var(--primary); }
+
+            .hero {
+                position: relative;
+                overflow: hidden;
+                margin: 8px 24px 0;
+                border-radius: 16px;
+                padding: 56px 32px 48px;
+                text-align: center;
+                color: #ffffff;
+                background: linear-gradient(135deg, #08122a 0%, #1b3d82 50%, #0c1b36 100%);
+                box-shadow: var(--shadow);
+            }
+            .hero::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background:
+                    radial-gradient(600px 300px at 20% 0%, rgba(87, 168, 255, 0.28), transparent 70%),
+                    radial-gradient(500px 260px at 85% 15%, rgba(43, 111, 236, 0.26), transparent 70%),
+                    radial-gradient(700px 320px at 50% 120%, rgba(87, 168, 255, 0.16), transparent 70%);
+                pointer-events: none;
+            }
+            .hero::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background-image: radial-gradient(rgba(255, 255, 255, 0.10) 1px, transparent 1px);
+                background-size: 22px 22px;
+                pointer-events: none;
+            }
+            .hero > * { position: relative; }
+
+            .badge {
+                display: inline-block;
+                margin-bottom: 18px;
+                padding: 4px 12px;
+                border: 1px solid rgba(240, 140, 0, 0.55);
+                border-radius: 999px;
+                font-size: 13px;
+                color: #ffd8a8;
+                background: rgba(240, 140, 0, 0.12);
+            }
+
+            .hero h1 {
+                margin: 0;
+                font-size: 34px;
+                line-height: 1.3;
+                letter-spacing: 0.3px;
+            }
+            .hero .lead {
+                max-width: 640px;
+                margin: 14px auto 0;
+                font-size: 16px;
+                color: rgba(255, 255, 255, 0.82);
+            }
+
+            .btn {
+                display: inline-block;
+                margin-top: 28px;
+                padding: 14px 36px;
+                border-radius: 10px;
+                background: var(--primary);
+                color: #ffffff;
+                font-size: 16px;
+                font-weight: 600;
+                text-decoration: none;
+                transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+                box-shadow: 0 6px 18px rgba(16, 24, 40, 0.24);
+            }
+            .btn:hover {
+                background: var(--primary-hover);
+                transform: translateY(-1px);
+            }
+            .hero .meta {
+                margin: 14px 0 0;
+                font-size: 13px;
+                color: rgba(255, 255, 255, 0.6);
+            }
+            .hero .meta a { color: rgba(255, 255, 255, 0.92); }
+
+            main {
+                max-width: 960px;
+                margin: 0 auto;
+                padding: 40px 24px 0;
+            }
+
+            h2 {
+                margin: 0 0 16px;
+                font-size: 20px;
+            }
+            section { margin-top: 40px; }
+            section:first-of-type { margin-top: 0; }
+
+            .cards {
+                display: grid;
+                gap: 16px;
+                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            }
+            .card {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 20px 22px;
+                box-shadow: var(--shadow);
+            }
+            .card h3 {
+                margin: 0 0 6px;
+                font-size: 16px;
+            }
+            .card p {
+                margin: 0;
+                font-size: 14px;
+                color: var(--text-muted);
+            }
+
+            .steps {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 22px 24px;
+                box-shadow: var(--shadow);
+            }
+            .steps ol {
+                margin: 0;
+                padding-left: 20px;
+                color: var(--text-muted);
+                font-size: 14px;
+            }
+            .steps li { margin: 8px 0; }
+            .steps strong { color: var(--text); }
+            .steps code {
+                padding: 1px 6px;
+                border-radius: 6px;
+                background: rgba(16, 24, 40, 0.06);
+                font-size: 13px;
+                color: var(--text);
+            }
+
+            .note {
+                margin-top: 24px;
+                padding: 16px 20px;
+                border: 1px solid var(--border);
+                border-left: 3px solid var(--primary);
+                border-radius: 8px;
+                background: var(--card);
+                font-size: 13px;
+                color: var(--text-muted);
+            }
+
+            footer {
+                max-width: 960px;
+                margin: 40px auto 0;
+                padding: 20px 24px 40px;
+                border-top: 1px solid var(--border);
+                font-size: 13px;
+                color: var(--text-faint);
+            }
+            footer a { color: var(--text-muted); text-decoration: none; }
+            footer a:hover { color: var(--primary); }
+            footer p { margin: 4px 0; }
+
+            @media (max-width: 600px) {
+                .hero { padding: 40px 20px 36px; border-radius: 12px; }
+                .hero h1 { font-size: 26px; }
+            }
+        </style>
+    </head>
+
+    <body>
+        <nav class="nav">
+            <img src="/xce-logo.png" alt="">
+            <a class="name" href="/">XMUER Coding Engine</a>
+            <span class="links">
+                <a href="/desktop/">桌面版</a>
+                <a href="/">← 回到编辑器</a>
+            </span>
+        </nav>
+
+        <section class="hero">
+            <span class="badge">虚舟实验室（CaelLab）出品</span>
+            <h1>XCE Agent</h1>
+            <p class="lead">
+                编辑器内置的 AI 助手。你用一句话说要什么，它把积木真的写进项目里 —— 写脚本、绘制造型、
+                读懂并运行你的作品、看结果对不对，而不是只给一段建议让你自己动手。
+            </p>
+            <a class="btn" href="/">打开编辑器</a>
+            <p class="meta">
+                内置在 XMUER Coding Engine 里 · 与网页版、桌面版是同一个助手 ·
+                <a href="https://github.com/CaelLab-org/scratch-gui" rel="noreferrer">查看源码</a>
+            </p>
+        </section>
+
+        <main>
+            <section>
+                <h2>它能做什么</h2>
+                <div class="cards">
+                    <div class="card">
+                        <h3>写和改积木</h3>
+                        <p>
+                            你说要什么效果，它把对应的 Scratch 积木直接加到角色上；要改现有脚本，
+                            它按积木的位置替换，不动你没提到的部分。
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3>画造型</h3>
+                        <p>
+                            用代码画一个 SVG 造型，或者给一个图片网址让角色换上。
+                            造型、角色都能新建和删除。
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3>读懂你的项目</h3>
+                        <p>
+                            列出所有角色、读出每个角色的积木、看舞台截图 —— 它先弄清你现在有什么，
+                            再动手改。
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3>跑一遍再交给你</h3>
+                        <p>
+                            点绿旗运行、读变量和角色的位置，确认结果是你要的那个；
+                            不对就接着调。
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3>联网查资料</h3>
+                        <p>
+                            桌面版里它能直接读公开网页（5 秒超时、最长 20KB），
+                            需要查库名、语法或现成做法时用得上。
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3>记住你的偏好</h3>
+                        <p>
+                            项目级的笔记和长期记忆：你交代过的风格、约定，下次打开还在，
+                            不用每次重讲。
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2>怎么用</h2>
+                <div class="steps">
+                    <ol>
+                        <li>打开 <a href="/">engine.xmuer.online</a>，右上角进编辑器（桌面版则直接打开应用）。</li>
+                        <li>进入编辑器后，XCE Agent 就<strong>停靠在左侧、和积木区并排</strong>；标题栏能收起、也能全屏。</li>
+                        <li>用中文或英文说你想要的效果，例如「做个数到 10 的计数器」，它会直接改项目。</li>
+                        <li>改完它跑一遍、把结果给你看；不满意就接着说，随时可以撤销。</li>
+                    </ol>
+                </div>
+                <p class="note">
+                    XCE Agent 用你自己的模型密钥：在设置页里添加，支持 OpenAI 兼容与 Anthropic 两家协议，
+                    密钥只存在你自己的浏览器里。
+                </p>
+            </section>
+
+            <section>
+                <h2>源码</h2>
+                <div class="steps">
+                    <p style="margin: 0 0 10px; font-size: 14px; color: var(--text-muted);">
+                        XCE Agent 是 XMUER Coding Engine 的一部分，随编辑器一起以 <strong>GPL-3.0-only</strong> 开源。
+                    </p>
+                    <ol>
+                        <li>编辑器整体：<a href="https://github.com/CaelLab-org/scratch-gui" rel="noreferrer">github.com/CaelLab-org/scratch-gui</a></li>
+                        <li>XCE Agent 的实现在 <a href="https://github.com/CaelLab-org/scratch-gui/tree/develop/src/playground/ai" rel="noreferrer">src/playground/ai</a> —— 面板界面、提示词、工具、模型适配都在这个目录里。</li>
+                    </ol>
+                </div>
+            </section>
+
+            <p class="note">
+                XMUER Coding Engine 是 TurboWarp（Scratch 的衍生版）的分支，所以它确实基于 Scratch ——
+                但它不是 scratch.org 官方产品，也不要把它当成官方作品。
+            </p>
+        </main>
+
+        <footer>
+            <p>
+                由 <a href="https://www.caellab.com/" rel="noreferrer">虚舟实验室（CaelLab）</a> 开发并维护 ·
+                <a href="mailto:support@caellab.com">support@caellab.com</a> ·
+                <a href="https://policy.caellab.org/" rel="noreferrer">政策与条款</a>
+            </p>
+            <p>XMUER Coding Engine 基于 TurboWarp 与 Scratch 构建；Scratch 是 MIT 媒体实验室的免费项目。</p>
+        </footer>
+    </body>
+</html>

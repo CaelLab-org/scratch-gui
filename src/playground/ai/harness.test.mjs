@@ -829,6 +829,26 @@ const env = await envTool.handler({}, {});
 check('xce_read_env 报出运行时（网页版）',
     !env.isError && /Runtime: /.test(env.content) && /web version of XCE/.test(env.content),
     String(env.content).split('\n')[0]);
+// 版本 / 许可证 / 官方页面：两态都要给，桌面版给桌面页、网页版给编辑器根（用户 2026-10-11 定的）
+const envLines = String(env.content).split('\n');
+check('xce_read_env 给出编辑器版本（无头测试里 webpack 没注入，退化成 unknown）',
+    /^Version: XMUER Coding Engine (\d+\.\d+\.\d+|unknown)$/.test(envLines.find(l => l.startsWith('Version: ')) || ''),
+    envLines.find(l => l.startsWith('Version: ')));
+check('xce_read_env 写明 GPL-3.0 许可证',
+    /^Licence: GPL-3\.0-only/.test(envLines.find(l => l.startsWith('Licence: ')) || ''),
+    envLines.find(l => l.startsWith('Licence: ')));
+check('网页版的官方页面是编辑器根地址',
+    /^Official page: https:\/\/engine\.xmuer\.online\/ \(/.test(
+        envLines.find(l => l.startsWith('Official page: ')) || ''),
+    envLines.find(l => l.startsWith('Official page: ')));
+// 临时挂一个假的桌面桥，验桌面那一支的链接换了页（验完立刻摘掉）
+globalThis.window = {EditorPreload: {fetchOnline: () => Promise.resolve({})}, innerWidth: 0, devicePixelRatio: 1};
+const envDesktop = String((await envTool.handler({}, {})).content);
+delete globalThis.window;
+check('桌面版的官方页面是桌面客户端页',
+    /Official page: https:\/\/engine\.xmuer\.online\/desktop\/ \(/.test(
+        envDesktop.split('\n').find(l => l.startsWith('Official page: ')) || ''),
+    envDesktop.split('\n').find(l => l.startsWith('Official page: ')));
 check('UA 解析：Windows 10/11 认得出',
     osFromUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36') === 'Windows 10 or 11');
 check('UA 解析：桌面版先认 Electron（不是裸 Chromium）',

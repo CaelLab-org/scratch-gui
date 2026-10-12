@@ -220,15 +220,53 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.3.1 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.3.2 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
+                    <h2>4.3.2</h2>
+                    <span class="date">2026-10-12</span>
+                    <span class="latest">最新</span>
+                </header>
+
+                <p>这一版给编辑器里的 AI 助手起了名字 —— <strong>XCE Agent</strong>，并修掉一个会让积木「看着写好了、其实永远不触发」的 bug；桌面版的安装器也换成了 Inno Setup。</p>
+
+                <h3>AI 助手有了名字：XCE Agent</h3>
+                <ul>
+                    <li>首页功能卡片、页脚、桌面通知和编辑器里的 AI 面板，都改用它的名字 <strong>XCE Agent</strong>（简中、繁中、英文一致）。</li>
+                    <li>新增一页介绍 <a href="/xce-agent/"><code>/xce-agent/</code></a>：它能做什么、怎么用、源码在哪。</li>
+                    <li>被问到「你是谁」时，它回答自己叫 XCE Agent、是 XMUER Coding Engine 的助手。</li>
+                </ul>
+
+                <h3>修掉「写入成功却永远不触发」的积木</h3>
+                <ul>
+                    <li>下拉菜单的取值改成<strong>按积木分别查</strong>：以前同一段显示文字先扫到哪个扩展、就用哪个扩展的值。典型是「当按下按键」被写成 <code>RIGHT</code>，而 Scratch 只认 <code>right arrow</code> —— 那块积木就永远不会触发。</li>
+                    <li>真写出菜单里没有的值时，工具会<strong>明确报一条警告</strong>并列出可用取值，不再默默「写入成功」。</li>
+                </ul>
+
+                <h3>AI 现在知道自己在哪个版本</h3>
+                <ul>
+                    <li><code>xce_read_env</code> 会报当前版本、许可（GPL-3.0-only）和官方页地址。你问「我这是哪一版 / 什么许可 / 官网在哪」，它会去查，而不是凭记忆答。</li>
+                    <li>提示词里注入的日期明确标注为 <strong>UTC 日期</strong>，并说明它不是本地时间；要报时间或日期时它会先调 <code>xce_get_time</code>，不再把 UTC 当成你的本地时间。</li>
+                </ul>
+
+                <h3>桌面版换了安装器</h3>
+                <ul>
+                    <li>安装包从 NSIS 换成 <strong>Inno Setup</strong>，欢迎页做了主题化。你在旧版上选的安装目录会被自动带上、不用重选，也<strong>不会动你的应用数据</strong>。</li>
+                </ul>
+
+                <h3>其他</h3>
+                <ul>
+                    <li>隐私政策更新：新增「AI 功能」一节，说明对话与密钥只存在你的设备上、AI 请求直达你自己配置的服务商；云变量一段改成默认连 TurboWarp 的服务器。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
                     <h2>4.3.1</h2>
                     <span class="date">2026-10-10</span>
-                    <span class="latest">最新</span>
                 </header>
 
                 <p>这一版修的是「说错话之后怎么收场」：改早期的提问不会再把后面的对话弄丢，AI 提到桌面版的地址也不再指错。</p>

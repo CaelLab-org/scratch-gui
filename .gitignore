@@ -27,6 +27,9 @@ npm-*
 # for act
 .secrets
 
+# throwaway scripts — never commit these
+.tmp_*
+
 AGENTS.md
 
 /desktop

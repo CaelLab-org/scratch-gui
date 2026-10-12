@@ -2169,7 +2169,7 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
                             />
                             <span className={styles.fieldNote}>
                                 会原样拼在系统提示词后面（以 [End of system prompt] 分隔），每轮对话都带上。
-                                它只改风格和偏好，改不了助手有哪些工具、能往项目里写什么。
+                                它只改风格和偏好，改不了 XCE Agent 有哪些工具、能往项目里写什么。
                             </span>
                         </label>
 
@@ -2630,7 +2630,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
         setAskPendingId(id);
         // 人不在跟前就敲一下：这是「AI 卡住等你」的通知，跟「干完了」分开一个 tag
         notify({
-            title: 'XMUER Coding Engine · AI 在等你拿主意',
+            title: 'XMUER Coding Engine · XCE Agent 在等你拿主意',
             body: questions.map(entry => entry.question).join(' / ')
                 .slice(0, 80),
             tag: 'xce-ask'
@@ -2755,6 +2755,8 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
         const system = buildSystemPrompt({
             currentSprite,
             extensions: port.loadedExtensions(),
+            // 只有 UTC 日期（toISOString 就是 UTC，别看成本地日期）—— 提示词里标注了时区，
+            // 要准确时间模型得自己调 xce_get_time
             date: new Date().toISOString()
                 .slice(0, 10),
             modelInfo,
@@ -2844,7 +2846,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
             // 人不在跟前才叫一声（窗口有焦点时 notify 自己会跳过）
             if (!outcome.aborted) {
                 notify({
-                    title: 'XMUER Coding Engine · AI 回复好了',
+                    title: 'XMUER Coding Engine · XCE Agent 回复好了',
                     body: notifyPreview(session),
                     tag: 'xce-turn'
                 });
@@ -3249,7 +3251,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                 <Icon
                     name="panel"
                     size={13}
-                /> AI 对话
+                /> XCE Agent
             </button>
         );
     }
@@ -3364,7 +3366,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                         <p
                                             className={`${styles.emptyTitle} ${mode === 'full' ?
                                                 styles.emptyTitleWide : ''}`}
-                                        >{greetingOf(new Date().getHours())}，想让 AI 做点什么？</p>
+                                        >{greetingOf(new Date().getHours())}，想让 XCE Agent 做点什么？</p>
                                         <p className={styles.emptySub}>它能读你现在的积木、写新的脚本、跑一遍看结果对不对。</p>
                                         <ul className={styles.emptyHints}>
                                             {EMPTY_HINTS.map(hint => (
@@ -3532,7 +3534,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                     className={styles.input}
                                     onChange={e => setDraft(e.target.value)}
                                     onKeyDown={handleKeyDown}
-                                    placeholder="让 AI 写积木，例如：做个数到 10 的计数器"
+                                    placeholder="让 XCE Agent 写积木，例如：做个数到 10 的计数器"
                                     value={draft}
                                 />
                                 <div className={styles.bar}>
