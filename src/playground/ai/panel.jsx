@@ -28,6 +28,7 @@ import PropTypes from 'prop-types';
 import AddonHooks from '../../addons/hooks';
 import {createScratchPort} from './port.js';
 import {createTools} from './tools.js';
+import {startEditorBridge} from './bridge.js';
 import {SKILLS} from './skills.js';
 import {
     loadMemories, saveMemory, deleteMemory, memoryIndexText, MEMORY_TYPES, MEMORY_LIMITS
@@ -2363,6 +2364,11 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     const stickRef = useRef(true);
     const saveTimerRef = useRef(0);
     const latestRef = useRef({session: null, items: []});
+    // 本机 MCP 桥要知道面板是不是正在干活：干活时外面来的写操作一律拒绝
+    const busyRef = useRef(busy);
+    useEffect(() => {
+        busyRef.current = busy;
+    }, [busy]);
 
     const dock = usePaletteDock(mode !== 'code' && mode !== 'full');
 
@@ -2403,6 +2409,16 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
             getWorkspace: () => AddonHooks.blocklyWorkspace
         });
     }
+
+    // 桌面版：把同一套工具借给本机 MCP 客户端。网页版没有 preload，startEditorBridge 直接返回
+    useEffect(() => {
+        if (!vm) return;
+        return startEditorBridge({
+            getPort: () => portRef.current,
+            getSkills: () => SKILLS.concat(userSkillsForModel()),
+            isBusy: () => busyRef.current
+        });
+    }, [vm]);
 
     // 会话级模型：切到一条旧会话时把它当时的模型换回来 —— 供应商、模型、思考档，
     // 连带这家自己的 baseUrl 与那一把密钥（密钥按供应商 id 存，见 settings.js）。

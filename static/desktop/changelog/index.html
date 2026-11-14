@@ -220,15 +220,37 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.3.3 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.4.0 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
+                    <h2>4.4.0</h2>
+                    <span class="date">2026-11-15</span>
+                    <span class="latest">最新</span>
+                </header>
+
+                <p>这一版让本机的其他 AI 工具可以直接操作编辑器里打开的项目。</p>
+
+                <h3>外部 AI 工具能读写项目</h3>
+                <ul>
+                    <li>桌面版启动时在本机开一条只监听 <code>127.0.0.1</code> 的通道，端口随机、口令每次启动重新生成，只写在用户目录里。</li>
+                    <li>装 <code>xce-mcp</code>（<code>npm i -g xce-mcp</code>）并配到 MCP 客户端里，就能看到编辑器里同一套工具：列角色、读写积木、加造型、运行项目、读舞台截图。</li>
+                    <li>面板里的 XCE Agent 正在干活时，外部来的写操作会被拒绝，避免两个 AI 同时改同一个项目。</li>
+                    <li>这条通道只对桌面版开放，网页版没有。</li>
+                </ul>
+
+                <h3>说明</h3>
+                <ul>
+                    <li>这是给其他 AI 工具用的接口，编辑器里 XCE Agent 的行为没有变化。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
                     <h2>4.3.3</h2>
                     <span class="date">2026-10-23</span>
-                    <span class="latest">最新</span>
                 </header>
 
                 <p>这一版让作品文件可以直接双击打开，默认的思考强度调低了，许可证换成 AGPL-3.0。</p>
