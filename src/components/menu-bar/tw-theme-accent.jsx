@@ -26,8 +26,8 @@ const options = defineMessages({
         id: 'tw.accent.purple'
     },
     [ACCENT_BLUE]: {
-        defaultMessage: 'Blue',
-        description: 'Name of the blue color scheme. Matches Scratch before the high contrast update.',
+        defaultMessage: 'XCE Blue',
+        description: 'Name of the default blue color scheme, matching the XCE brand color.',
         id: 'tw.accent.blue'
     },
     [ACCENT_RAINBOW]: {

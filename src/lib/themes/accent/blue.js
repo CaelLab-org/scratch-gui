@@ -1,11 +1,34 @@
+/* XCE 品牌蓝（默认强调色）。
+   主体用品牌蓝，外观类保留 Scratch 语义紫，红色只留给警告 / 错误 / 停止。 */
 const guiColors = {
-    'looks-secondary': 'hsla(215, 100%, 65%, 1)',
-    'looks-transparent': 'hsla(215, 100%, 65%, 0.35)',
-    'looks-light-transparent': 'hsla(215, 100%, 65%, 0.15)',
-    'looks-secondary-dark': 'hsla(215, 60%, 50%, 1)'
+    'motion-primary': '#2b6fec',
+    'motion-primary-transparent': '#2b6feccc',
+    'motion-tertiary': '#1d5bd6',
+
+    'looks-secondary': '#2b6fec',
+    'looks-transparent': '#2b6fec59',
+    'looks-light-transparent': '#2b6fec26',
+    'looks-secondary-dark': '#1d5bd6',
+
+    'extensions-primary': 'hsla(160, 50%, 35%, 1)',
+    'extensions-tertiary': 'hsla(160, 50%, 25%, 1)',
+    'extensions-transparent': 'hsla(160, 50%, 35%, 0.35)',
+    'extensions-light': 'hsla(160, 35%, 75%, 1)',
+
+    'drop-highlight': '#57a8ff',
+    'menu-bar-background': '#2b6fec',
+    'menu-bar-background-image': 'none',
+
+    /* 平衡红 - 用于警告、错误、停止等 */
+    'red-primary': 'hsla(350, 65%, 50%, 1)',
+    'red-tertiary': 'hsla(350, 65%, 40%, 1)',
+    'red-transparent': 'hsla(350, 65%, 50%, 0.35)'
 };
 
-const blockColors = {};
+const blockColors = {
+    checkboxActiveBackground: '#2b6fec',
+    checkboxActiveBorder: '#1d5bd6'
+};
 
 export {
     guiColors,

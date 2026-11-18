@@ -44,7 +44,7 @@ import {runTurn, maxStepsOf, STEP_LIMITS} from './loop.js';
 import {createScriptedModel, demoSteps} from './model.js';
 import {
     createCloudModel, fetchProviderModels, PROVIDERS, getProvider, resolveModel,
-    contextWindowOf, maxOutputTokensOf, thinkingOf, allProviders
+    contextWindowOf, maxOutputTokensOf, thinkingOf, allProviders, keyRequired
 } from './providers.js';
 import {
     loadSettings, saveSettings, clearSettings, describeSettings, hasApiKey,
@@ -126,11 +126,12 @@ const greetingOf = hour =>
                     hour < 18 ? '下午好' :
                         hour < 23 ? '晚上好' : '夜深了');
 
-// 品牌六边形（跟 logo 同形）当空状态的底影：纯 SVG，不依赖图片资源
-const HexMark = ({size}) => (
+// 品牌六边形（跟 logo 同形）：纯 SVG，不依赖图片资源。颜色走 currentColor，
+// 由用它的地方决定（空状态是淡蓝底影，头部是品牌色标记）。
+const HexMark = ({size, className}) => (
     <svg
         aria-hidden="true"
-        className={styles.emptyMark}
+        className={className}
         height={size}
         viewBox="0 0 24 24"
         width={size}
@@ -151,7 +152,8 @@ const HexMark = ({size}) => (
 );
 
 HexMark.propTypes = {
-    size: PropTypes.number
+    size: PropTypes.number,
+    className: PropTypes.string
 };
 
 // 这一轮用的是哪个模型（用户 2026-10-04 要的「每一轮记下自己用的哪个模型」）：
@@ -770,6 +772,12 @@ const ModelMenu = ({settings, onClose, onEffort, onPick, onOpenSettings}) => {
     const needle = query.trim().toLowerCase();
 
     const groups = allProviders()
+        // 学 ZCode：没配密钥的供应商不在模型菜单里出现（本地端点不需要密钥，照常显示；
+        // 当前这家始终留着，不然没填密钥时菜单会整个空掉）。
+        .filter(provider =>
+            provider.id === settings.providerId ||
+            !keyRequired(provider, provider.baseUrl) ||
+            !!loadProviderKey(provider.id))
         .map(provider => ({
             provider,
             models: modelsOf(
@@ -790,7 +798,11 @@ const ModelMenu = ({settings, onClose, onEffort, onPick, onOpenSettings}) => {
         .filter(group => group.shown.length);
 
     const thinking = thinkingOf(settings.providerId, settings.modelId);
-    const level = thinking && (thinking.levels.find(item => item.value === settings.effort) ||
+    // 没显式选过档位时按设置页的默认规则显示（低 → 高 → 最后一档），别硬落到「最高」
+    const level = thinking && (
+        thinking.levels.find(item => item.value === settings.effort) ||
+        thinking.levels.find(item => item.value === 'low') ||
+        thinking.levels.find(item => item.value === 'high') ||
         thinking.levels[thinking.levels.length - 1]);
     return (
         <div className={styles.modelMenu}>
@@ -881,7 +893,10 @@ const ModelMenu = ({settings, onClose, onEffort, onPick, onOpenSettings}) => {
             </div>
             {thinking && level ? (
                 <div className={styles.modelMenuEffort}>
-                    <span className={styles.fieldLabel}>思考强度</span>
+                    <span className={styles.modelMenuEffortTitle}>
+                        思考强度
+                        <span className={styles.modelMenuEffortValue}>{level.label}</span>
+                    </span>
                     <div className={styles.efforts}>
                         {thinking.levels.map(item => (
                             <button
@@ -898,7 +913,7 @@ const ModelMenu = ({settings, onClose, onEffort, onPick, onOpenSettings}) => {
                 className={styles.modelMenuMore}
                 onClick={onOpenSettings}
                 type="button"
-            >更多设置（密钥 / 上下文限额 / 提示词）</button>
+            >管理模型与密钥</button>
         </div>
     );
 };
@@ -1656,9 +1671,10 @@ BackupSection.propTypes = {
 // 设置
 // ---------------------------------------------------------------------------
 
-const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
+const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll, initialSection}) => {
     // null = 停在分区列表；否则是 SETTINGS_SECTIONS 里的某个 id
-    const [section, setSection] = useState(null);
+    // （模型菜单的「管理模型」会带着 'model' 直接进来）
+    const [section, setSection] = useState(initialSection || null);
     const provider = getProvider(draft.providerId);
     // 占位符里显示的「自动」值 = 目录/拉取清单里声明的元数据（不算用户覆盖）
     const draftModel = resolveModel(draft) || {};
@@ -2194,6 +2210,7 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll}) => {
 
 SettingsView.propTypes = {
     draft: PropTypes.object,
+    initialSection: PropTypes.string,
     onClearAll: PropTypes.func,
     onClose: PropTypes.func,
     onSave: PropTypes.func,
@@ -2337,6 +2354,8 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     const [showHistory, setShowHistory] = useState(false);
     // 输入区那行模型名点开的快捷面板（换模型 / 调思考档位，不用进设置页）
     const [showModelMenu, setShowModelMenu] = useState(false);
+    const [showCtx, setShowCtx] = useState(false);
+    const [settingsStartSection, setSettingsStartSection] = useState(null);
     // 打开历史列表那一刻的库内快照（列表是静态的，切换/删除后由对应 handler 刷新）
     const [convIndex, setConvIndex] = useState(null);
     const [settings, setSettings] = useState(() => loadSettings());
@@ -2700,27 +2719,13 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     }, [askPendingId]);
 
     // 发一轮。「改上一轮发言」之后的重发也走这里（文本由调用方给），所以它**不读输入框**。
-    // 通知权限的状态提示每个页面加载只贴一次，别每次发送都刷屏。
-    const notifyNoticeShownRef = useRef(false);
     const sendText = useCallback(async text => {
         const content = String(text === void 0 || text === null ? '' : text)
             .trim();
         if (!content || busy || !portRef.current) return;
         // 就趁这一下（真手势）申请网页通知权限 —— 浏览器只认用户交互里发出的请求。
-        // 结果不能扔：没拿到权限时 notify 那头是静默不发（Chrome 的弹窗也只弹这一次），
-        // 至少要在面板上说一声「叫不回你」。
-        requestNotifyPermission().then(perm => {
-            if (notifyNoticeShownRef.current || perm === 'granted' || perm === 'desktop') return;
-            notifyNoticeShownRef.current = true;
-            const noticeText = perm === 'denied' ?
-                '浏览器的通知权限被拒了，AI 干完活没法叫你回来。想开的话点地址栏的锁图标，把「通知」改成允许。' :
-                perm === 'default' ?
-                    '浏览器没给通知权限（弹窗可能被关掉了），AI 干完活叫不回你；点地址栏的锁图标可以再开。' :
-                    perm === 'unsupported' ? '这个浏览器不支持网页通知，AI 干完活没法叫你回来。' : '';
-            if (noticeText) {
-                setItemsState(prev => prev.concat([{kind: 'notice', text: noticeText}]));
-            }
-        });
+        // 用户明确要求：申请了就行，不追问结果，也不在面板上贴「权限被拒」之类的提示。
+        requestNotifyPermission();
         // 这一轮计时的起点（也是「已工作 Nm Ns」的 t0）
         const startedAt = Date.now();
         // 这一轮用的是哪个模型，跟着这条用户消息一起记下来
@@ -3170,8 +3175,9 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
         setStatusError(false);
     }, [settings]);
 
-    const openSettings = useCallback(() => {
+    const openSettings = useCallback(section => {
         // 每次打开都重新读一遍自定义供应商：清单是立即落盘的，别拿一份可能过期的副本
+        setSettingsStartSection(section || null);
         setSettingsDraft({...settings, customProviders: loadCustomProviders()});
         setShowSettings(true);
     }, [settings]);
@@ -3255,8 +3261,8 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                 style={{left: Math.max(0, dock.left + dock.width - 96), top: dock.top + 8}}
                 type="button"
             >
-                <Icon
-                    name="panel"
+                <HexMark
+                    className={styles.markIcon}
                     size={13}
                 /> XCE Agent
             </button>
@@ -3272,13 +3278,18 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     const effortLevels = thinkingOf(settings.providerId, settings.modelId);
     const effortLabel = effortLevels ?
         ((effortLevels.levels.find(item => item.value === settings.effort) ||
+            effortLevels.levels.find(item => item.value === 'low') ||
+            effortLevels.levels.find(item => item.value === 'high') ||
             effortLevels.levels[effortLevels.levels.length - 1]) || {}).label : '';
-    // 用量照 ZCode 的写法收成 `12.3K (6%)`，完整数字放 title 里 —— 面板太窄，别把两行数字都摊开
+    // 用量照 ZCode / dsh 的写法：触发键只显示百分比 + 一圈占用环，完整数字放进点开的
+    // 小面板里 —— 面板太窄，别把两行数字都摊在输入框底下。
     const usedK = context ? (context.tokens / 1000).toFixed(1).replace(/\.0$/, '') : '';
     const windowK = Math.round(contextWindowOf(settings) / 1000);
-    const contextLabel = context ? `${usedK}K (${Math.round(ratio * 100)}%)` : '';
     const contextTitle = context ? `上下文已用 ${usedK}k / ${windowK}k` : '';
-    // 会话累计的缓存命中率（悬停浮层用）；没报缓存字段的请求不进分母，一个都没报就别算百分比
+    const ctxPercent = context ? Math.max(0, Math.min(100, Math.round(ratio * 100))) : 0;
+    const ctxRemainingK = Math.max(0, windowK - Math.round(context ? context.tokens / 1000 : 0));
+    const ctxRing = 2 * Math.PI * 5.5;
+    // 会话累计的缓存命中率（点开的小面板里用）；没报缓存字段的请求不进分母，一个都没报就别算百分比
     const hitPct = usageStats && usageStats.promptCached > 0 ?
         Math.round(usageStats.cached / usageStats.promptCached * 100) : null;
     // 输入是**每次请求各算一遍**的累计值（每步都要重发整份上下文），所以要拆开写清楚：
@@ -3305,7 +3316,12 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                 }}
             >
                 <div className={styles.header}>
-                    <span className={`${styles.dot} ${busy ? styles.dotBusy : ''}`} />
+                    {/* 左侧只放品牌六边形：它同时是忙闲指示（忙时跟着强调色呼吸），
+                        不写标题 —— 面板叫什么不用挂在脸上。 */}
+                    <span
+                        aria-hidden="true"
+                        className={`${styles.brand} ${busy ? styles.brandBusy : ''}`}
+                    ><HexMark size={16} /></span>
                     <button
                         aria-label="收起面板，显示积木选择框"
                         className={styles.iconBtn}
@@ -3322,14 +3338,14 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                     ><Icon name="plus" /></button>
                     <button
                         aria-label="历史对话"
-                        className={styles.iconBtn}
+                        className={`${styles.iconBtn} ${showHistory ? styles.iconBtnOn : ''}`}
                         onClick={() => (showHistory ? setShowHistory(false) : openHistory())}
                         title="历史对话"
                         type="button"
                     ><Icon name="history" /></button>
                     <button
                         aria-label="设置"
-                        className={styles.iconBtn}
+                        className={`${styles.iconBtn} ${showSettings ? styles.iconBtnOn : ''}`}
                         onClick={() => (showSettings ? setShowSettings(false) : openSettings())}
                         title="设置"
                         type="button"
@@ -3346,6 +3362,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                 {showSettings ? (
                     <SettingsView
                         draft={settingsDraft}
+                        initialSection={settingsStartSection}
                         onClearAll={handleClearSettings}
                         onClose={() => setShowSettings(false)}
                         onSave={handleSaveSettings}
@@ -3375,7 +3392,10 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                             >
                                 {items.length === 0 ? (
                                     <div className={styles.empty}>
-                                        <HexMark size={44} />
+                                        <HexMark
+                                            className={styles.emptyMark}
+                                            size={44}
+                                        />
                                         <p
                                             className={`${styles.emptyTitle} ${mode === 'full' ?
                                                 styles.emptyTitleWide : ''}`}
@@ -3477,7 +3497,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                             if (segment.type !== 'work') {
                                                 return <React.Fragment key={key}>{body}</React.Fragment>;
                                             }
-                                            const duration = formatWorkDuration(turn.durationMs);
+                                            const duration = formatWorkDuration(segment.durationMs);
                                             const label = turn.running ?
                                                 `工作中${duration ? ` ${duration}` : '…'}` :
                                                 duration ? `已工作 ${duration}` : '已处理';
@@ -3527,7 +3547,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                         onPick={handlePickModel}
                                         onOpenSettings={() => {
                                             setShowModelMenu(false);
-                                            openSettings();
+                                            openSettings('model');
                                         }}
                                         settings={settings}
                                     />
@@ -3546,8 +3566,12 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                 />
                                 <div className={styles.bar}>
                                     <button
+                                        aria-expanded={showModelMenu}
                                         className={styles.modelBtn}
-                                        onClick={() => setShowModelMenu(v => !v)}
+                                        onClick={() => {
+                                            setShowCtx(false);
+                                            setShowModelMenu(v => !v);
+                                        }}
                                         title="换模型 / 思考强度"
                                         type="button"
                                     >
@@ -3555,32 +3579,105 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                         {effortLabel ? (
                                             <span className={styles.effortBadge}>{effortLabel}</span>
                                         ) : null}
-                                        <Icon
-                                            name="chevron"
-                                            size={11}
-                                        />
+                                        <span
+                                            className={`${styles.modelCaret} ${showModelMenu ?
+                                                styles.modelCaretOpen : ''}`}
+                                        >
+                                            <Icon
+                                                name="chevron"
+                                                size={12}
+                                            />
+                                        </span>
                                     </button>
                                     {context ? (
                                         <span className={styles.ctxWrap}>
-                                            <span
-                                                className={`${styles.ctx} ${ratio > 0.75 ? styles.ctxWarn : ''}`}
+                                            {/* 占用环 + 百分比：一眼看得出还剩多少；点开才摊数字 */}
+                                            <button
+                                                aria-expanded={showCtx}
+                                                aria-haspopup="dialog"
+                                                aria-label={contextTitle}
+                                                className={`${styles.ctxBtn} ${ratio > 0.75 ? styles.ctxWarn : ''}`}
+                                                onClick={() => {
+                                                    setShowModelMenu(false);
+                                                    setShowCtx(v => !v);
+                                                }}
                                                 title={contextTitle}
+                                                type="button"
                                             >
-                                                {contextLabel}
-                                            </span>
-                                            {/* 悬停展开会话累计（学 ZCode）：次数 / 输入拆成命中与未命中 / 输出 */}
-                                            {usageRows.length ? (
-                                                <span className={styles.ctxPop}>
-                                                    <span className={styles.ctxPopTitle}>
-                                                        {`本会话累计 · ${usageStats.requests} 次请求`}
+                                                <svg
+                                                    aria-hidden="true"
+                                                    className={styles.ctxRing}
+                                                    height="14"
+                                                    viewBox="0 0 14 14"
+                                                    width="14"
+                                                >
+                                                    <circle
+                                                        className={styles.ctxRingTrack}
+                                                        cx="7"
+                                                        cy="7"
+                                                        r="5.5"
+                                                    />
+                                                    <circle
+                                                        className={styles.ctxRingFill}
+                                                        cx="7"
+                                                        cy="7"
+                                                        r="5.5"
+                                                        strokeDasharray={`${ctxRing * ctxPercent / 100} ${ctxRing}`}
+                                                        transform="rotate(-90 7 7)"
+                                                    />
+                                                </svg>
+                                                <span>{`${ctxPercent}%`}</span>
+                                            </button>
+                                            {showCtx ? (
+                                                <React.Fragment>
+                                                    <span
+                                                        className={styles.ctxBackdrop}
+                                                        onClick={() => setShowCtx(false)}
+                                                    />
+                                                    <span
+                                                        aria-label="上下文用量"
+                                                        className={styles.ctxPanel}
+                                                        role="dialog"
+                                                    >
+                                                        <span className={styles.ctxPanelHead}>
+                                                            <span className={styles.ctxPanelTitle}>上下文</span>
+                                                            <span className={styles.ctxPanelFigures}>
+                                                                {`${usedK}K / ${windowK}K`}
+                                                            </span>
+                                                        </span>
+                                                        <span className={styles.ctxBar}>
+                                                            <span
+                                                                className={styles.ctxBarFill}
+                                                                style={{width: `${ctxPercent}%`}}
+                                                            />
+                                                        </span>
+                                                        <span className={styles.ctxPanelRow}>
+                                                            <span>已用</span>
+                                                            <span>{`${usedK}K · ${ctxPercent}%`}</span>
+                                                        </span>
+                                                        <span className={styles.ctxPanelRow}>
+                                                            <span>剩余</span>
+                                                            <span>{`${ctxRemainingK}K`}</span>
+                                                        </span>
+                                                        <span className={styles.ctxPanelRow}>
+                                                            <span>窗口</span>
+                                                            <span>{`${windowK}K`}</span>
+                                                        </span>
+                                                        {usageRows.length ? (
+                                                            <span className={styles.ctxPanelFoot}>
+                                                                <span className={styles.ctxPanelFootTitle}>
+                                                                    {`本会话累计 · ${usageStats.requests} 次请求`}
+                                                                </span>
+                                                                {usageRows.map(row => (
+                                                                    <span
+                                                                        className={styles.ctxPanelLine}
+                                                                        key={row}
+                                                                    >{row}</span>
+                                                                ))}
+                                                            </span>
+                                                        ) : null}
                                                     </span>
-                                                    {usageRows.map(row => (
-                                                        <span
-                                                            className={styles.ctxPopRow}
-                                                            key={row}
-                                                        >{row}</span>
-                                                    ))}
-                                                </span>
+                                                </React.Fragment>
                                             ) : null}
                                         </span>
                                     ) : null}

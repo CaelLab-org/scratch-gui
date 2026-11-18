@@ -35,25 +35,42 @@ import {customProviders} from './custom-providers.js';
 // ---------------------------------------------------------------------------
 
 // 通用的思考档位。wire 就是最终塞进请求体的值，所以各家写法不同也能塞进同一份数据里。
+// 第四项 extra 是「同一档要一起带上的别的字段」（DeepSeek V4 这类：reasoning_effort 和
+// thinking.type 是一对）；wire 写成 null 表示这一档**不带**主字段。
+// 档位名不写「默认」：默认由选中态表达（学 ZCode 的 Off/Low/High/Max 词表）。
 const thinkingLevels = (field, levels) => ({
     field,
-    levels: levels.map(([value, label, wire]) => ({value, label, wire: wire === void 0 ? value : wire}))
+    levels: levels.map(([value, label, wire, extra]) => ({
+        value,
+        label,
+        wire: wire === void 0 ? value : wire,
+        ...(extra ? {extra} : {})
+    }))
 });
 
 const LEVELS_4 = [
-    ['none', '不思考（最快）', void 0],
-    ['low', '低（默认）', void 0],
+    ['none', '关闭', void 0],
+    ['low', '低', void 0],
     ['high', '高', void 0],
     ['max', '最高', void 0]
 ];
 const LEVELS_3 = [
-    ['low', '低（默认）', void 0],
+    ['low', '低', void 0],
     ['high', '高', void 0],
     ['max', '最高', void 0]
 ];
 const LEVELS_ONOFF = [
-    ['off', '不思考', {type: 'disabled'}],
-    ['on', '思考（默认）', {type: 'enabled'}]
+    ['off', '关闭', {type: 'disabled'}],
+    ['on', '开启', {type: 'enabled'}]
+];
+
+// 带「关闭」的四档：开着的三档同时声明 thinking.type = enabled（照 ZCode 对 DeepSeek V4
+// 的请求形状），关闭那一档不传 reasoning_effort、只把 thinking 关掉。
+const LEVELS_EFFORT_ONOFF = [
+    ['off', '关闭', null, {thinking: {type: 'disabled'}}],
+    ['low', '低', void 0, {thinking: {type: 'enabled'}}],
+    ['high', '高', void 0, {thinking: {type: 'enabled'}}],
+    ['max', '最高', void 0, {thinking: {type: 'enabled'}}]
 ];
 
 // Anthropic 的思考档位（这条是协议定死的字段名，所以自定义的 Anthropic 端点也能直接用）。
@@ -61,8 +78,8 @@ const LEVELS_ONOFF = [
 // 老模型或兼容网关只认 {type:'enabled', budget_tokens} 的话，把那档的 wire 改成那个形状也能用
 // （anthropic.js 会把预算夹到 max_tokens 以下，不会因为预算超了直接 400）。
 const ANTHROPIC_THINKING = thinkingLevels('thinking', [
-    ['off', '不思考', {type: 'disabled'}],
-    ['high', '思考（默认）', {type: 'adaptive'}],
+    ['off', '关闭', {type: 'disabled'}],
+    ['high', '思考', {type: 'adaptive'}],
     ['max', '最高', {type: 'adaptive', effort: 'high'}]
 ]);
 
@@ -86,7 +103,7 @@ export const PROVIDERS = [
         baseUrl: 'https://api.deepseek.com',
         keyUrl: 'https://platform.deepseek.com/api_keys',
         note: '国内可直连，浏览器跨域实测放行',
-        thinking: thinkingLevels('reasoning_effort', LEVELS_3),
+        thinking: thinkingLevels('reasoning_effort', LEVELS_EFFORT_ONOFF),
         models: [
             {
                 id: 'deepseek-flash',
@@ -140,7 +157,13 @@ export const PROVIDERS = [
                 contextWindow: 1048576,
                 note: '旗舰，原生看图'
             },
-            {id: 'kimi-k2.7-code', name: 'Kimi K2.7 Code', contextWindow: 262144, note: '写代码'},
+            {
+                id: 'kimi-k2.7-code',
+                name: 'Kimi K2.7 Code',
+                contextWindow: 262144,
+                note: '写代码',
+                thinking: thinkingLevels('reasoning_effort', LEVELS_EFFORT_ONOFF)
+            },
             {
                 id: 'kimi-k2.6',
                 name: 'Kimi K2.6',
@@ -160,8 +183,8 @@ export const PROVIDERS = [
         thinking: {
             field: 'enable_thinking',
             levels: [
-                {value: 'off', label: '不思考', wire: false},
-                {value: 'on', label: '思考（默认）', wire: true}
+                {value: 'off', label: '关闭', wire: false},
+                {value: 'on', label: '开启', wire: true}
             ]
         },
         models: [
@@ -711,10 +734,15 @@ export const buildRequestBody = ({
         // 单次输出上限：防失控（也防把上下文一次性吃光）。元数据或用户设置里有就带
         ...(maxTokens > 0 ? {max_tokens: maxTokens} : {})
     };
-    // 思考档位：字段名与取值形态都由供应商声明，这里只负责拼进去
+    // 思考档位：字段名与取值形态都由供应商声明，这里只负责拼进去。
+    // wire = null 表示这一档不带主字段（例如「关闭」只发 thinking.type=disabled）；
+    // extra 里的字段跟主字段一起发（DeepSeek V4 的 thinking.type）。
     if (thinking && effort) {
         const level = thinking.levels.find(item => item.value === effort);
-        if (level) body[thinking.field] = level.wire;
+        if (level) {
+            if (level.extra) Object.assign(body, level.extra);
+            if (level.wire !== null) body[thinking.field] = level.wire;
+        }
     }
     return body;
 };

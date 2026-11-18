@@ -220,15 +220,44 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.4.0 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.5.0 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
+                    <h2>4.5.0</h2>
+                    <span class="date">2026-11-18</span>
+                    <span class="latest">最新</span>
+                </header>
+
+                <p>这一版把 AI 面板的几处细节收拾了，默认配色也回到品牌蓝。</p>
+
+                <h3>默认强调色换成品牌蓝</h3>
+                <ul>
+                    <li>没改过主题设置的话，界面强调色是 XCE 品牌蓝，菜单里这项叫「XCE Blue」。</li>
+                    <li>「红」恢复 TurboWarp 原来的真红；喜欢原来那套配色的可以自己切回去。</li>
+                </ul>
+
+                <h3>AI 面板</h3>
+                <ul>
+                    <li>输入框上方的上下文用量改成占用环 + 百分比，点开才摊开数字：已用 / 剩余 / 窗口大小，以及本会话累计的请求次数、输入命中与未命中、输出。</li>
+                    <li>换模型的菜单只列已经填过密钥的供应商（本地端点不用密钥，照常显示）；底下那行改成「管理模型与密钥」，点进去直接停在模型设置。</li>
+                    <li>头部左边只留品牌六边形，干活时它跟着呼吸。</li>
+                    <li>思考档位统一写成「关闭 / 低 / 高 / 最高」，默认由选中状态表达；DeepSeek V4 选「关闭」会真的把思考关掉，Kimi K2.7 Code 也能调档位了。</li>
+                </ul>
+
+                <h3>修复</h3>
+                <ul>
+                    <li>同一轮里既有问用户的卡片、又有后续工作，不会再被切成两个「已工作」标题、时间还一模一样；每段显示自己那段的时长。</li>
+                    <li>发消息时不再贴「通知权限被拒」之类的提示，权限仍然会申请。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
                     <h2>4.4.0</h2>
                     <span class="date">2026-11-15</span>
-                    <span class="latest">最新</span>
                 </header>
 
                 <p>这一版让本机的其他 AI 工具可以直接操作编辑器里打开的项目。</p>

@@ -79,7 +79,8 @@ const noAnswer = buildTurns([
 ]);
 check('没答复时不标 hasAnswer', noAnswer[0].hasAnswer === false);
 
-// 系统提示插在工作行前面时，顺序不能被拆散（分段是保序的）
+// 系统提示插在工作行前面时，顺序不能被拆散（分段是保序的）。
+// 提示行算干活过程的一部分：它不另起一段，也就不再切出第二个「已工作」标题。
 const mixed = buildTurns([
     {kind: 'user', text: '来', at: T0},
     {kind: 'notice', text: '上下文偏长，已清理较早的工具返回。'},
@@ -87,7 +88,7 @@ const mixed = buildTurns([
     {kind: 'tool', id: 'd', name: 'xce_write_script', status: 'done', at: T0 + 200},
     {kind: 'agent', text: '好了。', at: T0 + 900}
 ]);
-check('提示行留在最前', mixed[0].segments.map(s => s.type).join(',') === 'final,work,final',
+check('提示行并入工作段，只留一个标题', mixed[0].segments.map(s => s.type).join(',') === 'work,final',
     mixed[0].segments.map(s => s.type).join(','));
 
 // 旧数据：没有 at（v1 迁过来的），不该崩、也不该编一个耗时出来

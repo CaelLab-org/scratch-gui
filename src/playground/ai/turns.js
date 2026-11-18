@@ -30,10 +30,16 @@ export const formatWorkDuration = ms => {
     return `${seconds}s`;
 };
 
-// 「干活」还是「答复」：工具行、以及**带工具调用**的那一步（它的正文是旁白，不是答复）。
+// 「干活」还是「答复」：工具行、问用户的卡片、系统提示行，以及**带工具调用**的那一步
+// （它的正文是旁白，不是答复）。问用户 / 系统提示本来就是干活过程的一部分 —— 当成答复会让
+// 同一轮被切成两个「已工作」标题，时间还一模一样（2026-11-18 用户报的 bug）。
 // 流式中的那一步还没拿到 toolCalls，先按答复放在外面 —— 等确定了再收进去。
 // 宁可「内容被收走」，不要「内容先被藏起来又冒出来」：后者发生在用户正读的时候。
-const isWorkItem = item => item.kind === 'tool' || (item.kind === 'agent' && !!item.hasTools);
+const isWorkItem = item =>
+    item.kind === 'tool' ||
+    item.kind === 'ask' ||
+    item.kind === 'notice' ||
+    (item.kind === 'agent' && !!item.hasTools);
 
 /**
  * 把一个工具留下的 undo 句柄读成规范化动作：
@@ -184,6 +190,21 @@ export const buildTurns = (items, {now = 0, active = false} = {}) => {
         if (entry.startedAt && entry.endedAt) {
             entry.durationMs = Math.max(entry.endedAt - entry.startedAt, 0);
         }
+        // 每个工作段自己算一遍首尾时间：万一还是出现两段（答复之后又开工），
+        // 两个标题也各显示自己那段，而不是全复制这一轮的总时长。
+        for (const segment of entry.segments) {
+            let first = null;
+            let last = null;
+            for (const item of segment.items) {
+                if (typeof item.at !== 'number') continue;
+                if (first === null) first = item.at;
+                last = item.at;
+            }
+            segment.startedAt = first;
+            segment.endedAt = last;
+            segment.durationMs = first !== null && last !== null ?
+                Math.max(last - first, 0) : null;
+        }
         // 有收尾答复 = 这轮真的说完了，标题行该安静下来（收起）
         entry.hasAnswer = entry.segments.some(segment =>
             segment.type === 'final' && segment.items.some(it => it.kind === 'agent' && it.text));
@@ -196,6 +217,10 @@ export const buildTurns = (items, {now = 0, active = false} = {}) => {
     if (last && active) {
         last.running = true;
         last.durationMs = last.startedAt ? Math.max(now - last.startedAt, 0) : null;
+        const lastWork = [...last.segments].reverse().find(segment => segment.type === 'work');
+        if (lastWork && lastWork.startedAt !== null) {
+            lastWork.durationMs = Math.max(now - lastWork.startedAt, 0);
+        }
     }
     return turns;
 };

@@ -42,6 +42,7 @@
     --bg-layer1: #f5f6f8;
     --bg-layer2: #eceef2;
     --bg-user: #e9f1fc;
+    --bg-soft: #f7f8fa;
     --border-l1: #e4e7ec;
     --border-l2: #d5d9e0;
     --border-l3: #b9c0cc;
@@ -50,6 +51,8 @@
     --text-3: #98a2b3;
     --accent: #1d5bd6;
     --accent-solid: #2b6fec;
+    --accent-soft: #eaf1fe;
+    --ring: rgba(43, 111, 236, 0.14);
     --success: #12a150;
     --warning: #b54708;
     --error: #d92d20;
@@ -61,6 +64,7 @@
     font-size: 14px;
     line-height: 22px;
     color: var(--text-1);
+    -webkit-font-smoothing: antialiased;
 }
 
 /* 编辑器切到深色主题时，面板跟着走 —— 否则 310px 宽的一块白贴在深色画布上，
@@ -73,6 +77,7 @@
     --bg-layer1: #1e1e1e;
     --bg-layer2: #2e2e2e;
     --bg-user: #16202c;
+    --bg-soft: #191919;
     --border-l1: #2e2e2e;
     --border-l2: #3d3d3d;
     --border-l3: #565656;
@@ -81,6 +86,8 @@
     --text-3: #8a8a8a;
     --accent: #6fa8ff;
     --accent-solid: #3b7ff0;
+    --accent-soft: #1a2635;
+    --ring: rgba(111, 168, 255, 0.18);
     --success: #3dc46b;
     --warning: #f0a44a;
     --error: #f56c6c;
@@ -104,26 +111,36 @@
     z-index: $z-index-ai-panel;
     display: flex;
     align-items: center;
-    gap: 4px;
-    height: 26px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: 6px;
-    background: var(--accent-solid, #2b6fec);
-    color: #fff;
+    gap: 6px;
+    height: 28px;
+    padding: 0 12px 0 10px;
+    border: 1px solid var(--border-l2);
+    border-radius: 999px;
+    background: var(--bg-base);
+    color: var(--text-1);
     font-family: inherit;
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    box-shadow: var(--shadow-float);
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.1);
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .handle:hover {
-    filter: brightness(1.08);
+    border-color: var(--accent-solid);
+    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.14);
+}
+
+.markIcon {
+    flex: 0 0 auto;
+    color: var(--accent-solid);
 }
 
 /* ---------------------------------------------------------------- 面板外壳 */
 
+/* 面板是一块**独立的面板**：右边一条实线 + 一层朝右的软阴影，让它在浅色画布上
+   立起来；右上角收圆（底下是积木画布，露出来也不难看）。停靠态依然贴左缘和底边，
+   下边和左边保持方角 —— 圆角会把底下的积木漏出来。 */
 .panel {
     position: fixed;
     z-index: $z-index-ai-panel;
@@ -134,8 +151,9 @@
     min-width: 0;
     overflow: hidden;
     background: var(--bg-base);
-    /* 停靠态：贴屏幕左缘和底边，方角 + 一条右边框；圆角会把底下的积木漏出来 */
     border-right: 1px solid var(--border-l1);
+    border-top-right-radius: 12px;
+    box-shadow: 12px 0 32px -12px rgba(16, 24, 40, 0.12);
 }
 
 .panelFull {
@@ -144,43 +162,46 @@
     width: 100% !important;
     height: 100% !important;
     border-right: 0;
+    border-radius: 0;
+    box-shadow: none;
     z-index: $z-index-ai-panel-full;
 }
 
 /* ---------------------------------------------------------------- 头部 */
 
-/* 头部只有状态点和图标按钮，**一个字都不写**（学 ZCode / Codex：面板自己叫什么没必要挂在脸上，
-   而且 310px 宽度里写标题就得跟五个按钮抢地方）。左边那个点=忙闲，右边是全部操作。 */
+/* 头部只有品牌标记和图标按钮，**一个字都不写**（学 ZCode / Codex：面板自己叫什么
+   没必要挂在脸上，310px 里写标题就得跟五个按钮抢地方）。左边那个六边形=品牌 +
+   忙闲：忙的时候跟着强调色呼吸，闲的时候是安静的灰。 */
 .header {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     flex: 0 0 auto;
-    height: 36px;
-    padding: 0 8px;
+    height: 44px;
+    padding: 0 8px 0 12px;
     border-bottom: 1px solid var(--border-l1);
-    background: var(--bg-layer1);
+    background: var(--bg-base);
     white-space: nowrap;
 }
 
-.dot {
+.brand {
+    display: flex;
+    align-items: center;
     flex: 0 0 auto;
-    width: 6px;
-    height: 6px;
-    /* 左边距顶住面板左缘，右边 auto 把按钮组推到右缘 */
-    margin: 0 auto 0 2px;
-    border-radius: 50%;
-    background: var(--text-3);
+    margin-right: auto;
+    color: var(--accent-solid);
+    opacity: 0.5;
+    transition: color 0.15s ease, opacity 0.15s ease;
 }
 
-.dotBusy {
-    background: var(--accent-solid);
-    animation: aiPulse 1.1s ease-in-out infinite;
+.brandBusy {
+    opacity: 1;
+    animation: aiPulse 1.4s ease-in-out infinite;
 }
 
 @keyframes aiPulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
+    50% { opacity: 0.4; }
 }
 
 .iconBtn {
@@ -188,24 +209,36 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border: 0;
     border-radius: 6px;
     background: transparent;
     color: var(--text-2);
     cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
 }
 
 .iconBtn:hover:enabled {
-    background: var(--bg-layer2);
+    background: var(--bg-layer1);
     color: var(--text-1);
+}
+
+.iconBtn:active:enabled {
+    background: var(--bg-layer2);
 }
 
 .iconBtn:disabled {
     color: var(--border-l3);
     cursor: default;
+}
+
+/* 设置 / 历史这类「切换一块界面」的按钮，打开时保持高亮，不然不知道自己点开了什么 */
+.iconBtnOn,
+.iconBtnOn:hover:enabled {
+    background: var(--accent-soft);
+    color: var(--accent);
 }
 
 /* ---------------------------------------------------------------- 设置页 */
@@ -223,14 +256,14 @@
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
-    padding: 8px 12px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border-l1);
 }
 
 .settingsTitle {
     flex: 1;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .settingsBody {
@@ -250,7 +283,7 @@
     flex-direction: column;
     margin-bottom: 12px;
     border: 1px solid var(--border-l1);
-    border-radius: 8px;
+    border-radius: 10px;
     overflow: hidden;
 }
 
@@ -432,16 +465,17 @@
 .fieldSelect {
     display: block;
     width: 100%;
-    height: 30px;
-    padding: 0 8px;
+    height: 32px;
+    padding: 0 9px;
     border: 1px solid var(--border-l2);
-    border-radius: 6px;
+    border-radius: 8px;
     outline: none;
     box-sizing: border-box;
-    background: var(--bg-layer1);
+    background: var(--bg-base);
     color: var(--text-1);
     font-family: inherit;
     font-size: 13px;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .fieldSelect {
@@ -451,26 +485,29 @@
 .fieldInput:focus,
 .fieldSelect:focus {
     border-color: var(--accent-solid);
+    box-shadow: 0 0 0 3px var(--ring);
 }
 
 .fieldTextarea {
     display: block;
     width: 100%;
-    padding: 6px 8px;
+    padding: 7px 9px;
     border: 1px solid var(--border-l2);
-    border-radius: 6px;
+    border-radius: 8px;
     outline: none;
     box-sizing: border-box;
     resize: vertical;
-    background: var(--bg-layer1);
+    background: var(--bg-base);
     color: var(--text-1);
     font-family: inherit;
     font-size: 13px;
     line-height: 20px;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .fieldTextarea:focus {
     border-color: var(--accent-solid);
+    box-shadow: 0 0 0 3px var(--ring);
 }
 
 .fieldTextarea::placeholder {
@@ -485,19 +522,20 @@
 }
 
 .btn {
-    height: 28px;
-    padding: 0 12px;
+    height: 30px;
+    padding: 0 13px;
     border: 1px solid var(--border-l2);
-    border-radius: 6px;
+    border-radius: 8px;
     background: transparent;
     color: var(--text-1);
     font-family: inherit;
-    font-size: 12px;
+    font-size: 12.5px;
     cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
 }
 
 .btn:hover:enabled {
-    background: var(--bg-layer2);
+    background: var(--bg-layer1);
 }
 
 .btn:disabled {
@@ -509,12 +547,12 @@
     border-color: var(--accent-solid);
     background: var(--accent-solid);
     color: #fff;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .btnPrimary:hover:enabled {
-    background: var(--accent-solid);
-    filter: brightness(1.08);
+    background: var(--accent);
+    border-color: var(--accent);
 }
 
 /* ---------------------------------------------------------------- 历史对话列表 */
@@ -533,36 +571,37 @@
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
-    padding: 8px 12px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border-l1);
 }
 
 .historyTitle {
     flex: 1;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .historyNew {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 5px;
     flex: 0 0 auto;
-    height: 30px;
-    margin: 8px 12px 4px;
-    border: 1px dashed var(--border-l3);
-    border-radius: 6px;
-    background: transparent;
+    height: 34px;
+    margin: 10px 12px 4px;
+    border: 1px solid var(--border-l1);
+    border-radius: 9px;
+    background: var(--bg-base);
     color: var(--accent);
     font-family: inherit;
     font-size: 13px;
     cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .historyNew:hover {
     border-color: var(--accent-solid);
-    background: var(--bg-layer1);
+    background: var(--accent-soft);
 }
 
 .historyList {
@@ -576,7 +615,7 @@
     display: flex;
     align-items: stretch;
     margin-top: 2px;
-    border-radius: 6px;
+    border-radius: 8px;
 }
 
 .historyItem:hover {
@@ -732,7 +771,7 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 6px 10px;
+    padding: 6px 9px;
     border: 0;
     border-bottom: 1px solid var(--border-l1);
     background: transparent;
@@ -747,16 +786,31 @@
 }
 
 .modelRow:hover {
-    background: var(--bg-layer2);
+    background: var(--bg-layer1);
 }
 
+/* 选中不铺整行色 —— 用行首的小对勾表示（学 dsh 的 Menu 选中态） */
 .modelRowOn {
-    background: var(--bg-user);
+    background: transparent;
+}
+
+.modelRowOn .modelName {
+    font-weight: 500;
+}
+
+/* 快捷面板里的行：无分隔线、自己收圆角，跟菜单条目一个观感 */
+.modelMenu .modelRow {
+    min-height: 38px;
+    padding: 5px 7px;
+    border-bottom: 0;
+    border-radius: 6px;
 }
 
 .modelTick {
+    display: flex;
+    align-items: center;
     flex: 0 0 auto;
-    width: 12px;
+    width: 14px;
     color: var(--accent);
 }
 
@@ -788,14 +842,14 @@
     flex: 0 0 auto;
     padding: 1px 5px;
     border-radius: 4px;
-    background: var(--bg-layer2);
-    color: var(--text-2);
-    font-size: 11px;
+    background: var(--bg-layer1);
+    color: var(--text-3);
+    font-size: 10.5px;
     line-height: 16px;
 }
 
 .tagImg {
-    background: var(--bg-user);
+    background: var(--accent-soft);
     color: var(--accent);
 }
 
@@ -818,7 +872,7 @@
 .transcript {
     flex: 1;
     min-height: 0;
-    padding: 12px;
+    padding: 16px 14px 10px;
     overflow-y: auto;
     overflow-wrap: break-word;
     background: var(--bg-base);
@@ -830,12 +884,12 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 1;
-    height: 26px;
-    padding: 0 12px;
-    border: 1px solid var(--border-l3);
-    border-radius: 13px;
-    background: var(--bg-layer2);
-    color: var(--text-1);
+    height: 28px;
+    padding: 0 14px;
+    border: 1px solid var(--border-l1);
+    border-radius: 14px;
+    background: var(--bg-base);
+    color: var(--text-2);
     font-family: inherit;
     font-size: 12px;
     cursor: pointer;
@@ -844,6 +898,7 @@
 
 .jump:hover {
     border-color: var(--accent-solid);
+    color: var(--accent);
 }
 
 .transcript::-webkit-scrollbar,
@@ -852,7 +907,7 @@
 .modelsList::-webkit-scrollbar,
 .thinkBody::-webkit-scrollbar,
 .workBody::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
 }
 
 .transcript::-webkit-scrollbar-thumb,
@@ -862,9 +917,18 @@
 .thinkBody::-webkit-scrollbar-thumb,
 .workBody::-webkit-scrollbar-thumb {
     border: 2px solid transparent;
-    border-radius: 4px;
+    border-radius: 3px;
     background-clip: content-box;
     background-color: var(--border-l3);
+}
+
+.transcript::-webkit-scrollbar-thumb:hover,
+.settingsBody::-webkit-scrollbar-thumb:hover,
+.toolBody::-webkit-scrollbar-thumb:hover,
+.modelsList::-webkit-scrollbar-thumb:hover,
+.thinkBody::-webkit-scrollbar-thumb:hover,
+.workBody::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-3);
 }
 
 /* 空状态：别留一片黑洞，但也别摆一堆盒子（学 ZCode：空状态只留最少的元素） */
@@ -874,7 +938,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 18px 4px 0;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 100%;
+    padding: 12px 4px;
     color: var(--text-2);
     font-size: 13px;
     line-height: 20px;
@@ -883,15 +950,16 @@
 
 .emptyMark {
     color: var(--accent-solid);
-    opacity: 0.5;
+    opacity: 0.45;
 }
 
 .emptyTitle {
-    margin: 10px 0 6px;
+    margin: 14px 0 6px;
     color: var(--text-1);
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.3;
+    font-size: 18px;
+    font-weight: 500;
+    line-height: 1.45;
+    text-wrap: balance;
 }
 
 .emptyTitleWide {
@@ -899,7 +967,10 @@
 }
 
 .emptySub {
-    margin: 0 0 8px;
+    margin: 0 0 10px;
+    color: var(--text-2);
+    font-size: 13px;
+    line-height: 20px;
 }
 
 .empty p {
@@ -907,7 +978,7 @@
 }
 
 .emptyHints {
-    margin: 12px 0 0;
+    margin: 16px 0 0;
     padding: 0;
     width: 100%;
     list-style: none;
@@ -922,20 +993,22 @@
 .emptyHint {
     display: block;
     width: 100%;
-    padding: 3px 6px;
+    padding: 6px 8px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 7px;
     background: transparent;
     color: var(--text-2);
     font-family: inherit;
     font-size: 13px;
-    line-height: 20px;
+    line-height: 19px;
     text-align: left;
     cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
 }
 
 .emptyHint::before {
-    content: '· ';
+    content: '·';
+    margin-right: 7px;
     color: var(--text-3);
 }
 
@@ -945,29 +1018,30 @@
 }
 
 .emptyWarn {
-    margin-top: 12px !important;
-    padding-top: 12px;
+    margin-top: 16px !important;
+    padding-top: 14px;
     border-top: 1px solid var(--border-l1);
     color: var(--warning);
     font-size: 12px;
     line-height: 18px;
 }
 
-/* 用户消息：照 ZCode 的会话行 —— 靠右、宽度跟着文字走，中性底 + 一条细边框，
-   右上角收成 2px 的小尖角当"尾巴"；助手正文则完全不带容器（ZCode 原话：speaker labels
-   were visually noisy，所以连标签都不画，只靠这一块框 + 靠右来区分谁在说话）。
-   靠右用 `width: fit-content` + `margin-left: auto`，别用 text-align —— 那是给行内文字的，
-   多行时只有最后一行会跟着走。底色只留给选中态（历史当前条 / 选中的模型），跟 ZCode 的
-   `bg-surface`（消息）和 `bg-selected`（选中）是同一个分工。 */
+/* 用户消息：靠右的气泡，底色是编辑器自己的选中蓝（--bg-user）。圆角照 dsh 的
+   会话气泡（12px 一级容器），不做小尾巴 —— 面板这么窄，尖角只是噪音。
+   助手正文完全不带容器（ZCode 原话：speaker labels were visually noisy，所以连标签
+   都不画，只靠这一块气泡 + 靠右来区分谁在说话）。 */
 .user {
     box-sizing: border-box;
     width: fit-content;
-    max-width: 100%;
-    margin: 0 0 10px auto;
-    padding: 7px 10px;
-    border: 1px solid var(--border-l1);
-    border-radius: 8px 2px 8px 8px;
-    background: var(--bg-layer1);
+    max-width: 82%;
+    margin: 0 0 12px auto;
+    padding: 10px 13px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--bg-user);
+    color: var(--text-1);
+    font-size: 14px;
+    line-height: 22px;
     white-space: pre-wrap;
 }
 
@@ -989,8 +1063,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: flex-end;
-    gap: 4px;
-    margin: 0 0 10px;
+    gap: 2px;
+    margin: 0 0 12px;
 }
 
 /* 下边距归 .userRow 管，别跟 .user 自己的叠加 */
@@ -1002,7 +1076,7 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    padding-top: 2px;
+    padding-top: 6px;
     /* 藏起来时不能只是 opacity:0 —— 那样照样吃点击，得把指针也一起关掉 */
     opacity: 0;
     pointer-events: none;
@@ -1095,8 +1169,10 @@
 }
 
 .agent {
-    margin: 0 0 10px;
+    margin: 0 0 12px;
     color: var(--text-1);
+    font-size: 14px;
+    line-height: 23px;
 }
 
 .agent:last-child {
@@ -1113,26 +1189,30 @@
  */
 
 .work {
-    margin: 0 0 10px;
+    margin: 0 0 12px;
 }
 
+/* 干活那一段的标题行：一行灰字 + 一个能点的折叠条，hover 才给一点点底色 */
 .workHead {
     display: flex;
     align-items: center;
     gap: 6px;
     width: 100%;
-    padding: 2px 0;
+    padding: 2px 8px 2px 6px;
     border: 0;
+    border-radius: 7px;
     background: transparent;
     color: var(--text-3);
     font-family: inherit;
-    font-size: 12px;
-    line-height: 18px;
+    font-size: 13px;
+    line-height: 20px;
     text-align: left;
     cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
 }
 
 .workHead:hover {
+    background: var(--bg-layer1);
     color: var(--text-2);
 }
 
@@ -1151,9 +1231,10 @@
 /* 这一轮用的模型：贴着右边灰着写，占不下就省略（标题优先） */
 .workMeta {
     flex: 0 1 auto;
-    max-width: 52%;
+    max-width: 48%;
     overflow: hidden;
     color: var(--text-3);
+    font-size: 11.5px;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
@@ -1168,12 +1249,14 @@
     transform: rotate(90deg);
 }
 
-/* 干活期间整段都摊开：**不再自己开一个 340px 的小滚动窗**（那会跟转录区的滚动条打架，
-   内容也被切得看不全）。高度交给转录区统一滚。 */
+/* 摊开后的整段装进一块很淡的软底里 —— 过程是一整段，不该散在正文里。
+   不自己开滚动窗（那会跟转录区的滚动条打架），高度交给转录区统一滚。 */
 .workBody {
-    margin: 4px 0 0 18px;
-    padding-left: 9px;
-    border-left: 2px solid var(--border-l1);
+    margin: 6px 0 0;
+    padding: 8px 10px 4px;
+    border: 1px solid var(--border-l1);
+    border-radius: 10px;
+    background: var(--bg-soft);
 }
 
 /* 段内最后一条不用再留一份底部间距 */
@@ -1192,7 +1275,11 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 4px 8px;
-    margin: 2px 0 12px 18px;
+    margin: 2px 0 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-l1);
+    border-radius: 10px;
+    background: var(--bg-soft);
     color: var(--text-3);
     font-size: 12px;
     line-height: 18px;
@@ -1258,18 +1345,21 @@
     align-items: center;
     gap: 6px;
     width: 100%;
-    padding: 2px 0;
+    padding: 2px 6px 2px 4px;
     border: 0;
+    border-radius: 6px;
     background: transparent;
     color: var(--text-3);
     font-family: inherit;
-    font-size: 12px;
-    line-height: 18px;
+    font-size: 13px;
+    line-height: 20px;
     text-align: left;
     cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
 }
 
 .thinkHead:hover {
+    background: var(--bg-layer1);
     color: var(--text-2);
 }
 
@@ -1306,16 +1396,17 @@
     transform: rotate(90deg);
 }
 
-/* 展开的细节一律缩进 + 一条灰竖线，不用边框圈起来（省地方，也跟工具行一致） */
+/* 展开的细节：挂在标题下面的一块浅底，跟工具输出同一套观感 */
 .thinkBody {
-    max-height: 220px;
-    margin: 4px 0 0 18px;
-    padding-left: 9px;
+    max-height: 240px;
+    margin: 6px 0 0 20px;
+    padding: 8px 10px;
     overflow-y: auto;
-    border-left: 2px solid var(--border-l1);
-    color: var(--text-3);
-    font-size: 12px;
-    line-height: 19px;
+    border-radius: 8px;
+    background: var(--bg-base);
+    color: var(--text-2);
+    font-size: 13px;
+    line-height: 20px;
     white-space: pre-wrap;
 }
 
@@ -1328,7 +1419,7 @@
  */
 
 .tool {
-    margin: 0 0 10px;
+    margin: 0 0 8px;
 }
 
 .toolRow {
@@ -1343,18 +1434,21 @@
     gap: 6px;
     flex: 1 1 auto;
     min-width: 0;
-    padding: 2px 0;
+    padding: 2px 6px 2px 4px;
     border: 0;
+    border-radius: 6px;
     background: transparent;
     color: var(--text-2);
     font-family: inherit;
-    font-size: 12px;
-    line-height: 18px;
+    font-size: 13px;
+    line-height: 20px;
     text-align: left;
     cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
 }
 
 .toolHead:hover {
+    background: var(--bg-layer1);
     color: var(--text-1);
 }
 
@@ -1433,29 +1527,29 @@
     to { transform: rotate(360deg); }
 }
 
-/* 细节行缩进到文字起点（chevron 12 + gap 6 = 18px），跟思考过程同一套缩进。
-   限高只为兜极端的长输出（读一个几百块的角色、整页网页正文）：给到视口比例的 60vh，
-   不再是 260px 那种「必须低头在小方框里滚」的死限制 —— 干活期间要能一眼看完写了什么。 */
+/* 细节行缩进到文字起点（chevron 12 + gap 6 = 18px）。限高只为兜极端的长输出
+   （读一个几百块的角色、整页网页正文）：给到视口比例的 60vh，干活期间要能一眼看完写了什么。 */
 .toolBody {
     max-height: 60vh;
-    margin: 4px 0 0 18px;
-    padding: 6px 10px;
+    margin: 6px 0 0 20px;
+    padding: 8px 10px;
     overflow: auto;
-    border-left: 2px solid var(--border-l1);
+    border-radius: 8px;
+    background: var(--bg-base);
     color: var(--text-2);
     font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
     font-size: 12px;
-    line-height: 18px;
+    line-height: 19px;
     white-space: pre-wrap;
 }
 
-/* 失败：标题和竖线转红，正文里的报错保持可读的灰（整段刷红太吵） */
+/* 失败：标题和输出的左侧标一条红（正文里的报错保持可读的灰，整段刷红太吵） */
 .toolFailed .toolName {
     color: var(--error);
 }
 
 .toolFailed .toolBody {
-    border-left-color: var(--error);
+    box-shadow: inset 2px 0 0 var(--error);
 }
 
 .bad {
@@ -1470,8 +1564,8 @@
     display: block;
     width: 100%;
     margin-top: 8px;
-    border: 1px solid var(--border-l2);
-    border-radius: 6px;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
     background: var(--bg-layer1);
 }
 
@@ -1520,71 +1614,75 @@
 /* ---------------------------------------------------------------- markdown */
 
 .mdP {
-    margin: 0 0 8px;
+    margin: 0 0 10px;
 }
 
 .mdH1,
 .mdH2,
 .mdH3 {
-    margin: 16px 0 8px;
-    font-weight: 600;
-    line-height: 1.4;
+    margin: 18px 0 8px;
+    font-weight: 500;
+    line-height: 1.5;
 }
 
 .mdH1 {
-    font-size: 18px;
+    font-size: 17px;
 }
 
 .mdH2 {
-    font-size: 16px;
+    font-size: 15.5px;
 }
 
 .mdH3 {
-    font-size: 14px;
+    font-size: 14.5px;
 }
 
 .mdList {
-    margin: 0 0 8px;
+    margin: 0 0 10px;
     padding-left: 20px;
 }
 
 .mdList li {
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+}
+
+.mdList li:last-child {
+    margin-bottom: 0;
 }
 
 .mdQuote {
-    margin: 0 0 8px;
+    margin: 0 0 10px;
     padding: 2px 0 2px 12px;
-    border-left: 2px solid var(--border-l3);
+    border-left: 3px solid var(--border-l2);
     color: var(--text-2);
 }
 
 .mdHr {
-    margin: 12px 0;
+    margin: 16px 0;
     border: 0;
     border-top: 1px solid var(--border-l1);
 }
 
 .mdCode {
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--bg-layer2);
-    color: var(--accent);
+    padding: 2px 5px;
+    border-radius: 5px;
+    background: var(--bg-layer1);
+    color: var(--text-1);
     font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
     font-size: 12px;
 }
 
 .mdPre {
-    margin: 0 0 8px;
-    padding: 10px 12px;
+    margin: 0 0 10px;
+    padding: 12px;
     overflow-x: auto;
     border: 1px solid var(--border-l1);
-    border-radius: 8px;
-    background: var(--bg-layer1);
+    border-radius: 10px;
+    background: var(--bg-soft);
     color: var(--text-1);
     font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
     font-size: 12px;
-    line-height: 18px;
+    line-height: 19px;
     white-space: pre;
 }
 
@@ -1605,14 +1703,15 @@
 
 .mdTable {
     width: 100%;
-    margin: 0 0 8px;
+    margin: 0 0 10px;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 12.5px;
+    line-height: 18px;
 }
 
 .mdTable th,
 .mdTable td {
-    padding: 4px 8px;
+    padding: 5px 8px;
     border: 1px solid var(--border-l1);
     text-align: left;
 }
@@ -1620,37 +1719,55 @@
 .mdTable th {
     background: var(--bg-layer1);
     color: var(--text-2);
-    font-weight: 600;
+    font-weight: 500;
 }
 
 /* ---------------------------------------------------------------- 输入区
  *
- * 学 ZCode 的 InputPane：**一个描边的圆角盒子**，聚焦时边框换成强调色（`:focus-within`）；
- * 模型、用量、发送收在盒子里，状态那行挂在盒子**外面**下方 —— 状态一变不会把输入框顶上去。
+ * 学 ZCode 的 InputPane：**一个描边的圆角盒子**，聚焦时边框换成强调色 + 一圈很淡的
+ * focus ring；模型、用量、发送收在盒子里，状态那行挂在盒子**外面**下方 ——
+ * 状态一变不会把输入框顶上去。
  */
 
 .composer {
     flex: 0 0 auto;
-    padding: 8px 10px 6px;
+    padding: 10px 14px 8px;
     border-top: 1px solid var(--border-l1);
-    background: var(--bg-layer1);
+    background: var(--bg-base);
+}
+
+/* 全屏形态：内容排成一条阅读栏（正文一行拉满 1900px 没法读）。
+   转录区用 max-width 收窄（滚动条就贴在栏边上），底栏用等宽内边距把内容推进栏里、
+   底色和上边框照样铺满。 */
+.panelFull .transcript {
+    width: 100%;
+    max-width: 808px;
+    margin: 0 auto;
+}
+
+.panelFull .composer {
+    padding-left: max(14px, calc(50% - 390px));
+    padding-right: max(14px, calc(50% - 390px));
 }
 
 .inputBox {
-    border: 1px solid var(--border-l2);
-    border-radius: 8px;
+    border: 1px solid var(--border-l1);
+    border-radius: 16px;
     background: var(--bg-base);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .inputBox:focus-within {
     border-color: var(--accent-solid);
+    box-shadow: 0 0 0 2px var(--ring);
 }
 
 .input {
     display: block;
     width: 100%;
-    height: 56px;
-    padding: 8px 10px 0;
+    height: 60px;
+    padding: 11px 12px 0;
     border: none;
     outline: none;
     resize: none;
@@ -1659,7 +1776,7 @@
     color: var(--text-1);
     font-family: inherit;
     font-size: 14px;
-    line-height: 21px;
+    line-height: 22px;
 }
 
 .input::placeholder {
@@ -1667,11 +1784,12 @@
 }
 
 .statusBar {
-    padding: 4px 2px 0;
+    min-height: 18px;
+    padding: 6px 2px 0;
     overflow: hidden;
     color: var(--text-3);
-    font-size: 11px;
-    line-height: 16px;
+    font-size: 12px;
+    line-height: 18px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -1683,30 +1801,32 @@
 .bar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 2px 6px 6px;
+    gap: 8px;
+    padding: 2px 8px 8px;
     white-space: nowrap;
 }
 
 .modelBtn {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
     flex: 1 1 auto;
     min-width: 0;
-    height: 22px;
-    padding: 0 4px;
+    height: 28px;
+    padding: 0 7px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 7px;
     background: transparent;
-    color: var(--text-3);
+    color: var(--text-2);
     font-family: inherit;
-    font-size: 12px;
+    font-size: 13px;
+    line-height: 20px;
     cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
 }
 
 .modelBtn:hover {
-    background: var(--bg-layer2);
+    background: var(--bg-layer1);
     color: var(--text-1);
 }
 
@@ -1717,66 +1837,190 @@
     white-space: nowrap;
 }
 
-.ctx {
+/* 上下文占用：一个 14px 的环 + 百分比（学 dsh 的 ContextMeter）——
+   比一行 `12.3K (6%)` 更容易一眼看出「还剩多少」，数字留给点开的面板。
+   环里两段圆都是 2px 描边：底环用弱边框色，进度环用强调色。 */
+.ctxWrap {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
     flex: 0 0 auto;
+}
+
+.ctxBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
     color: var(--text-3);
-    font-size: 11px;
+    font-family: inherit;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.ctxBtn:hover,
+.ctxBtn[aria-expanded='true'] {
+    background: var(--bg-layer1);
+    color: var(--text-2);
 }
 
 .ctxWarn {
     color: var(--warning);
 }
 
-/* 上下文用量的悬停浮层（学 ZCode 的展开）：默认藏着，hover 才出来。
-   锚在用量旁边、弹到输入盒上方；pointer-events:none 免得浮层自己把 hover 顶掉 */
-.ctxWrap {
-    position: relative;
+.ctxRing {
     flex: 0 0 auto;
 }
 
-.ctxPop {
-    display: none;
+.ctxRingTrack {
+    fill: none;
+    stroke: var(--border-l2);
+    stroke-width: 2;
+}
+
+.ctxRingFill {
+    fill: none;
+    stroke: var(--accent-solid);
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.ctxWarn .ctxRingFill {
+    stroke: var(--warning);
+}
+
+/* 点面板以外收起；面板本身在它上面（z-index 30） */
+.ctxBackdrop {
+    position: fixed;
+    z-index: 1;
+    inset: 0;
+}
+
+.ctxPanel {
     position: absolute;
     right: 0;
-    bottom: calc(100% + 8px);
+    bottom: calc(100% + 10px);
     z-index: 30;
+    box-sizing: border-box;
+    display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 8px 10px;
-    border: 1px solid var(--border-l2);
-    border-radius: 8px;
-    background: var(--bg-layer1);
-    box-shadow: 0 4px 16px rgba(16, 24, 40, 0.16);
-    white-space: nowrap;
-    pointer-events: none;
+    width: 248px;
+    max-width: calc(100vw - 24px);
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--bg-base);
+    box-shadow: 0 0 0 0.5px var(--border-l1), 0 12px 32px rgba(16, 24, 40, 0.16);
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 18px;
+    white-space: normal;
+    text-align: left;
     cursor: default;
 }
 
-.ctxWrap:hover .ctxPop {
+.aiDark .modelMenu,
+.aiDark .ctxPanel {
+    background: var(--bg-layer1);
+    box-shadow: 0 0 0 0.5px var(--border-l2), 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.ctxPanelHead {
     display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.ctxPopTitle {
+.ctxPanelTitle {
+    font-weight: 500;
     color: var(--text-2);
-    font-size: 11px;
-    font-weight: 600;
 }
 
-.ctxPopRow {
+.ctxPanelFigures {
+    margin-left: auto;
+    color: var(--text-1);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.ctxBar {
+    display: block;
+    height: 4px;
+    margin: 10px 0;
+    border-radius: 999px;
+    background: var(--bg-layer2);
+    overflow: hidden;
+}
+
+.ctxBarFill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent-solid);
+}
+
+.ctxPanelRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 2px 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.ctxPanelRow > span:last-child {
+    color: var(--text-1);
+    font-weight: 500;
+}
+
+.ctxPanelFoot {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-l1);
+}
+
+.ctxPanelFootTitle {
     color: var(--text-3);
     font-size: 11px;
     line-height: 16px;
 }
 
+.ctxPanelLine {
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 模型名后面那个下箭头：chevron 图标本身朝右，转 90° 当展开箭头；打开时翻上去 */
+.modelCaret {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--text-3);
+    transform: rotate(90deg);
+    transition: transform 0.12s ease;
+}
+
+.modelCaretOpen {
+    transform: rotate(-90deg);
+}
+
 /* 输入区那行模型名后面的档位小标（模型 + 思考强度一眼都看得见） */
 .effortBadge {
     flex: 0 0 auto;
-    padding: 0 4px;
-    border-radius: 4px;
-    background: var(--bg-layer2);
+    padding: 0 5px;
+    border-radius: 5px;
+    background: var(--bg-layer1);
     color: var(--text-2);
-    font-size: 10px;
-    line-height: 15px;
+    font-size: 10.5px;
+    line-height: 16px;
 }
 
 /* ------------------------------------------------- 模型 / 思考强度快捷面板
@@ -1789,11 +2033,12 @@
     z-index: 2;
     max-height: 44vh;
     margin-bottom: 8px;
+    padding: 4px;
     overflow-y: auto;
-    border: 1px solid var(--border-l2);
-    border-radius: 8px;
+    border: 0;
+    border-radius: 12px;
     background: var(--bg-base);
-    box-shadow: var(--shadow-float);
+    box-shadow: 0 0 0 0.5px var(--border-l1), 0 12px 32px rgba(16, 24, 40, 0.16);
 }
 
 /* 透明遮罩：点面板以外任何地方都收起（只有面板打开时才渲染） */
@@ -1807,10 +2052,10 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 4px 4px 10px;
-    border-bottom: 1px solid var(--border-l1);
+    height: 30px;
+    padding: 0 2px 0 8px;
     color: var(--text-3);
-    font-size: 11px;
+    font-size: 11.5px;
     line-height: 16px;
     white-space: nowrap;
 }
@@ -1825,26 +2070,29 @@
 .modelMenuSearch {
     display: block;
     box-sizing: border-box;
-    width: calc(100% - 16px);
-    height: 26px;
-    margin: 8px;
-    padding: 0 8px;
-    border: 1px solid var(--border-l1);
+    width: 100%;
+    height: 30px;
+    margin: 0 0 4px;
+    padding: 0 7px;
+    border: 0;
     border-radius: 6px;
-    background: var(--bg-layer1);
+    background: transparent;
     color: var(--text-1);
     font-family: inherit;
-    font-size: 12px;
+    font-size: 12.5px;
+}
+
+.modelMenuSearch::placeholder {
+    color: var(--text-3);
 }
 
 .modelMenuSearch:focus {
     outline: none;
-    border-color: var(--accent-solid);
-    background: var(--bg-base);
+    background: var(--bg-layer1);
 }
 
 .modelMenuList {
-    max-height: min(208px, 26vh);
+    max-height: min(240px, 30vh);
     overflow-y: auto;
 }
 
@@ -1854,11 +2102,12 @@
     align-items: center;
     gap: 6px;
     width: 100%;
-    padding: 5px 8px;
+    height: 28px;
+    padding: 0 7px;
     border: 0;
-    border-radius: 4px;
-    background: var(--bg-layer1);
-    color: var(--text-2);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-3);
     font-family: inherit;
     font-size: 12px;
     line-height: 18px;
@@ -1868,7 +2117,7 @@
 }
 
 .modelGroup:hover {
-    background: var(--bg-layer2);
+    background: var(--bg-layer1);
 }
 
 .modelGroupChevron {
@@ -1885,7 +2134,7 @@
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
-    font-weight: 600;
+    font-weight: 500;
     text-overflow: ellipsis;
 }
 
@@ -1897,27 +2146,44 @@
 
 /* 思考档位：一排小片，点一下就生效（跟 ZCode 的 effort 控件一样不用再确认） */
 .modelMenuEffort {
-    padding: 8px 10px;
+    padding: 8px;
     border-top: 1px solid var(--border-l1);
 }
 
 .efforts {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 6px;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+/* 思考强度：左边是分区名，右边跟着当前值（学 ZCode 的 ComposerEffortHeading，
+   不进菜单也知道现在是哪一档） */
+.modelMenuEffortTitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.modelMenuEffortValue {
+    color: var(--text-2);
+    font-weight: 500;
 }
 
 .effort {
-    height: 22px;
-    padding: 0 8px;
+    height: 26px;
+    padding: 0 9px;
     border: 1px solid var(--border-l1);
-    border-radius: 11px;
+    border-radius: 7px;
     background: transparent;
     color: var(--text-2);
     font-family: inherit;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
 .effort:hover {
@@ -1926,58 +2192,66 @@
 }
 
 .effortOn {
-    border-color: var(--accent-solid);
-    background: var(--bg-user);
+    border-color: transparent;
+    background: var(--accent-soft);
     color: var(--accent);
 }
 
 .modelMenuNote {
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--border-l1);
+    margin: 2px 0 4px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    background: rgba(181, 71, 8, 0.06);
     color: var(--warning);
-    font-size: 11px;
-    line-height: 16px;
+    font-size: 11.5px;
+    line-height: 17px;
     white-space: normal;
+}
+
+.aiDark .modelMenuNote {
+    background: rgba(240, 164, 74, 0.12);
 }
 
 .modelMenuMore {
     display: block;
     width: 100%;
-    height: 28px;
+    height: 30px;
     border: 0;
     border-top: 1px solid var(--border-l1);
-    border-radius: 0 0 7px 7px;
+    border-radius: 0 0 8px 8px;
     background: transparent;
     color: var(--text-3);
     font-family: inherit;
-    font-size: 11px;
+    font-size: 11.5px;
     cursor: pointer;
 }
 
 .modelMenuMore:hover {
-    background: var(--bg-layer2);
+    background: var(--bg-layer1);
     color: var(--accent);
 }
 
-/* 发送 / 停止：**只放图标**（学 ZCode 的 composer —— 主按钮是强调色底的圆角方按钮里一支上箭头，
-   跑起来换成中性的方块，标签走 title / aria-label）。面板窄，这里省下的宽度留给左边的模型名。 */
+/* 发送 / 停止：**只放图标**（学 ZCode 的 composer —— 主按钮是强调色底的圆角方按钮里一支
+   上箭头，跑起来换成中性的方块，标签走 title / aria-label）。面板窄，这里省下的宽度留给
+   左边的模型名。 */
 .send {
     display: flex;
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     border: 0;
-    border-radius: 6px;
+    border-radius: 8px;
     background: var(--accent-solid);
     color: #fff;
     cursor: pointer;
+    transition: background 0.12s ease;
 }
 
 .send:hover:enabled {
-    filter: brightness(1.08);
+    background: var(--accent);
 }
 
 .send:disabled {
@@ -1993,7 +2267,6 @@
 }
 
 .sendStop:hover:enabled {
-    filter: none;
     background: var(--border-l1);
 }
 
@@ -2013,12 +2286,12 @@
    面板只有 ~310px 宽：所有文字都要能换行，但标签与说明各自成行，不并排挤。 */
 
 .ask {
-    margin: 0 0 10px;
-    padding: 10px;
-    border: 1px solid var(--border-l2);
+    margin: 0 0 12px;
+    padding: 12px;
+    border: 1px solid var(--border-l1);
     border-left: 3px solid var(--accent-solid);
-    border-radius: 8px;
-    background: var(--bg-layer1);
+    border-radius: 12px;
+    background: var(--bg-soft);
 }
 
 .askQ {
@@ -2043,7 +2316,7 @@
 .askText {
     color: var(--text-1);
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     line-height: 19px;
     white-space: pre-wrap;
 }
@@ -2060,9 +2333,9 @@
     align-items: flex-start;
     gap: 8px;
     width: 100%;
-    padding: 7px 8px;
+    padding: 8px 9px;
     border: 1px solid var(--border-l1);
-    border-radius: 6px;
+    border-radius: 8px;
     background: var(--bg-base);
     color: inherit;
     font: inherit;
@@ -2128,9 +2401,9 @@
     margin-top: 6px;
     width: 100%;
     box-sizing: border-box;
-    padding: 6px 8px;
+    padding: 7px 9px;
     border: 1px solid var(--border-l1);
-    border-radius: 6px;
+    border-radius: 8px;
     background: var(--bg-base);
     color: var(--text-1);
     font: inherit;
@@ -2143,9 +2416,9 @@
 
 .askSubmit {
     width: 100%;
-    padding: 7px 10px;
+    padding: 8px 10px;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     background: var(--accent-solid);
     color: #fff;
     font: inherit;
