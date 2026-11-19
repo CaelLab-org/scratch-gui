@@ -35,11 +35,11 @@ const InvalidEmbed = () => (
         <p>
             {'If you are seeing this page even though you aren\'t embedding anything, let us know on '}
             <a
-                href="https://forum.xmuer.online/t/problem"
+                href="https://coding.xmuer.online/topics"
                 target="_blank"
                 rel="noreferrer"
             >
-                {'scratch.mit.edu/users/GarboMuffin'}
+                {'XMUER Coding Community'}
             </a>
             {'.'}
         </p>

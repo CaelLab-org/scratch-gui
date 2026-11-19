@@ -101,82 +101,390 @@ if (AddonChannels.changeChannel) {
 
 runAddons();
 
+const IconArrowRight = () => (
+    <svg
+        aria-hidden="true"
+        className={styles.linkArrow}
+        viewBox="0 0 12 12"
+    >
+        <path
+            d="M2.5 6h7M6.6 2.9 9.7 6l-3.1 3.1"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.4"
+        />
+    </svg>
+);
+
+const IconLink = ({className}) => (
+    <svg
+        aria-hidden="true"
+        className={className}
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+        viewBox="0 0 20 20"
+    >
+        <path d="M8.4 11.6 11.6 8.4" />
+        <path d="M9.7 6.7l1.3-1.3a2.9 2.9 0 0 1 4.1 4.1l-1.3 1.3" />
+        <path d="M10.3 13.3l-1.3 1.3a2.9 2.9 0 0 1-4.1-4.1l1.3-1.3" />
+    </svg>
+);
+
+IconLink.propTypes = {
+    className: PropTypes.string
+};
+
+const IconChevron = ({open}) => (
+    <svg
+        aria-hidden="true"
+        className={classNames(styles.openChevron, {
+            [styles.openChevronOpen]: open
+        })}
+        viewBox="0 0 12 12"
+    >
+        <path
+            d="M2.5 4.5 6 8l3.5-3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.4"
+        />
+    </svg>
+);
+
+IconChevron.propTypes = {
+    open: PropTypes.bool
+};
+
+const MockFlag = () => (
+    <svg
+        aria-hidden="true"
+        viewBox="0 0 12 12"
+    >
+        <path
+            d="M2.2 1.4v9.2"
+            stroke="#7a5b00"
+            strokeLinecap="round"
+            strokeWidth="1.1"
+        />
+        <path
+            d="M2.2 1.8h7.1L7.8 4.1l1.5 2.3H2.2z"
+            fill="#45993d"
+        />
+    </svg>
+);
+
+const MockStop = () => (
+    <svg
+        aria-hidden="true"
+        viewBox="0 0 12 12"
+    >
+        <path
+            d="M3.9 1.2h4.2l2.7 2.7v4.2l-2.7 2.7H3.9L1.2 8.1V3.9z"
+            fill="#ec5959"
+        />
+    </svg>
+);
+
+const IconTerminal = () => (
+    <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+    >
+        <rect
+            fill="none"
+            height="11.5"
+            rx="2"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            width="14.5"
+            x="2.75"
+            y="4.25"
+        />
+        <path
+            d="M6.5 8.3 8.7 10l-2.2 1.7M10.8 12h2.9"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.5"
+        />
+    </svg>
+);
+
+const IconBolt = () => (
+    <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+    >
+        <path
+            d="M10.9 2.4 4.9 11.1h4.2l-1 6.5 6.2-8.7h-4.3z"
+            fill="none"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="1.5"
+        />
+    </svg>
+);
+
+const IconAddons = () => (
+    <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+    >
+        <rect
+            fill="none"
+            height="5.6"
+            rx="1.4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            width="5.6"
+            x="3"
+            y="3"
+        />
+        <rect
+            fill="none"
+            height="5.6"
+            rx="1.4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            width="5.6"
+            x="11.4"
+            y="3"
+        />
+        <rect
+            fill="none"
+            height="5.6"
+            rx="1.4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            width="5.6"
+            x="3"
+            y="11.4"
+        />
+        <rect
+            fill="none"
+            height="5.6"
+            rx="1.4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            width="5.6"
+            x="11.4"
+            y="11.4"
+        />
+    </svg>
+);
+
+const IconDesktop = () => (
+    <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+    >
+        <rect
+            fill="none"
+            height="10"
+            rx="1.8"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            width="14.5"
+            x="2.75"
+            y="3.75"
+        />
+        <path
+            d="M10 13.75V16.5M7.6 16.5h4.8"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.5"
+        />
+    </svg>
+);
+
+const HomeMock = () => (
+    <div
+        aria-hidden="true"
+        className={styles.mock}
+    >
+        <div className={styles.mockBar}>
+            <img
+                alt=""
+                className={styles.mockMark}
+                src={xceLogo}
+            />
+            <span className={styles.mockLabel}>
+                <FormattedMessage
+                    defaultMessage="Example project"
+                    description="Label on the editor preview on the homepage"
+                    id="tw.home.mock.label"
+                />
+            </span>
+        </div>
+        <div className={styles.mockBody}>
+            <div className={styles.mockScript}>
+                <div className={classNames(styles.mockBlock, styles.mockBlockHat)}>
+                    <MockFlag />
+                    <FormattedMessage
+                        defaultMessage="when green flag clicked"
+                        description="Example block in homepage preview"
+                        id="tw.home.mock.hat"
+                    />
+                </div>
+                <div className={classNames(styles.mockBlock, styles.mockBlockControl)}>
+                    <FormattedMessage
+                        defaultMessage="repeat 10"
+                        description="Example block in homepage preview"
+                        id="tw.home.mock.loop"
+                    />
+                </div>
+                <div
+                    className={classNames(
+                        styles.mockBlock,
+                        styles.mockBlockMotion,
+                        styles.mockBlockNested
+                    )}
+                >
+                    <FormattedMessage
+                        defaultMessage="move 10 steps"
+                        description="Example block in homepage preview"
+                        id="tw.home.mock.move"
+                    />
+                </div>
+                <div className={classNames(styles.mockBlock, styles.mockBlockLooks)}>
+                    <FormattedMessage
+                        defaultMessage="say Hello!"
+                        description="Example block in homepage preview"
+                        id="tw.home.mock.say"
+                    />
+                </div>
+            </div>
+            <div className={styles.mockStageCol}>
+                <div className={styles.mockStageTools}>
+                    <MockFlag />
+                    <MockStop />
+                </div>
+                <div className={styles.mockStage}>
+                    <div className={styles.mockScene}>
+                        <span className={styles.mockBubble}>
+                            <FormattedMessage
+                                defaultMessage="Hello!"
+                                description="Speech bubble in the homepage editor preview"
+                                id="tw.home.mock.bubble"
+                            />
+                        </span>
+                        <img
+                            alt=""
+                            className={styles.mockSprite}
+                            src={xceLogo}
+                        />
+                    </div>
+                </div>
+                <div className={styles.mockSprites}>
+                    <span className={styles.mockSpriteChip}>
+                        <img
+                            alt=""
+                            src={xceLogo}
+                        />
+                    </span>
+                    <span className={styles.mockAddSprite}>{'+'}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 const Footer = () => (
     <footer className={styles.footer}>
-        <div className={styles.footerContent}>
-            <div className={styles.footerText}>
-                <FormattedMessage
-                    // eslint-disable-next-line max-len
-                    defaultMessage="{APP_NAME} is not affiliated with Scratch, the Scratch Team, or the Scratch Foundation."
-                    description="Disclaimer that TurboWarp is not connected to Scratch"
-                    id="tw.footer.disclaimer"
-                    values={{
-                        APP_NAME
-                    }}
-                />
-            </div>
-
-            <div className={styles.footerText}>
-                <FormattedMessage
-                    // eslint-disable-next-line max-len
-                    defaultMessage="Scratch is a project of the Scratch Foundation. It is available for free at {scratchDotOrg}."
-                    description="A disclaimer that Scratch requires when referring to Scratch. {scratchDotOrg} is a link with text 'https://scratch.org/'"
-                    id="tw.footer.scratchDisclaimer"
-                    values={{
-                        scratchDotOrg: (
-                            <a
-                                href="https://scratch.org/"
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                {'https://scratch.org/'}
-                            </a>
-                        )
-                    }}
-                />
-            </div>
-
-            <div className={styles.footerColumns}>
-                <div className={styles.footerSection}>
-                    <a href={`${getCurrentLocalePrefix()}/credits`}>
-                        <FormattedMessage
-                            defaultMessage="Credits"
-                            description="Credits link in footer"
-                            id="tw.footer.credits"
-                        />
-                    </a>
+        <div className={styles.footerInner}>
+            <div className={styles.footerAbout}>
+                <div className={styles.footerBrand}>
+                    <img
+                        alt=""
+                        className={styles.footerMark}
+                        src={xceLogo}
+                    />
+                    <span>{APP_NAME}</span>
                 </div>
-                <div className={styles.footerSection}>
-                    <a href="/xce-agent/">{'XCE Agent'}</a>
-                    <a href="/desktop/">{'XCE Desktop'}</a>
-                    <a href="https://packager.xmuer.online/">{'XMUER Coding Packager'}</a>
-                    <a href="https://coding.xmuer.online/">{'XMUER Coding Community'}</a>
-                </div>
-                <div className={styles.footerSection}>
-                    <a href="https://forum.xmuer.online/t/problem" target="_blank" rel="noreferrer">
-                        <FormattedMessage
-                            defaultMessage="Feedback & Bugs"
-                            description="Footer link to feedback/bug report"
-                            id="tw.footer.feedback"
-                        />
-                    </a>
-                    <a href="https://github.com/CaelLab-org/scratch-gui" target="_blank" rel="noreferrer">
-                        <FormattedMessage
-                            defaultMessage="Source Code"
-                            description="Footer link to source code"
-                            id="tw.footer.sourceCode"
-                        />
-                    </a>
-                    <a href="privacy.html">
-                        <FormattedMessage
-                            defaultMessage="Privacy Policy"
-                            description="Footer link to privacy policy"
-                            id="tw.footer.privacy"
-                        />
-                    </a>
-                </div>
+                <p className={styles.footerText}>
+                    <FormattedMessage
+                        // eslint-disable-next-line max-len
+                        defaultMessage="{APP_NAME} is not affiliated with Scratch, the Scratch Team, or the Scratch Foundation."
+                        description="Disclaimer that TurboWarp is not connected to Scratch"
+                        id="tw.footer.disclaimer"
+                        values={{
+                            APP_NAME
+                        }}
+                    />
+                </p>
+                <p className={styles.footerText}>
+                    <FormattedMessage
+                        // eslint-disable-next-line max-len
+                        defaultMessage="Scratch is a project of the Scratch Foundation. It is available for free at {scratchDotOrg}."
+                        description="A disclaimer that Scratch requires when referring to Scratch. {scratchDotOrg} is a link with text 'https://scratch.org/'"
+                        id="tw.footer.scratchDisclaimer"
+                        values={{
+                            scratchDotOrg: (
+                                <a
+                                    href="https://scratch.org/"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    {'https://scratch.org/'}
+                                </a>
+                            )
+                        }}
+                    />
+                </p>
             </div>
-            <div className={styles.footerText}>
+            <nav className={styles.footerNav}>
+                <a href={`${getCurrentLocalePrefix()}/credits`}>
+                    <FormattedMessage
+                        defaultMessage="Credits"
+                        description="Credits link in footer"
+                        id="tw.footer.credits"
+                    />
+                </a>
+                <a href="/xce-agent/">{'XCE Agent'}</a>
+                <a href="/desktop/">{'XCE Desktop'}</a>
+                <a href="https://packager.xmuer.online/">{'XMUER Coding Packager'}</a>
+                <a href="https://coding.xmuer.online/">{'XMUER Coding Community'}</a>
+                <a
+                    href="https://coding.xmuer.online/topics"
+                    rel="noreferrer"
+                    target="_blank"
+                >
+                    <FormattedMessage
+                        defaultMessage="Feedback & Bugs"
+                        description="Footer link to feedback/bug report"
+                        id="tw.footer.feedback"
+                    />
+                </a>
+                <a
+                    href="https://github.com/CaelLab-org/scratch-gui"
+                    rel="noreferrer"
+                    target="_blank"
+                >
+                    <FormattedMessage
+                        defaultMessage="Source Code"
+                        description="Footer link to source code"
+                        id="tw.footer.sourceCode"
+                    />
+                </a>
+                <a href="privacy.html">
+                    <FormattedMessage
+                        defaultMessage="Privacy Policy"
+                        description="Footer link to privacy policy"
+                        id="tw.footer.privacy"
+                    />
+                </a>
+            </nav>
+        </div>
+        <div className={styles.footerMeta}>
+            <span>
                 <FormattedMessage
                     // eslint-disable-next-line max-len
                     defaultMessage="XCE would not be possible without the {turbowarp} open source project."
@@ -184,15 +492,18 @@ const Footer = () => (
                     id="tw.footer.turbowarpCredit"
                     values={{
                         turbowarp: (
-                            <a href="https://turbowarp.org/" target="_blank" rel="noreferrer">
+                            <a
+                                href="https://turbowarp.org/"
+                                rel="noreferrer"
+                                target="_blank"
+                            >
                                 {'TurboWarp'}
                             </a>
                         )
                     }}
                 />
-            </div>
-
-            <div className={styles.footerText}>
+            </span>
+            <span>
                 <FormattedMessage
                     // eslint-disable-next-line max-len
                     defaultMessage="{APP_NAME} is an open source project by {caelab}."
@@ -201,13 +512,17 @@ const Footer = () => (
                     values={{
                         APP_NAME,
                         caelab: (
-                            <a href="https://www.caellab.com/" target="_blank" rel="noreferrer">
+                            <a
+                                href="https://www.caellab.com/"
+                                rel="noreferrer"
+                                target="_blank"
+                            >
                                 {'CaelLab'}
                             </a>
                         )
                     }}
                 />
-            </div>
+            </span>
         </div>
     </footer>
 );
@@ -215,12 +530,28 @@ const Footer = () => (
 class Interface extends React.Component {
     constructor (props) {
         super(props);
+        this.state = {
+            projectInputOpen: false
+        };
+        this.openPanelRef = React.createRef();
+        this.handleToggleProjectInput = this.handleToggleProjectInput.bind(this);
         this.handleUpdateProjectTitle = this.handleUpdateProjectTitle.bind(this);
     }
-    componentDidUpdate (prevProps) {
+    componentDidUpdate (prevProps, prevState) {
         if (prevProps.isLoading && !this.props.isLoading) {
             loadServiceWorker();
         }
+        if (!prevState.projectInputOpen && this.state.projectInputOpen && this.openPanelRef.current) {
+            const input = this.openPanelRef.current.querySelector('input');
+            if (input) {
+                input.focus();
+            }
+        }
+    }
+    handleToggleProjectInput () {
+        this.setState(prevState => ({
+            projectInputOpen: !prevState.projectInputOpen
+        }));
     }
     handleUpdateProjectTitle (title, isDefault) {
         if (isDefault || !title) {
@@ -315,159 +646,247 @@ class Interface extends React.Component {
                             {isBrowserSupported() ? null : (
                                 <BrowserModal isRtl={isRtl} />
                             )}
-                            {/* Hero Section */}
-                            <div className={styles.heroSection}>
-                                <img
-                                    src={xceLogo}
-                                    alt="XMUER Coding Engine"
-                                    className={styles.heroLogo}
-                                />
-                                <h1 className={styles.heroTitle}>{APP_NAME}</h1>
-                                <p className={styles.heroSubtitle}>
-                                    <FormattedMessage
-                                        defaultMessage="An online block coding editor from CaelLab, with a built-in AI agent (XCE Agent) that writes and edits blocks for you. Projects compile to JavaScript and run faster."
-                                        description="Hero subtitle on homepage"
-                                        id="tw.hero.subtitle"
-                                    />
-                                </p>
-                            </div>
+                            <div className={styles.home}>
+                                <section className={styles.hero}>
+                                    <div className={styles.heroCopy}>
+                                        <div className={styles.eyebrow}>
+                                            <img
+                                                alt=""
+                                                className={styles.eyebrowLogo}
+                                                src={xceLogo}
+                                            />
+                                            <FormattedMessage
+                                                defaultMessage="CaelLab"
+                                                description="Brand line on the homepage"
+                                                id="tw.home.eyebrow"
+                                            />
+                                        </div>
+                                        <h1 className={styles.heroTitle}>{APP_NAME}</h1>
+                                        <p className={styles.heroLead}>
+                                            <FormattedMessage
+                                                // eslint-disable-next-line max-len
+                                                defaultMessage="An online block coding editor built on Scratch. Its XCE Agent reads your project, writes blocks, and edits costumes when you describe what should change."
+                                                description="Lead paragraph on homepage"
+                                                id="tw.home.lead"
+                                            />
+                                        </p>
 
-                            {/* Input Section */}
-                            <div className={styles.inputSection}>
-                                <div className={styles.inputCard}>
-                                    <span className={styles.inputLabel}>
-                                        <FormattedMessage
-                                            defaultMessage="Enter a Scratch project ID or URL to get started"
-                                            description="Label above project input"
-                                            id="tw.input.label"
-                                        />
-                                    </span>
-                                    <div className={styles.inputWrapper}>
-                                        <ProjectInput />
-                                    </div>
-                                </div>
-                            </div>
+                                        <div className={styles.openProject}>
+                                            <button
+                                                aria-expanded={this.state.projectInputOpen}
+                                                className={styles.openToggle}
+                                                type="button"
+                                                onClick={this.handleToggleProjectInput}
+                                            >
+                                                <IconLink className={styles.toggleIcon} />
+                                                <FormattedMessage
+                                                    defaultMessage="Open a project from Scratch"
+                                                    // eslint-disable-next-line max-len
+                                                    description="Expandable control to open a Scratch project by ID or link"
+                                                    id="tw.home.openProject"
+                                                />
+                                                <IconChevron open={this.state.projectInputOpen} />
+                                            </button>
+                                            {this.state.projectInputOpen ? (
+                                                <div
+                                                    className={styles.openPanel}
+                                                    ref={this.openPanelRef}
+                                                >
+                                                    <div className={styles.openField}>
+                                                        <IconLink className={styles.fieldIcon} />
+                                                        <ProjectInput />
+                                                    </div>
+                                                    <p className={styles.openHint}>
+                                                        <FormattedMessage
+                                                            // eslint-disable-next-line max-len
+                                                            defaultMessage="Paste a Scratch project ID or link, then press Enter."
+                                                            description="Hint under the project input on homepage"
+                                                            id="tw.home.projectHint"
+                                                        />
+                                                    </p>
+                                                </div>
+                                            ) : null}
+                                        </div>
 
-                            {(
-                                // eslint-disable-next-line max-len
-                                description.instructions === 'unshared' || description.credits === 'unshared'
-                            ) && (
-                                <div className={classNames(styles.infobox, styles.unsharedUpdate)}>
-                                    <p>
-                                        <FormattedMessage
-                                            defaultMessage="Unshared projects are no longer visible."
-                                            description="Appears on unshared projects"
-                                            id="tw.unshared2.1"
-                                        />
-                                    </p>
-                                    <p>
-                                        <FormattedMessage
-                                            defaultMessage="For more information, visit: {link}"
-                                            description="Appears on unshared projects"
-                                            id="tw.unshared.2"
-                                            values={{
-                                                link: (
-                                                    <a
-                                                        href="https://docs.turbowarp.org/unshared-projects"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                    >
-                                                        {'https://docs.turbowarp.org/unshared-projects'}
-                                                    </a>
-                                                )
-                                            }}
-                                        />
-                                    </p>
-                                    <p>
-                                        <FormattedMessage
-                                            // eslint-disable-next-line max-len
-                                            defaultMessage="If the project was shared recently, this message may appear incorrectly for a few minutes."
-                                            description="Appears on unshared projects"
-                                            id="tw.unshared.cache"
-                                        />
-                                    </p>
-                                    <p>
-                                        <FormattedMessage
-                                            // eslint-disable-next-line max-len
-                                            defaultMessage="If this project is actually shared, please report a bug."
-                                            description="Appears on unshared projects"
-                                            id="tw.unshared.bug"
-                                        />
-                                    </p>
-                                </div>
-                            )}
-                            {hasCloudVariables && projectId !== '0' && (
-                                <div className={styles.section}>
-                                    <CloudVariableBadge />
-                                </div>
-                            )}
-                            {description.instructions || description.credits ? (
-                                <div className={styles.section}>
-                                    <Description
-                                        instructions={description.instructions}
-                                        credits={description.credits}
-                                        projectId={projectId}
-                                    />
-                                </div>
-                            ) : null}
+                                        <div className={styles.heroLinks}>
+                                            <a href="/xce-agent/">
+                                                <FormattedMessage
+                                                    defaultMessage="XCE Agent guide"
+                                                    description="Link to the XCE Agent guide"
+                                                    id="tw.home.agentGuide"
+                                                />
+                                                <IconArrowRight />
+                                            </a>
+                                            <a href="/desktop/">
+                                                <FormattedMessage
+                                                    defaultMessage="Desktop app"
+                                                    description="Link to the desktop app download page"
+                                                    id="tw.home.desktopLink"
+                                                />
+                                                <IconArrowRight />
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <HomeMock />
+                                </section>
 
-                            {/* Features Section */}
-                            <div className={styles.featuresSection}>
-                                <a
-                                    className={styles.featureCard}
-                                    href="/xce-agent/"
-                                >
-                                    <div className={styles.featureIcon}>{'\uD83E\uDD16'}</div>
-                                    <div className={styles.featureTitle}>
-                                        <FormattedMessage
-                                            defaultMessage="XCE Agent"
-                                            description="Feature card title"
-                                            id="tw.feature.ai"
+                                {(
+                                    // eslint-disable-next-line max-len
+                                    description.instructions === 'unshared' || description.credits === 'unshared'
+                                ) && (
+                                    <div className={styles.section}>
+                                        <div className={classNames(styles.infobox, styles.unsharedUpdate)}>
+                                            <p>
+                                                <FormattedMessage
+                                                    defaultMessage="Unshared projects are no longer visible."
+                                                    description="Appears on unshared projects"
+                                                    id="tw.unshared2.1"
+                                                />
+                                            </p>
+                                            <p>
+                                                <FormattedMessage
+                                                    defaultMessage="For more information, visit: {link}"
+                                                    description="Appears on unshared projects"
+                                                    id="tw.unshared.2"
+                                                    values={{
+                                                        link: (
+                                                            <a
+                                                                href="https://docs.turbowarp.org/unshared-projects"
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                            >
+                                                                {'https://docs.turbowarp.org/unshared-projects'}
+                                                            </a>
+                                                        )
+                                                    }}
+                                                />
+                                            </p>
+                                            <p>
+                                                <FormattedMessage
+                                                    // eslint-disable-next-line max-len
+                                                    defaultMessage="If the project was shared recently, this message may appear incorrectly for a few minutes."
+                                                    description="Appears on unshared projects"
+                                                    id="tw.unshared.cache"
+                                                />
+                                            </p>
+                                            <p>
+                                                <FormattedMessage
+                                                    // eslint-disable-next-line max-len
+                                                    defaultMessage="If this project is actually shared, please report a bug."
+                                                    description="Appears on unshared projects"
+                                                    id="tw.unshared.bug"
+                                                />
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                                {hasCloudVariables && projectId !== '0' && (
+                                    <div className={styles.section}>
+                                        <CloudVariableBadge />
+                                    </div>
+                                )}
+                                {description.instructions || description.credits ? (
+                                    <div className={styles.section}>
+                                        <Description
+                                            instructions={description.instructions}
+                                            credits={description.credits}
+                                            projectId={projectId}
                                         />
                                     </div>
-                                    <div className={styles.featureDesc}>
-                                        {/* eslint-disable-next-line max-len */}
+                                ) : null}
+
+                                <section className={styles.editorSection}>
+                                    <h2 className={styles.sectionTitle}>
                                         <FormattedMessage
-                                            defaultMessage="Chat with XCE Agent and it makes the change for you — writing blocks, drawing costumes, reading your project — not just handing out advice."
-                                            description="Feature card description"
-                                            id="tw.feature.ai.desc"
+                                            defaultMessage="Inside the editor"
+                                            description="Heading of the feature list on homepage"
+                                            id="tw.home.sectionEditor"
                                         />
+                                    </h2>
+                                    <div className={styles.featureGrid}>
+                                        <div className={styles.feature}>
+                                            <div className={styles.featureHead}>
+                                                <span className={styles.featureIcon}>
+                                                    <IconTerminal />
+                                                </span>
+                                                <h3 className={styles.featureTitle}>{'XCE Agent'}</h3>
+                                            </div>
+                                            <p className={styles.featureDesc}>
+                                                <FormattedMessage
+                                                    // eslint-disable-next-line max-len
+                                                    defaultMessage="Say what should change. It can read your scripts and costumes, add blocks, edit costumes, and run the project to check the result."
+                                                    description="XCE Agent feature description"
+                                                    id="tw.home.agent.desc"
+                                                />
+                                            </p>
+                                        </div>
+                                        <div className={styles.feature}>
+                                            <div className={styles.featureHead}>
+                                                <span className={styles.featureIcon}>
+                                                    <IconBolt />
+                                                </span>
+                                                <h3 className={styles.featureTitle}>
+                                                    <FormattedMessage
+                                                        defaultMessage="Compiled runtime"
+                                                        description="Compiled runtime feature title"
+                                                        id="tw.home.runtime.title"
+                                                    />
+                                                </h3>
+                                            </div>
+                                            <p className={styles.featureDesc}>
+                                                <FormattedMessage
+                                                    // eslint-disable-next-line max-len
+                                                    defaultMessage="Scripts compile to JavaScript while the project runs. Loops and clones see the biggest gains."
+                                                    description="Compiled runtime feature description"
+                                                    id="tw.home.runtime.desc"
+                                                />
+                                            </p>
+                                        </div>
+                                        <div className={styles.feature}>
+                                            <div className={styles.featureHead}>
+                                                <span className={styles.featureIcon}>
+                                                    <IconAddons />
+                                                </span>
+                                                <h3 className={styles.featureTitle}>
+                                                    <FormattedMessage
+                                                        defaultMessage="Addons"
+                                                        description="Addons feature title"
+                                                        id="tw.home.addons.title"
+                                                    />
+                                                </h3>
+                                            </div>
+                                            <p className={styles.featureDesc}>
+                                                <FormattedMessage
+                                                    // eslint-disable-next-line max-len
+                                                    defaultMessage="Community addons for the editor, enabled when you need them."
+                                                    description="Addons feature description"
+                                                    id="tw.home.addons.desc"
+                                                />
+                                            </p>
+                                        </div>
+                                        <div className={styles.feature}>
+                                            <div className={styles.featureHead}>
+                                                <span className={styles.featureIcon}>
+                                                    <IconDesktop />
+                                                </span>
+                                                <h3 className={styles.featureTitle}>
+                                                    <FormattedMessage
+                                                        defaultMessage="Desktop app"
+                                                        description="Desktop feature title"
+                                                        id="tw.home.desktop.title"
+                                                    />
+                                                </h3>
+                                            </div>
+                                            <p className={styles.featureDesc}>
+                                                <FormattedMessage
+                                                    defaultMessage="A Windows app that opens local projects offline."
+                                                    description="Desktop feature description"
+                                                    id="tw.home.desktop.desc"
+                                                />
+                                            </p>
+                                        </div>
                                     </div>
-                                </a>
-                                <div className={styles.featureCard}>
-                                    <div className={styles.featureIcon}>{'\u26A1'}</div>
-                                    <div className={styles.featureTitle}>
-                                        <FormattedMessage
-                                            defaultMessage="Blazing Fast"
-                                            description="Feature card title"
-                                            id="tw.feature.fast"
-                                        />
-                                    </div>
-                                    <div className={styles.featureDesc}>
-                                        <FormattedMessage
-                                            defaultMessage="Compiles Scratch projects to JavaScript for 10-100x faster execution."
-                                            description="Feature card description"
-                                            id="tw.feature.fast.desc"
-                                        />
-                                    </div>
-                                </div>
-                                <div className={styles.featureCard}>
-                                    <div className={styles.featureIcon}>{'\uD83E\uDDE9'}</div>
-                                    <div className={styles.featureTitle}>
-                                        <FormattedMessage
-                                            defaultMessage="Addons"
-                                            description="Feature card title"
-                                            id="tw.feature.addons"
-                                        />
-                                    </div>
-                                    <div className={styles.featureDesc}>
-                                        <FormattedMessage
-                                            defaultMessage="Hundreds of community addons to customize your editor experience."
-                                            description="Feature card description"
-                                            id="tw.feature.addons.desc"
-                                        />
-                                    </div>
-                                </div>
+                                </section>
                             </div>
                         </React.Fragment>
                     </div>

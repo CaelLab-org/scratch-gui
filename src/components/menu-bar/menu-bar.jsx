@@ -516,14 +516,14 @@ class MenuBar extends React.Component {
                                     place={this.props.isRtl ? 'left' : 'right'}
                                 >
                                     <MenuSection>
-                                        <MenuItemLink href="https://forum.xmuer.online/t/problem">
+                                        <MenuItemLink href="https://coding.xmuer.online/topics">
                                             <FormattedMessage
                                                 defaultMessage="Some scripts encountered errors."
                                                 description="Link in error menu"
                                                 id="tw.menuBar.reportError1"
                                             />
                                         </MenuItemLink>
-                                        <MenuItemLink href="https://forum.xmuer.online/t/problem">
+                                        <MenuItemLink href="https://coding.xmuer.online/topics">
                                             <FormattedMessage
                                                 defaultMessage="This is a bug. Please report it."
                                                 description="Link in error menu"
@@ -1015,7 +1015,7 @@ class MenuBar extends React.Component {
                     <div className={styles.menuBarItem}>
                         <a
                             className={styles.feedbackLink}
-                            href="https://forum.xmuer.online/t/problem"
+                            href="https://coding.xmuer.online/topics"
                             rel="noopener noreferrer"
                             target="_blank"
                         >
