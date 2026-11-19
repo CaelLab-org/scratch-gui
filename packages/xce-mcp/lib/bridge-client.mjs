@@ -37,14 +37,21 @@ export const cachedTools = () => {
     return info && Array.isArray(info.tools) ? info.tools : [];
 };
 
+// skill 的清单一并缓存：app 关着也能先答 prompts/list（正文要等 app 开了才读得到）
+export const cachedSkills = () => {
+    const info = readDiscovery();
+    return info && Array.isArray(info.skills) ? info.skills : [];
+};
+
 export class EditorBridge {
     constructor () {
         this.socket = null;
         this.connecting = null;
-        this.listWaiter = null;
+        this.listWaiters = new Set();
         this.seq = 0;
         this.pending = new Map();
         this.tools = [];
+        this.skills = [];
     }
 
     connect () {
@@ -93,14 +100,15 @@ export class EditorBridge {
                     clearTimeout(timer);
                     this.socket = socket;
                     this.tools = message.tools || [];
+                    this.skills = message.skills || [];
                     resolve();
                 } else if (message.type === 'tools') {
                     this.tools = message.tools || [];
-                    if (this.listWaiter) {
-                        const waiter = this.listWaiter;
-                        this.listWaiter = null;
-                        waiter(this.tools);
-                    }
+                    this.skills = message.skills || [];
+                    // tools/list 和 prompts/list 可能同时在等这一条
+                    const waiters = Array.from(this.listWaiters);
+                    this.listWaiters.clear();
+                    waiters.forEach(waiter => waiter({tools: this.tools, skills: this.skills}));
                 } else if (message.type === 'result' || message.type === 'error') {
                     const entry = this.pending.get(message.id);
                     if (!entry) {
@@ -124,31 +132,34 @@ export class EditorBridge {
                     entry.reject(new Error('The editor disconnected.'));
                 });
                 this.pending.clear();
+                // 等清单的请求别干耗到超时
+                const waiters = Array.from(this.listWaiters);
+                this.listWaiters.clear();
+                waiters.forEach(waiter => waiter({tools: cachedTools(), skills: cachedSkills()}));
             });
         });
     }
 
+    // 工具和 skill 清单一起来自编辑器；连不上就用上次缓存的
     async list () {
         try {
             await this.connect();
         } catch (error) {
-            return cachedTools();
+            return {tools: cachedTools(), skills: cachedSkills()};
         }
         return new Promise(resolve => {
-            const timer = setTimeout(() => {
-                this.listWaiter = null;
-                resolve(this.tools);
-            }, LIST_TIMEOUT_MS);
-            this.listWaiter = tools => {
+            let timer = 0;
+            const waiter = result => {
                 clearTimeout(timer);
-                resolve(tools);
+                this.listWaiters.delete(waiter);
+                resolve(result);
             };
+            timer = setTimeout(() => waiter({tools: this.tools, skills: this.skills}), LIST_TIMEOUT_MS);
+            this.listWaiters.add(waiter);
             try {
                 this.socket.send(JSON.stringify({type: 'list'}));
             } catch (error) {
-                clearTimeout(timer);
-                this.listWaiter = null;
-                resolve(cachedTools());
+                waiter({tools: cachedTools(), skills: cachedSkills()});
             }
         });
     }

@@ -220,15 +220,45 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.6.0 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.7.0 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
-                    <h2>4.6.0</h2>
+                    <h2>4.7.0</h2>
                     <span class="date">2026-11-19</span>
                     <span class="latest">最新</span>
+                </header>
+
+                <p>这一版把编辑器里的技能开放给了外部 AI：本机的 MCP 客户端能直接加载，别人写的技能也能从 .md 文件导入。</p>
+
+                <h3>外部 AI 能加载技能</h3>
+                <ul>
+                    <li>接进来的 MCP 客户端（Claude Code、ZCode、Codex 等）现在能在自己的 prompt 列表里看到编辑器里的参考文档：内置的 6 份和用户自己写的都在内。</li>
+                    <li>加载哪份就实时从编辑器读正文，技能改了不用重装客户端，也不用等新版本。</li>
+                    <li>工具清单和技能清单一并下发；应用关着时还能看到上次的清单，真正读取时才需要打开编辑器。</li>
+                    <li>多个客户端同时请求清单不会再互相等到超时；编辑器断开时，正在等的请求立刻退回缓存。</li>
+                </ul>
+
+                <h3>接入说明</h3>
+                <ul>
+                    <li>新增 <a href="/desktop/mcp/">/desktop/mcp/</a>：各客户端怎么配、技能怎么用、常见报错怎么查，都在这一页。</li>
+                    <li>配套的 <code>xce-mcp</code> 升到 1.2.0，用法不变：<code>npx -y xce-mcp</code>。</li>
+                </ul>
+
+                <h3>技能导入</h3>
+                <ul>
+                    <li>设置 → 技能新增「从 .md 导入」，可以一次选多份。</li>
+                    <li>认 <code>SKILL.md</code> 的 <code>--- name: / description: ---</code> 头；没有头就按文件名起名，中文文件名会给一个临时英文名，导入后还能点开改。</li>
+                    <li>导入的技能和内置技能一样，AI 面板和外部客户端共用；重名、数量超限、正文超长都会在导入结果里说清楚。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
+                    <h2>4.6.0</h2>
+                    <span class="date">2026-11-19</span>
                 </header>
 
                 <p>这一版重做了首页，去掉渐变和 emoji，改成白底编辑风；页面上的反馈入口也统一到了 XMUER Coding Community 的话题页。</p>

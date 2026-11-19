@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>把 AI 客户端接进编辑器 · XMUER Coding Engine Desktop</title>
+        <meta name="description" content="用 xce-mcp 把 Claude Code、ZCode、Codex 这类本机 AI 客户端接进 XMUER Coding Engine 桌面版：读写当前项目、加载技能、排查问题。">
+        <link rel="icon" href="/favicon.ico" type="image/x-icon">
+        <style>
+            :root {
+                --primary: #2b6fec;
+                --primary-hover: #1d5bd6;
+                --accent: #f08c00;
+                --bg: #f5f6f8;
+                --card: #ffffff;
+                --border: #e4e7ec;
+                --text: #101828;
+                --text-muted: #5a6472;
+                --text-faint: #98a2b3;
+                --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.06);
+            }
+
+            * { box-sizing: border-box; }
+
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+                    "Helvetica Neue", Arial, sans-serif;
+                line-height: 1.75;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            a { color: var(--primary); }
+
+            .nav {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                max-width: 960px;
+                margin: 0 auto;
+                padding: 20px 24px;
+            }
+            .nav img { width: 32px; height: 32px; }
+            .nav .name {
+                font-weight: 600;
+                color: var(--text);
+                text-decoration: none;
+                letter-spacing: 0.2px;
+            }
+            .nav .links {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                margin-left: auto;
+                font-size: 14px;
+            }
+            .nav .links a { color: var(--text-muted); text-decoration: none; }
+            .nav .links a:hover { color: var(--primary); }
+
+            main {
+                max-width: 960px;
+                margin: 0 auto;
+                padding: 8px 24px 0;
+            }
+
+            header h1 {
+                margin: 8px 0 0;
+                font-size: 30px;
+                line-height: 1.35;
+                letter-spacing: 0.2px;
+            }
+            header .lead {
+                max-width: 680px;
+                margin: 12px 0 0;
+                color: var(--text-muted);
+                font-size: 15px;
+            }
+
+            section {
+                margin-top: 36px;
+            }
+            h2 {
+                margin: 0 0 12px;
+                font-size: 19px;
+            }
+            h3 {
+                margin: 20px 0 6px;
+                font-size: 15px;
+            }
+            p, li {
+                font-size: 14px;
+                color: var(--text-muted);
+            }
+            p { margin: 8px 0; }
+            ul, ol { margin: 8px 0; padding-left: 22px; }
+            li { margin: 5px 0; }
+
+            code {
+                padding: 1px 6px;
+                border-radius: 5px;
+                background: rgba(16, 24, 40, 0.05);
+                font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+                font-size: 13px;
+                color: var(--text);
+            }
+            pre {
+                margin: 10px 0;
+                padding: 14px 16px;
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                background: var(--card);
+                overflow-x: auto;
+                line-height: 1.6;
+            }
+            pre code {
+                padding: 0;
+                background: none;
+                font-size: 13px;
+                color: var(--text);
+            }
+
+            .card {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 18px 22px;
+                box-shadow: var(--shadow);
+            }
+            .card + .card { margin-top: 12px; }
+            .card h3 { margin-top: 0; }
+
+            .note {
+                margin-top: 28px;
+                padding: 14px 18px;
+                border: 1px solid var(--border);
+                border-left: 3px solid var(--primary);
+                border-radius: 8px;
+                background: var(--card);
+                font-size: 13px;
+                color: var(--text-muted);
+            }
+
+            table {
+                width: 100%;
+                margin-top: 10px;
+                border-collapse: collapse;
+                font-size: 13.5px;
+            }
+            th, td {
+                padding: 10px 12px;
+                border-bottom: 1px solid var(--border);
+                text-align: left;
+                vertical-align: top;
+                color: var(--text-muted);
+            }
+            th {
+                color: var(--text);
+                font-weight: 600;
+                font-size: 13px;
+            }
+            tr:last-child td { border-bottom: 0; }
+            td code { white-space: nowrap; }
+
+            footer {
+                max-width: 960px;
+                margin: 48px auto 0;
+                padding: 20px 24px 40px;
+                border-top: 1px solid var(--border);
+                font-size: 13px;
+                color: var(--text-faint);
+            }
+            footer a { color: var(--text-muted); text-decoration: none; }
+            footer a:hover { color: var(--primary); }
+            footer p { margin: 4px 0; }
+
+            @media (max-width: 600px) {
+                header h1 { font-size: 24px; }
+            }
+        </style>
+    </head>
+
+    <body>
+        <nav class="nav">
+            <img src="/xce-logo.png" alt="">
+            <a class="name" href="/">XMUER Coding Engine</a>
+            <span class="links">
+                <a href="/desktop/">桌面版</a>
+                <a href="/desktop/changelog/">更新日志</a>
+                <a href="/">← 回到编辑器</a>
+            </span>
+        </nav>
+
+        <main>
+            <header>
+                <h1>把你本机的 AI 客户端接进编辑器</h1>
+                <p class="lead">
+                    桌面版打开项目后，支持 MCP 的 agent（Claude Code、ZCode、Codex 等）可以用编辑器同一套
+                    工具读写它：读积木、改脚本、加角色、跑起来截图。通道只监听本机。
+                </p>
+            </header>
+
+            <section>
+                <h2>前提</h2>
+                <ul>
+                    <li>装了 <a href="/desktop/">Windows 桌面版</a>，并打开了一个项目。网页版没有这条通道。</li>
+                    <li>本机有 Node.js 20 或更新版本（客户端要能跑 <code>npx</code>）。</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>一条命令接上 Claude Code</h2>
+                <pre><code>claude mcp add xce -- npx -y xce-mcp</code></pre>
+                <p>
+                    其余客户端用同一条命令参数：<code>command</code> 是 <code>npx</code>，
+                    <code>args</code> 是 <code>["-y", "xce-mcp"]</code>。
+                </p>
+            </section>
+
+            <section>
+                <h2>各客户端的配置位置</h2>
+
+                <div class="card">
+                    <h3>ZCode</h3>
+                    <p>设置 → MCP → 添加，选 stdio，命令填 <code>npx -y xce-mcp</code>。或者写进
+                        <code>~/.zcode/cli/config.json</code>：</p>
+<pre><code>{
+  "mcp": {
+    "servers": {
+      "xce": {
+        "command": "npx",
+        "args": ["-y", "xce-mcp"]
+      }
+    }
+  }
+}</code></pre>
+                </div>
+
+                <div class="card">
+                    <h3>Cursor</h3>
+                    <p>写进 <code>~/.cursor/mcp.json</code>（全局）或项目里的 <code>.cursor/mcp.json</code>：</p>
+<pre><code>{
+  "mcpServers": {
+    "xce": {
+      "command": "npx",
+      "args": ["-y", "xce-mcp"]
+    }
+  }
+}</code></pre>
+                </div>
+
+                <div class="card">
+                    <h3>VS Code</h3>
+                    <p>写进项目里的 <code>.vscode/mcp.json</code>，注意这层键叫 <code>servers</code>：</p>
+<pre><code>{
+  "servers": {
+    "xce": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "xce-mcp"]
+    }
+  }
+}</code></pre>
+                </div>
+
+                <div class="card">
+                    <h3>Codex CLI</h3>
+                    <p>写进 <code>~/.codex/config.toml</code>：</p>
+<pre><code>[mcp_servers.xce]
+command = "npx"
+args = ["-y", "xce-mcp"]</code></pre>
+                </div>
+
+                <div class="card">
+                    <h3>Cline / Windsurf 等</h3>
+                    <p>
+                        都认通用的 <code>mcpServers</code> 结构（同上面的 Cursor 那段）。
+                        Cline 在 Settings → MCP Servers 里加；Windsurf 写在
+                        <code>~/.codeium/windsurf/mcp_config.json</code>。
+                    </p>
+                </div>
+            </section>
+
+            <section>
+                <h2>接上之后能做什么</h2>
+                <ul>
+                    <li><strong>读项目</strong>：角色清单、舞台、脚本、造型；脚本读回来带积木 id，方便改。</li>
+                    <li><strong>写项目</strong>：新建 / 替换 / 删除脚本，加角色、改造型、改名，改完能通过编辑器自己的撤销回退。</li>
+                    <li><strong>跑起来</strong>：触发绿旗或广播，等一会儿截图看结果。</li>
+                    <li><strong>项目记忆</strong>：读写这个项目级的长期笔记，跟面板里的 XCE Agent 共用一份。</li>
+                    <li><strong>联网</strong>：读公开网页（桌面版走应用自己发请求，不受浏览器跨域限制）、搜 CaelLab Search。</li>
+                </ul>
+                <p>
+                    边界：一次调用结束后才轮得到下一次；面板自己正在跑一轮时，外部来的写操作会被拒绝，
+                    等它结束再试。读操作不受影响。
+                </p>
+            </section>
+
+            <section>
+                <h2>技能（skill）</h2>
+                <p>
+                    编辑器里那套参考文档（内置 6 份 <code>xce_fastdocs_*</code>，加上你自己写的）会以
+                    MCP prompt 的形式出现在客户端里 —— 客户端列出 prompt 时就能看到名字和一行描述，
+                    选中哪份就实时从编辑器读正文，不在这个包里存副本。
+                </p>
+                <p>
+                    也就是说：在编辑器「设置 → 技能」里新增，或者从 <code>.md</code> 文件导入一份，
+                    面板里的 XCE Agent 和接进来的外部客户端都能用同一份，不用两边各写一遍。
+                </p>
+                <h3>SKILL.md 格式</h3>
+<pre><code>---
+name: my_rules
+description: 一行话，写清什么时候该读它
+---
+
+正文，随便写。模型先看到上面两行，需要时才读这里。</code></pre>
+                <p>
+                    名字只能是字母、数字、下划线、连字符（2~40 位）；没有 <code>---</code> 头也能导入，
+                    那就按文件名起名。最多 20 份，单份正文 8000 字以内。
+                </p>
+            </section>
+
+            <section>
+                <h2>它怎么找到编辑器</h2>
+                <p>
+                    桌面版启动时在主进程开一个只监听 <code>127.0.0.1</code> 的桥，端口随机；
+                    端口和一次性口令写进 <code>%APPDATA%\XMUER Coding Engine\ai-bridge.json</code>，
+                    <code>xce-mcp</code> 读这个文件去连。应用退出时文件删除，下次启动口令重新生成。
+                </p>
+                <p>调试时可以用环境变量跳过发现文件：</p>
+                <table>
+                    <thead>
+                        <tr><th>变量</th><th>作用</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>XCE_BRIDGE_FILE</code></td><td>换一个发现文件</td></tr>
+                        <tr><td><code>XCE_BRIDGE_PORT</code> / <code>XCE_BRIDGE_TOKEN</code></td><td>直接给端口和口令</td></tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section>
+                <h2>排错</h2>
+                <table>
+                    <thead>
+                        <tr><th>现象</th><th>怎么处理</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>客户端里根本没有 <code>xce</code> 这组工具</td>
+                            <td>先在终端跑 <code>npx -y xce-mcp</code>，看是装包失败还是启动报错；再确认客户端配置的键名（<code>mcpServers</code> / <code>servers</code> / <code>mcp.servers</code>）没写错。</td>
+                        </tr>
+                        <tr>
+                            <td>调用报 editor is not connected</td>
+                            <td>桌面版开着但没打开项目。在应用里打开任意项目，再试。</td>
+                        </tr>
+                        <tr>
+                            <td>应用压根没开</td>
+                            <td>工具清单还能列出来（读的是上次缓存），但调用会失败。先把应用开起来。</td>
+                        </tr>
+                        <tr>
+                            <td>写操作被拒绝</td>
+                            <td>面板里的 XCE Agent 正在跑一轮。等它结束；或者先把面板那一轮停掉。</td>
+                        </tr>
+                        <tr>
+                            <td><code>E_AUTH</code></td>
+                            <td>口令对不上，通常是应用重启过。重新启动客户端，让它重读发现文件。</td>
+                        </tr>
+                        <tr>
+                            <td>prompt 加载不出来</td>
+                            <td>prompt 的正文是从编辑器实时读的，应用没开或没打开项目时只有清单、没有正文。</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section>
+                <h2>安全</h2>
+                <ul>
+                    <li>桥只监听 <code>127.0.0.1</code>，外网连不进来；端口随机、口令每次启动重新生成。</li>
+                    <li>接进来的客户端能读也能改你当前打开的项目 —— 只接你信得过的客户端。</li>
+                    <li><code>xce-mcp</code> 只做传输，不含编辑器代码，按 Apache-2.0 发布；编辑器本身是 AGPL-3.0-only。</li>
+                </ul>
+            </section>
+
+            <p class="note">
+                源码：<a href="https://github.com/CaelLab-org/scratch-gui/tree/develop/packages/xce-mcp" rel="noreferrer">packages/xce-mcp</a>
+                · npm：<a href="https://www.npmjs.com/package/xce-mcp" rel="noreferrer">xce-mcp</a>
+                · 桌面版：<a href="/desktop/">下载与发布说明</a>
+            </p>
+        </main>
+
+        <footer>
+            <p>
+                由 <a href="https://www.caellab.com/" rel="noreferrer">虚舟实验室（CaelLab）</a> 开发并维护 ·
+                <a href="mailto:support@caellab.com">support@caellab.com</a> ·
+                <a href="https://policy.caellab.org/" rel="noreferrer">政策与条款</a>
+            </p>
+            <p>XMUER Coding Engine 基于 TurboWarp 与 Scratch 构建；Scratch 是 MIT 媒体实验室的免费项目。</p>
+        </footer>
+    </body>
+</html>

@@ -27,6 +27,12 @@ const descriptors = tools => tools.map(tool => ({
     readOnly: !!tool.readOnly
 }));
 
+// skill 只报名字和一行描述（正文让客户端按需调 xce_read_fast_docs 读，跟面板里的模型一个待遇）
+const skillDescriptors = skills => skills.map(skill => ({
+    name: skill.name,
+    description: skill.description || ''
+}));
+
 const messageOf = error => (error && error.message) || String(error);
 
 export const startEditorBridge = ({getPort, getSkills, isBusy}) => {
@@ -46,6 +52,14 @@ export const startEditorBridge = ({getPort, getSkills, isBusy}) => {
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify(message));
         }
+    };
+
+    const sendTools = () => {
+        send({
+            type: 'tools',
+            tools: descriptors(toolsNow()),
+            skills: skillDescriptors(getSkills() || [])
+        });
     };
 
     const run = async (name, args) => {
@@ -73,7 +87,7 @@ export const startEditorBridge = ({getPort, getSkills, isBusy}) => {
 
     const handle = async message => {
         if (message.type === 'list') {
-            send({type: 'tools', tools: descriptors(toolsNow())});
+            sendTools();
         } else if (message.type === 'call') {
             const result = await run(message.name, message.args);
             send({type: 'result', id: message.id, ...result});
@@ -110,7 +124,7 @@ export const startEditorBridge = ({getPort, getSkills, isBusy}) => {
                 return;
             }
             if (message.type === 'welcome') {
-                send({type: 'tools', tools: descriptors(toolsNow())});
+                sendTools();
                 return;
             }
             handle(message);

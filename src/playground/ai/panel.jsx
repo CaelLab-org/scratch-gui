@@ -35,7 +35,7 @@ import {
 } from './memory.js';
 import {
     loadUserSkills, saveUserSkill, deleteUserSkill, skillNameConflict, isValidSkillName,
-    userSkillsForModel, USER_SKILL_LIMITS
+    userSkillsForModel, skillFromFile, USER_SKILL_LIMITS
 } from './user-skills.js';
 import {collectConfig, downloadConfig, parseConfig, mergeConfig, CONFIG_EXTENSION,
     collectChatFile, downloadChat, parseChat, CHAT_EXTENSION} from './transfer.js';
@@ -1188,7 +1188,9 @@ const SkillsSection = ({onBack}) => {
     const [mine, setMine] = useState(() => loadUserSkills());
     const [editing, setEditing] = useState(null);
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
     const [confirmingId, setConfirmingId] = useState(null);
+    const importRef = useRef(null);
     const timerRef = useRef(0);
     useEffect(() => () => {
         if (timerRef.current) clearTimeout(timerRef.current);
@@ -1210,6 +1212,50 @@ const SkillsSection = ({onBack}) => {
         setMine(loadUserSkills());
         setEditing(null);
         setError('');
+        setNotice('');
+    };
+
+    // 从本地 .md / SKILL.md 导入（格式跟内置技能一致，没有 --- 头就按文件名起名）
+    const importFiles = async fileList => {
+        const files = Array.from(fileList || []);
+        if (!files.length) return;
+        const messages = [];
+        let added = 0;
+        for (const file of files) {
+            if (mine.length + added >= USER_SKILL_LIMITS.max) {
+                messages.push(`最多 ${USER_SKILL_LIMITS.max} 份，剩下的没导入`);
+                break;
+            }
+            let raw = '';
+            try {
+                raw = await file.text();
+            } catch (e) {
+                messages.push(`${file.name}：读不出来`);
+                continue;
+            }
+            const parsed = skillFromFile(raw, file.name);
+            if (parsed.error) {
+                messages.push(`${file.name}：${parsed.error}`);
+                continue;
+            }
+            const conflict = skillNameConflict(parsed.skill.name, builtinNames, null);
+            if (conflict) {
+                messages.push(`${file.name}：${conflict}`);
+                continue;
+            }
+            const result = saveUserSkill(parsed.skill);
+            if (result.error) {
+                messages.push(`${file.name}：${result.error}`);
+                continue;
+            }
+            added += 1;
+            parsed.notes.forEach(note => messages.push(`${file.name}：${note}`));
+        }
+        setMine(loadUserSkills());
+        setError('');
+        setNotice(messages.length ?
+            `已导入 ${added} 份。${messages.join('；')}` :
+            `已导入 ${added} 份。`);
     };
 
     return (
@@ -1221,7 +1267,9 @@ const SkillsSection = ({onBack}) => {
             <div className={styles.settingsBody}>
                 <p className={styles.fieldNote}>
                     「技能」是 AI 需要时会自己去读的参考文档（它先看到名字和一行描述，正文按需读）。
-                    这里的能自己写，内置的改不了。{`最多 ${USER_SKILL_LIMITS.max} 份。`}
+                    这里的能自己写，内置的改不了，也能从 <code>.md</code> 文件导入（格式同
+                    <code>SKILL.md</code>：<code>--- name: / description: ---</code> 头；没有头就按文件名起名）。
+                    {`最多 ${USER_SKILL_LIMITS.max} 份。`}
                 </p>
 
                 {editing ? (
@@ -1334,16 +1382,39 @@ const SkillsSection = ({onBack}) => {
                                 >{confirmingId === skill.id ? '确认' : '删'}</button>
                             </div>
                         ))}
+                        {notice ? (
+                            <p className={styles.fieldNote}>{notice}</p>
+                        ) : null}
                         <div className={styles.rowButtons}>
                             <button
                                 className={styles.btn}
                                 disabled={mine.length >= USER_SKILL_LIMITS.max}
                                 onClick={() => {
                                     setError('');
+                                    setNotice('');
                                     setEditing({name: '', description: '', body: ''});
                                 }}
                                 type="button"
                             >＋ 新增一份</button>
+                            <button
+                                className={styles.btn}
+                                disabled={mine.length >= USER_SKILL_LIMITS.max}
+                                onClick={() => {
+                                    if (importRef.current) importRef.current.click();
+                                }}
+                                type="button"
+                            >从 .md 导入</button>
+                            <input
+                                accept=".md,.markdown,.txt,text/markdown"
+                                hidden
+                                multiple
+                                onChange={e => {
+                                    importFiles(e.target.files);
+                                    e.target.value = '';
+                                }}
+                                ref={importRef}
+                                type="file"
+                            />
                         </div>
 
                         <span className={styles.fieldLabel}>{'内置技能（只读）'}</span>

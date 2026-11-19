@@ -1,7 +1,14 @@
 {
   "name": "xce-mcp",
-  "version": "0.1.0",
-  "description": "MCP server for the XMUER Coding Engine desktop editor",
+  "version": "1.2.0",
+  "description": "MCP server for the XMUER Coding Engine desktop editor — tools and skills",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "scratch",
+    "turbo-warp",
+    "editor"
+  ],
   "license": "Apache-2.0",
   "author": "CaelLab <contact@caellab.com>",
   "type": "module",

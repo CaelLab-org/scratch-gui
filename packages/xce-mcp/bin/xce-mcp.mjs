@@ -1,8 +1,17 @@
 #!/usr/bin/env node
+import {createRequire} from 'node:module';
 import {Server} from '@modelcontextprotocol/sdk/server/index.js';
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
-import {CallToolRequestSchema, ListToolsRequestSchema} from '@modelcontextprotocol/sdk/types.js';
+import {
+    CallToolRequestSchema,
+    ListPromptsRequestSchema,
+    GetPromptRequestSchema,
+    ListToolsRequestSchema
+} from '@modelcontextprotocol/sdk/types.js';
 import {EditorBridge} from '../lib/bridge-client.mjs';
+
+const require = createRequire(import.meta.url);
+const {version} = require('../package.json');
 
 const bridge = new EditorBridge();
 
@@ -17,18 +26,21 @@ const imageBlock = image => {
 };
 
 const server = new Server(
-    {name: 'xce', version: '0.1.0'},
+    {name: 'xce', version},
     {
-        capabilities: {tools: {}},
+        capabilities: {tools: {}, prompts: {}},
         instructions:
             'Tools that read and edit the project open in the XMUER Coding Engine desktop app. ' +
             'Start the app and open a project first. If a call says the editor is not connected, ' +
-            'ask the user to open the app rather than retrying in a loop.'
+            'ask the user to open the app rather than retrying in a loop. ' +
+            'The editor\'s reference documents (skills) are exposed as prompts: list them when the ' +
+            'user asks about the editor, this team, or the sites around it, and load the matching ' +
+            'one instead of guessing.'
     }
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = await bridge.list();
+    const {tools} = await bridge.list();
     return {
         tools: tools.map(tool => ({
             name: tool.name,
@@ -36,6 +48,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             inputSchema: tool.inputSchema,
             annotations: tool.readOnly ? {readOnlyHint: true} : undefined
         }))
+    };
+});
+
+// skill 当成 MCP prompt 给出去：客户端里能列出来、按需加载，
+// 正文仍由编辑器提供（xce_read_fast_docs），不在这个包里存副本
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    const {skills} = await bridge.list();
+    return {
+        prompts: skills.map(skill => ({
+            name: skill.name,
+            description: skill.description
+        }))
+    };
+});
+
+server.setRequestHandler(GetPromptRequestSchema, async request => {
+    const name = request.params.name;
+    const {skills} = await bridge.list();
+    const skill = skills.find(entry => entry.name === name);
+    if (!skill) {
+        throw new Error(`Unknown prompt: ${name}. List prompts to see what the editor offers.`);
+    }
+    const result = await bridge.call('xce_read_fast_docs', {name});
+    if (result.isError) {
+        throw new Error(String(result.content || `Could not read ${name}.`));
+    }
+    return {
+        description: skill.description,
+        messages: [{
+            role: 'user',
+            content: {type: 'text', text: String(result.content || '')}
+        }]
     };
 });
 

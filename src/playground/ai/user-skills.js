@@ -20,6 +20,8 @@
  * 结构跟内置 skill 对齐（{name, description, body, docs}），合并时直接拼数组即可。
  */
 
+import {parseSkillFile} from './skills-parse.js';
+
 const KEY = 'xce_ai_skills';
 
 export const USER_SKILL_LIMITS = {
@@ -165,6 +167,71 @@ export const skillNameConflict = (name, builtinNames, ownId) => {
         String(entry.name)
             .toLowerCase() === clean);
     return own ? '已经有一份同名技能了' : null;
+};
+
+// 文件名兜底成技能名：去掉扩展名，把不合规的字符换成下划线
+const nameFromFile = fileName => String(fileName || '')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, USER_SKILL_LIMITS.nameMax);
+
+const firstLineDescription = body => {
+    const line = String(body || '')
+        .split('\n')
+        .map(item => item.trim())
+        .find(item => item);
+    return cut(String(line || '')
+        .replace(/^#+\s*/, ''), USER_SKILL_LIMITS.descriptionMax);
+};
+
+/**
+ * 把一份 .md / SKILL.md 文件转成能存的技能（只转换，不落盘）。
+ * 格式跟内置技能一致：有 `--- name: / description: ---` 头就照抄；没有就按文件名起名、
+ * 正文取全文，这样别人随手写的 markdown 也能塞进来。
+ * @param {string} raw 文件原文
+ * @param {string} fileName 文件名（起名兜底用）
+ * @returns {object} {skill, error, notes} —— error 有值时 skill 为 null
+ */
+export const skillFromFile = (raw, fileName) => {
+    const text = String(raw === void 0 || raw === null ? '' : raw)
+        .trim();
+    if (!text) return {skill: null, error: '文件是空的', notes: []};
+    const parsed = parseSkillFile(text, fileName);
+    if (!parsed && /^---\r?\n/.test(text)) {
+        return {skill: null, error: '开头有 --- 头，但里面缺 name:', notes: []};
+    }
+    const notes = [];
+    const declared = parsed ? String(parsed.name)
+        .trim() : '';
+    let name = isValidSkillName(declared) ? declared : nameFromFile(fileName);
+    if (!isValidSkillName(name)) {
+        // 中文文件名 + 没有 --- 头：先给个临时英文名，导入后还能点开改
+        const stamp = Date.now().toString(36)
+            .slice(-4);
+        const salt = Math.random().toString(36)
+            .slice(2, 4);
+        name = `skill_${stamp}${salt}`;
+        notes.push(`文件名推不出英文名，先用「${name}」，导入后可以点开改`);
+    } else if (declared && declared !== name) {
+        notes.push(`名字「${declared}」不合规，按文件名用了「${name}」`);
+    }
+    const body = (parsed ? parsed.body : text)
+        .trim();
+    if (!body) return {skill: null, error: '正文是空的', notes: []};
+    if (body.length > USER_SKILL_LIMITS.bodyMax) {
+        notes.push(`正文超过 ${USER_SKILL_LIMITS.bodyMax} 字，会被截断`);
+    }
+    return {
+        skill: {
+            name,
+            description: cut((parsed && parsed.description) || firstLineDescription(body),
+                USER_SKILL_LIMITS.descriptionMax),
+            body
+        },
+        error: null,
+        notes
+    };
 };
 
 // 测试用：清空
