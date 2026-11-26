@@ -22,7 +22,7 @@ editor, so treat it like editing their open file.
 ## 1. See what you can do
 
 \`\`\`bash
-npx -y @yunyun-3782/xce-cli@latest tools --url ${endpoint} --key ${secret}
+npx -y @caellab/xce-cli@latest tools --url ${endpoint} --key ${secret}
 \`\`\`
 
 That prints every tool with its JSON schema. Do this first — the list is not fixed and
@@ -31,8 +31,8 @@ this document does not repeat it.
 ## 2. Call a tool
 
 \`\`\`bash
-npx -y @yunyun-3782/xce-cli@latest call xce_read_project '{}' --url ${endpoint} --key ${secret}
-npx -y @yunyun-3782/xce-cli@latest call xce_add_blocks '{"sprite":"Sprite1","script":"..."}' --url ${endpoint} --key ${secret}
+npx -y @caellab/xce-cli@latest call xce_read_project '{}' --url ${endpoint} --key ${secret}
+npx -y @caellab/xce-cli@latest call xce_add_blocks '{"sprite":"Sprite1","script":"..."}' --url ${endpoint} --key ${secret}
 \`\`\`
 
 Or plain HTTP, if you would rather not run npx:
@@ -63,13 +63,13 @@ for a human to read — quote the parts that matter, do not dump the whole thing
 };
 
 export const claudeCodeSnippet = ({url, key}) =>
-    `claude mcp add xce -- npx -y @yunyun-3782/xce-cli@latest mcp --url ${url} --key ${key}`;
+    `claude mcp add xce -- npx -y @caellab/xce-cli@latest mcp --url ${url} --key ${key}`;
 
 export const zcodeSnippet = ({url, key}) => JSON.stringify({
     mcpServers: {
         xce: {
             command: 'npx',
-            args: ['-y', '@yunyun-3782/xce-cli@latest', 'mcp', '--url', url, '--key', key]
+            args: ['-y', '@caellab/xce-cli@latest', 'mcp', '--url', url, '--key', key]
         }
     }
 }, null, 2);

@@ -246,7 +246,7 @@
                 <ul>
                     <li>设置里新增「外部接入」：打开后生成一串 API 密钥，在 49621 端口开一个 HTTP 入口，别的机器、或者只能发 HTTP 请求的 AI 也能读写你正在编辑的项目。关掉立刻停。</li>
                     <li>页面上直接给出可复制的地址、密钥，和一段 <code>claude mcp add …</code>，贴到别的 AI 对话窗口就能接上。</li>
-                    <li>新命令行工具 <code>xce-cli</code>：<code>npx -y @yunyun-3782/xce-cli@latest tools</code> 列工具，<code>call</code> 调工具，<code>mcp</code> 起 MCP 服务，<code>skill</code> 生成给 AI 看的说明文件。不传地址就走本机，不需要密钥。</li>
+                    <li>新命令行工具 <code>xce-cli</code>：<code>npx -y @caellab/xce-cli@latest tools</code> 列工具，<code>call</code> 调工具，<code>mcp</code> 起 MCP 服务，<code>skill</code> 生成给 AI 看的说明文件。不传地址就走本机，不需要密钥。</li>
                     <li>入口只有健康检查、工具清单、调用三个路由，没有文件系统、没有 shell；开关默认关着。</li>
                 </ul>
             </article>

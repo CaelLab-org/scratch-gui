@@ -1844,9 +1844,9 @@ const AccessSection = ({onBack}) => {
     const endpoint = (info && (info.urls && info.urls[0])) || (info && info.endpoint) || '';
     const key = (info && info.key) || '';
     const claude = endpoint && key ?
-        `claude mcp add xce -- npx -y @yunyun-3782/xce-cli@latest mcp --url ${endpoint} --key ${key}` : '';
+        `claude mcp add xce -- npx -y @caellab/xce-cli@latest mcp --url ${endpoint} --key ${key}` : '';
     const generic = endpoint && key ?
-        `npx -y @yunyun-3782/xce-cli@latest call <工具名> '<JSON参数>' --url ${endpoint} --key ${key}` : '';
+        `npx -y @caellab/xce-cli@latest call <工具名> '<JSON参数>' --url ${endpoint} --key ${key}` : '';
 
     return (
         <div className={styles.settings}>
@@ -1954,9 +1954,9 @@ const AccessSection = ({onBack}) => {
                                     </div>
                                     <span className={styles.fieldNote}>
                                         {'先让它跑 '}
-                                        <code className={styles.mdCode}>npx -y @yunyun-3782/xce-cli@latest tools</code>
+                                        <code className={styles.mdCode}>npx -y @caellab/xce-cli@latest tools</code>
                                         {' 看有哪些工具。要一份完整说明，就在编辑器目录跑 '}
-                                        <code className={styles.mdCode}>npx -y @yunyun-3782/xce-cli@latest skill</code>
+                                        <code className={styles.mdCode}>npx -y @caellab/xce-cli@latest skill</code>
                                         {'，生成的 SKILL.md 直接丢给它的技能目录。'}
                                     </span>
                                 </div>

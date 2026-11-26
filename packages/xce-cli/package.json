@@ -1,5 +1,5 @@
 {
-  "name": "xce-cli",
+  "name": "@caellab/xce-cli",
   "version": "0.1.0",
   "description": "Command line access to the XMUER Coding Engine editor for AI agents — MCP server, HTTP client, skill file",
   "keywords": [

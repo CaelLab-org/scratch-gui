@@ -36,14 +36,14 @@ Without `--url` it uses the local bridge (or the network endpoint if that is the
 
 ```bash
 # Claude Code
-claude mcp add xce -- npx -y @yunyun-3782/xce-cli@latest mcp --url http://192.168.1.10:49621/v1 --key xce_...
+claude mcp add xce -- npx -y @caellab/xce-cli@latest mcp --url http://192.168.1.10:49621/v1 --key xce_...
 
 # any client that reads a JSON config
 {
   "mcpServers": {
     "xce": {
       "command": "npx",
-      "args": ["-y", "@yunyun-3782/xce-cli@latest", "mcp", "--url", "http://192.168.1.10:49621/v1", "--key", "xce_..."]
+      "args": ["-y", "@caellab/xce-cli@latest", "mcp", "--url", "http://192.168.1.10:49621/v1", "--key", "xce_..."]
     }
   }
 }
