@@ -239,6 +239,8 @@ const ICON_PATHS = {
     expand: ['M6.5 2.5h-4v4', 'M9.5 2.5h4v4', 'M13.5 9.5v4h-4', 'M2.5 9.5v4h4'],
     shrink: ['M2.5 6.5h4v-4', 'M13.5 6.5h-4v-4', 'M13.5 9.5h-4v4', 'M2.5 9.5h4v4'],
     chevron: ['M6 3.5L10.5 8 6 12.5'],
+    // 下载 / 更新
+    download: ['M8 2.5v8', 'M4.5 7.5L8 11l3.5-3.5', 'M3 13.5h10'],
     chevronDown: ['M3.5 6L8 10.5 12.5 6'],
     // 「⋯」（更多）：三个点单独画，同 sliders 的处理
     dots: [],
@@ -994,7 +996,8 @@ const SETTINGS_SECTIONS = [
     {id: 'skills', label: '技能', note: 'AI 需要时会去读的参考文档'},
     {id: 'prompt', label: '提示词与限额', note: '回答风格的偏好、上下文与步数上限'},
     {id: 'backup', label: '备份与迁移', note: '导出 / 导入配置（换电脑用）'},
-    {id: 'access', label: '外部接入', note: '把编辑器借给 Claude Code / ZCode 这类外部 AI'}
+    {id: 'access', label: '外部接入', note: '把编辑器借给 Claude Code / ZCode 这类外部 AI'},
+    {id: 'update', label: '关于与更新', note: '版本号、检查更新（桌面版）'}
 ];
 
 // 分区内页的头部：左「返回」右标题，跟面板头部同一套（只有图标，不写多余的字）
@@ -1879,7 +1882,9 @@ const AccessSection = ({onBack}) => {
                                 </span>
                                 <span className={styles.accessNote}>
                                     {info && info.enabled ?
-                                        `监听 0.0.0.0:${info.port}，别的机器也能连` :
+                                        (info.local ?
+                                            `监听 127.0.0.1:${info.port}，只有本机能连` :
+                                            `监听 0.0.0.0:${info.port}，同一局域网都能连`) :
                                         '关着的时候，外部 AI 连不进来'}
                                 </span>
                             </div>
@@ -1892,6 +1897,29 @@ const AccessSection = ({onBack}) => {
                         </div>
 
                         {error ? <p className={styles.fieldError}>{error}</p> : null}
+
+                        <div className={styles.field}>
+                            <span className={styles.fieldLabel}>监听范围</span>
+                            <div className={styles.chipRow}>
+                                {[false, true].map(local => {
+                                    const on = !!(info && info.local) === local;
+                                    return (
+                                        <button
+                                            className={on ? `${styles.chip} ${styles.chipOn}` : styles.chip}
+                                            disabled={busy || !(info && info.enabled)}
+                                            key={String(local)}
+                                            onClick={() => apply({local})}
+                                            type="button"
+                                        >{local ? '仅本机' : '局域网'}</button>
+                                    );
+                                })}
+                            </div>
+                            <span className={styles.fieldNote}>
+                                {info && info.local ?
+                                    '只有这台机器上的 AI 连得上（绑定 127.0.0.1）。密钥照样要填。' :
+                                    '同一局域网里拿到这串密钥的机器都能连；只想给本机用就切「仅本机」。'}
+                            </span>
+                        </div>
 
                         {info && info.enabled ? (
                             <React.Fragment>
@@ -1944,10 +1972,10 @@ const AccessSection = ({onBack}) => {
                                             type="button"
                                         >{copied === 'prompt' ? '已复制' : '复制'}</button>
                                     </div>
-                                    <div className={styles.langRow}>
+                                    <div className={styles.chipRow}>
                                         {PROMPT_LANGS.map(item => {
                                             const chipClass = item.id === lang ?
-                                                `${styles.langChip} ${styles.langChipOn}` : styles.langChip;
+                                                `${styles.chip} ${styles.chipOn}` : styles.chip;
                                             return (
                                                 <button
                                                     className={chipClass}
@@ -1960,8 +1988,8 @@ const AccessSection = ({onBack}) => {
                                     </div>
                                     <pre className={styles.promptBox}>{prompt}</pre>
                                     <span className={styles.fieldNote}>
-                                        整段复制，粘到 Claude Code / ZCode / Cursor 的对话框里就行 ——
-                                        里面两种接法都写了，它能用 MCP 就用 MCP，不会就照着敲命令。
+                                        这是一份说明书，不是任务：先整段粘给 AI，再补一句你要它做的事。
+                                        里面的命令行和 MCP 两种接法，它能用哪种就用哪种。
                                         换台机器上的 AI 时，把地址换成它够得着的那条。
                                     </span>
                                 </div>
@@ -1986,8 +2014,11 @@ const AccessSection = ({onBack}) => {
                                 </div>
 
                                 <p className={styles.accessWarn}>
-                                    开着的时候，这一整台机器（包括同一局域网里的其他人）拿着这串密钥
-                                    就能操作你打开的项目。不用的时候关掉。
+                                    {info.local ?
+                                        '开着的时候，这台机器上任何拿到密钥的程序都能操作你打开的项目。' +
+                                        '不给别人用就关掉。' :
+                                        '开着的时候，同一局域网里的其他人拿着这串密钥就能操作你' +
+                                        '打开的项目。不放心就切「仅本机」，或者不用时关掉。'}
                                 </p>
                             </React.Fragment>
                         ) : null}
@@ -1999,6 +2030,153 @@ const AccessSection = ({onBack}) => {
 };
 
 AccessSection.propTypes = {
+    onBack: PropTypes.func.isRequired
+};
+
+
+// ---------------------------------------------------------------------------
+// 自动更新（桌面版）
+// ---------------------------------------------------------------------------
+
+// 主进程维护更新状态，这里只订阅：查/下/装都由它做，状态变了会 push 过来
+// （见桌面仓库 src-main/updater.js）。网页版没有这段 api，返回 null。
+const useUpdater = () => {
+    const api = typeof window === 'undefined' || !window.EditorPreload ?
+        null : window.EditorPreload.update;
+    const [updateState, setUpdateState] = useState(null);
+    useEffect(() => {
+        if (!api) return () => {};
+        let alive = true;
+        api.state().then(next => {
+            if (alive && next) setUpdateState(next);
+        })
+            .catch(() => {});
+        const off = api.onState(next => {
+            if (alive) setUpdateState(next);
+        });
+        return () => {
+            alive = false;
+            if (typeof off === 'function') off();
+        };
+    }, [api]);
+    return [updateState, api];
+};
+
+const UPDATE_STATUS_TEXT = {
+    idle: '还没查过，点下面的按钮查一次',
+    checking: '正在查更新清单…',
+    latest: '已经是最新版本',
+    available: '有新版本可以装',
+    downloading: '正在下载安装包，别关窗口',
+    ready: '安装包已就绪，随时可以装',
+    installing: '正在安装，窗口马上会关掉',
+    error: '没查成'
+};
+
+const sizeLabel = bytes => {
+    if (!bytes) return '';
+    const mb = bytes / (1024 * 1024);
+    return `${mb >= 100 ? Math.round(mb) : mb.toFixed(1)} MB`;
+};
+
+const UpdateSection = ({onBack}) => {
+    const [updateState, api] = useUpdater();
+    const status = (updateState && updateState.status) || 'idle';
+    const current = (updateState && updateState.current) || '';
+    const latest = (updateState && updateState.latest) || '';
+    const error = (updateState && updateState.error) || '';
+    const percent = (updateState && updateState.percent) || 0;
+    const size = (updateState && updateState.size) || 0;
+    const busy = status === 'checking' || status === 'downloading' || status === 'installing';
+
+    return (
+        <div className={styles.settings}>
+            <SectionHead
+                onBack={onBack}
+                title="关于与更新"
+            />
+            <div className={styles.settingsBody}>
+                {api ? null : (
+                    <p className={styles.fieldNote}>
+                        只有桌面版能自己下载安装新版本。网页版每次打开就是最新的，刷新一下即可。
+                    </p>
+                )}
+
+                {api ? (
+                    <React.Fragment>
+                        <div className={styles.accessRow}>
+                            <div className={styles.accessText}>
+                                <span className={styles.accessTitle}>
+                                    {`当前 ${current || '…'}`}
+                                </span>
+                                <span className={styles.accessNote}>
+                                    {UPDATE_STATUS_TEXT[status] || ''}
+                                </span>
+                            </div>
+                            {status === 'available' || status === 'ready' ? (
+                                <span className={styles.updateVer}>{latest}</span>
+                            ) : null}
+                        </div>
+
+                        {status === 'downloading' ? (
+                            <div className={styles.updateBar}>
+                                <span
+                                    className={styles.updateBarFill}
+                                    style={{width: `${percent}%`}}
+                                />
+                            </div>
+                        ) : null}
+
+                        <div className={styles.rowButtons}>
+                            <button
+                                className={styles.btn}
+                                disabled={busy}
+                                onClick={() => api.check()}
+                                type="button"
+                            >{status === 'checking' ? '检查中…' : '检查更新'}</button>
+                            {status === 'available' ? (
+                                <button
+                                    className={`${styles.btn} ${styles.btnPrimary}`}
+                                    onClick={() => api.download()}
+                                    type="button"
+                                >{size ? `下载 ${sizeLabel(size)}` : '下载'}</button>
+                            ) : null}
+                            {status === 'ready' ? (
+                                <button
+                                    className={`${styles.btn} ${styles.btnPrimary}`}
+                                    onClick={() => api.install()}
+                                    type="button"
+                                >安装并重启</button>
+                            ) : null}
+                        </div>
+
+                        {error ? <p className={styles.fieldError}>{error}</p> : null}
+
+                        <span className={styles.fieldNote}>
+                            装的时候当前窗口会关掉，装完自动打开新版；项目和设置都在原处，不会被覆盖。
+                            {' '}离线、或者服务器一时连不上，检查更新会静默跳过，不影响用。
+                        </span>
+
+                        <div className={styles.rowButtons}>
+                            <button
+                                className={styles.btn}
+                                onClick={() => api.openNotes()}
+                                type="button"
+                            >在浏览器看更新日志</button>
+                            <button
+                                className={styles.btn}
+                                onClick={() => api.openPage()}
+                                type="button"
+                            >打开发布页</button>
+                        </div>
+                    </React.Fragment>
+                ) : null}
+            </div>
+        </div>
+    );
+};
+
+UpdateSection.propTypes = {
     onBack: PropTypes.func.isRequired
 };
 
@@ -2185,6 +2363,7 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll, initialSect
     if (section === 'skills') return <SkillsSection onBack={() => setSection(null)} />;
     if (section === 'backup') return <BackupSection onBack={() => setSection(null)} />;
     if (section === 'access') return <AccessSection onBack={() => setSection(null)} />;
+    if (section === 'update') return <UpdateSection onBack={() => setSection(null)} />;
 
     // 「模型与密钥」和「提示词与限额」共用同一份 draft 与那个保存按钮，所以留在这一层渲染
     const isModel = section === 'model';
@@ -2690,6 +2869,10 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     const [showHistory, setShowHistory] = useState(false);
     // 头部右侧的「⋯」：设置 / 全屏 / 收起都收进去，头部只留标题和两个常用按钮
     const [showMore, setShowMore] = useState(false);
+    // 有新版本时头部「更多」上点一个小圆点（桌面版才有状态，网页版一直是 null）
+    const [updateState] = useUpdater();
+    const hasUpdate = !!updateState && (updateState.status === 'available' ||
+        updateState.status === 'ready');
     // 输入区那行模型名点开的快捷面板（换模型 / 调思考档位，不用进设置页）
     const [showModelMenu, setShowModelMenu] = useState(false);
     const [showCtx, setShowCtx] = useState(false);
@@ -3691,7 +3874,9 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                         onClick={() => setShowMore(v => !v)}
                         title="更多"
                         type="button"
-                    ><Icon name="dots" /></button>
+                    ><Icon name="dots" />
+                        {hasUpdate ? <span className={styles.updateDot} /> : null}
+                    </button>
                     {showMore ? (
                         <React.Fragment>
                             <div
@@ -3711,6 +3896,21 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                     role="menuitem"
                                     type="button"
                                 ><Icon name="sliders" />设置</button>
+                                {hasUpdate ? (
+                                    <button
+                                        className={styles.menuItem}
+                                        onClick={() => {
+                                            setShowMore(false);
+                                            openSettings('update');
+                                        }}
+                                        role="menuitem"
+                                        type="button"
+                                    ><Icon name="download" />
+                                        {updateState.status === 'ready' ?
+                                            `安装 ${updateState.latest}` :
+                                            `更新到 ${updateState.latest}`}
+                                    </button>
+                                ) : null}
                                 <button
                                     className={styles.menuItem}
                                     onClick={() => {

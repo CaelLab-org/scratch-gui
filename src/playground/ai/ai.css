@@ -259,6 +259,7 @@
 }
 
 .iconBtn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -648,14 +649,15 @@
     margin-bottom: 0;
 }
 
-.langRow {
+/* 一行小胶囊：语言切换、监听范围都用它（同一套视觉，别各写一遍） */
+.chipRow {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
     margin-bottom: 6px;
 }
 
-.langChip {
+.chip {
     height: 22px;
     padding: 0 7px;
     border: 1px solid var(--border-l1);
@@ -669,13 +671,13 @@
     transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 
-.langChip:hover {
+.chip:hover {
     border-color: var(--border-l2);
     color: var(--text-1);
 }
 
-.langChipOn,
-.langChipOn:hover {
+.chipOn,
+.chipOn:hover {
     border-color: var(--accent);
     background: var(--accent-soft);
     color: var(--accent);
@@ -769,6 +771,45 @@
     align-items: center;
     gap: 8px;
     margin-top: 4px;
+}
+
+/* 有新版本时「更多」右上角那个小点：只告诉你有事，不抢注意力 */
+.updateDot {
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-solid);
+    box-shadow: 0 0 0 2px var(--bg-base);
+}
+
+.updateVer {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 16px;
+}
+
+.updateBar {
+    height: 4px;
+    margin: 2px 0 10px;
+    border-radius: 999px;
+    background: var(--bg-layer2);
+    overflow: hidden;
+}
+
+.updateBarFill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent-solid);
+    transition: width 0.2s ease;
 }
 
 .btn {
