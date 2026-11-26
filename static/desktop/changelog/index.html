@@ -243,15 +243,33 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.10.0 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.10.1 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
-                    <h2>4.10.0</h2>
+                    <h2>4.10.1</h2>
                     <span class="date">2026-11-26</span>
                     <span class="latest">最新</span>
+                </header>
+
+                <p>更新检查从下载站搬到编辑器自己的域名；旧地址保留跳转，4.8.1 起的旧版本也能继续收到更新。</p>
+
+                <h3>更新源</h3>
+                <ul>
+                    <li>更新清单改到 <code>https://engine.xmuer.online/desktop/latest.json</code>，跟网页版一起发布，缓存只有十几分钟，不会再因为 CDN 长缓存一直看到旧清单。</li>
+                    <li><code>dl.caellab.com</code> 的旧清单地址保留 302 跳转：4.8.1 起的客户端会跟到新地址，不用手动换。</li>
+                    <li>安装包下载地址不变，仍在 <code>dl.caellab.com</code>。</li>
+                </ul>
+
+                <p>4.10.0 的内容没有改动。</p>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
+                    <h2>4.10.0</h2>
+                    <span class="date">2026-11-26</span>
                 </header>
 
                 <p>外置 AI 现在能读到编辑器自己的说明书，也能直接加声音；顺手修掉 AI 写完积木偶尔弹出的「变量名」确认框，并把设置页和面板的交互重新打磨了一遍。</p>
