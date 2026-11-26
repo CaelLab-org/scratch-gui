@@ -1332,8 +1332,8 @@
 
 /* ---------------------------------------------------------------- 思考过程
  *
- * 一行灰字（学 ZCode 的 `+ Thought` / `+ Thinking...`），**不套盒子**：
- * 思考不是主角，套个带边框的卡片会把正文挤下去。正在想的时候整行走强调色，想完就灰掉。
+ * 一行灰字（学 ZCode 新版）：标题 + 秒数，**不套盒子**。想着的时候文字扫光（不转圈），
+ * 右边那截「正在想什么」只在**还没想完、而且收着**的时候出现；想完就回到一行安静的灰字。
  */
 
 .think {
@@ -1383,13 +1383,55 @@
 }
 
 .thinkLive {
-    color: var(--accent);
+    /* 想着的时候一行灰字扫光（学 ZCode 的 animated-gradient-text）：底色就是 --text-2，
+       上面叠一条白色高光带扫过去 —— 只动透明度、不引入第二种颜色，亮色/暗色主题共用一个值
+       （硬编码灰在暗色下会扫出一道「洞」）。4s 一轮：前 2s 扫过，后 2s 歇着。 */
+    display: inline-block;
+    background-image: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 40%,
+        rgba(255, 255, 255, 0.55) 50%,
+        rgba(255, 255, 255, 0) 60%
+    ),
+    linear-gradient(var(--text-2), var(--text-2));
+    background-size: 300% 100%, 100% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: think-sweep 4s linear infinite;
+    will-change: background-position;
+}
+
+@keyframes think-sweep {
+    0% {
+        background-position: 100% 0, 0 0;
+    }
+
+    50% {
+        background-position: 0% 0, 0 0;
+    }
+
+    100% {
+        background-position: 0% 0, 0 0;
+    }
 }
 
 .thinkChevron {
     flex: 0 0 auto;
     color: var(--text-3);
-    transition: transform 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.12s ease;
+}
+
+/* 箭头平时不露（一行灰字就够了），悬停这一行或已经展开时才出来 ——
+   跟 ZCode 的 group-hover 一样；触摸屏直接点整行也能展开。 */
+.thinkHead .thinkChevron {
+    opacity: 0;
+}
+
+.thinkHead:hover .thinkChevron,
+.thinkHead .thinkChevronOpen {
+    opacity: 1;
 }
 
 .thinkChevronOpen {
@@ -1453,8 +1495,14 @@
 }
 
 .toolName {
-    flex: 0 0 auto;
+    /* 读资料那两条的标题是 AI 自己写的一句话，可能偏长：允许截断，
+       否则 312px 的面板里这一行会被撑爆（参数那截反而被挤没） */
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
     font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .toolArg {

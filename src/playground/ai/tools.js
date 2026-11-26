@@ -1546,7 +1546,10 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
             name: 'xce_read_skill',
             description:
                 'List the RAG reference documents (fastdocs) that exist for this editor, the team behind ' +
-                'it and its sister sites — one line each. Takes no arguments.\n' +
+                'it and its sister sites — one line each.\n' +
+                'Pass `description`: a few words saying what you are looking up. That line is shown on ' +
+                'the tool row in place of a generic label, so write it in the same language you are ' +
+                'talking to the user in.\n' +
                 'Terminology, so it does not get muddled: these documents are NOT "skills". A skill is ' +
                 'something you can do — writing blocks, drawing sprites, firing events — and this lookup ' +
                 'itself is one of your skills. What you read here is reference material, and the names ' +
@@ -1556,7 +1559,17 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 'know what is available, and they beat anything you only half-remember. To actually read ' +
                 'one, pass its name to xce_read_fast_docs.',
             readOnly: true,
-            inputSchema: {type: 'object', properties: {}},
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    description: {
+                        type: 'string',
+                        description: 'A few words saying what you are looking up — shown on the tool ' +
+                            'row in place of a generic label. Same language you are talking to the ' +
+                            'user in.'
+                    }
+                }
+            },
             handler: () => {
                 if (!skills.length) return ok('No reference documents are loaded.');
                 const lines = skills.map(skill => `- \`${skill.name}\` — ${skill.description}`);
@@ -1573,12 +1586,21 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 'you can look facts up before answering.\n' +
                 'Each fastdoc is a SHORT overview; when it is not enough, pass "<fastdoc>/<doc>" to read ' +
                 'one of its detailed documents (a fastdoc lists the detailed docs it has).\n' +
+                'Pass `description` too: a few words saying what you are looking up. That line is shown ' +
+                'on the tool row in place of a generic label, so write it in the same language you are ' +
+                'talking to the user in.\n' +
                 'One call per document; do not fetch documents you do not need, and never answer a ' +
                 'question the documents cover without reading them first.',
             readOnly: true,
             inputSchema: {
                 type: 'object',
                 properties: {
+                    description: {
+                        type: 'string',
+                        description: 'A few words saying what you are looking up — shown on the tool ' +
+                            'row in place of a generic label. Same language you are talking to the ' +
+                            'user in.'
+                    },
                     name: {
                         type: 'string',
                         description: 'Document name: a fastdoc ("xce_fastdocs_engine"), or one of its ' +

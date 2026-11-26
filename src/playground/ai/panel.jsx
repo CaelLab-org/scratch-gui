@@ -111,6 +111,10 @@ const TOOL_LABELS = {
     xce_search: '搜索网络'
 };
 
+// 这两个工具的标题不写死：调用时由 AI 自己写一句 description（它知道自己要找什么），
+// 比「查阅资料 / 读取文档」这种固定标签有用；没写就回退固定标签。
+const SELF_LABELED = ['xce_read_skill', 'xce_read_fast_docs'];
+
 const EMPTY_HINTS = [
     '做个数到 10 的计数器，用变量记',
     '这个角色现在有哪些脚本？讲讲它在干嘛',
@@ -382,7 +386,10 @@ const Thinking = ({text, streaming, ms, startedAt, now}) => {
     const label = streaming ?
         `思考中 · ${thinkSeconds({streaming, startedAt, now})}s` :
         (ms ? `思考过程 · 共 ${thinkSeconds({ms})}s` : '思考过程');
-    const peek = thinkPeek(text);
+    // 右边那截「正在想什么」只在**还在想、而且收着**的时候出现 —— 跟 ZCode 新版一条规矩
+    // （它的 streamingSummary 就是 `isStreaming && !isOpen`）：想完了它成了旧话，展开后正文
+    // 就在下面，预览只是重复。
+    const peek = streaming && !open ? thinkPeek(text) : '';
     // 一步只想了两个字的那种就别占地方了（多步往返时会冒出好几条「思考过程 · 1s」，很吵）
     if (!streaming && String(text).trim().length < 12) return null;
     return (
@@ -398,8 +405,7 @@ const Thinking = ({text, streaming, ms, startedAt, now}) => {
                         size={11}
                     />
                 </span>
-                {/* 想着的时候行首转个小圈 + 秒数在跳：收起来也看得出它还在干 */}
-                {streaming ? <span className={styles.spinner} /> : null}
+                {/* 想着的时候文字扫光 + 秒数在跳（学 ZCode 新版：不转圈，扫光本身就说明它在动） */}
                 <span className={`${styles.thinkLabel} ${streaming ? styles.thinkLive : ''}`}>{label}</span>
                 {peek ? <span className={styles.thinkPeek}>{peek}</span> : null}
             </button>
@@ -558,7 +564,10 @@ const ToolCard = ({item, onUndo, onSkip}) => {
         setOpen(defaultOpen);
     }, [defaultOpen]);
     // 旧对话（改名前存的）里工具名没有 xce_ 前缀，补一次映射，别让界面露出裸英文名
-    const label = TOOL_LABELS[item.name] || TOOL_LABELS[`xce_${item.name}`] || item.name;
+    // 读资料那两条：AI 在参数里写的那句话就是标题，空着才回退固定标签
+    const own = SELF_LABELED.includes(item.name) && item.input &&
+        typeof item.input.description === 'string' ? item.input.description.trim() : '';
+    const label = own || TOOL_LABELS[item.name] || TOOL_LABELS[`xce_${item.name}`] || item.name;
     // 「查看 Agent 的请求」：用户展开后可以点开看这次调用真正发出去的参数。
     // 截断到 2KB —— xce_write_script 的 text 参数可能很长，全量展开会把面板撑爆。
     const requestText = item.input ?

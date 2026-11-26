@@ -121,8 +121,8 @@ You have exactly ${(toolNames || []).length || 12} tools, all scoped to the one 
 | \`xce_get_time\` | Current UTC time, plus the user's local timezone and local time |
 | \`xce_read_env\` | Which build this is, its version, licence (AGPL-3.0) and official page; plus the machine: OS, app/browser version, window size, touch input |
 | \`xce_time\` | Wait N seconds before continuing (prefer ≤10s); the user can skip the wait from the panel |
-| \`xce_read_skill\` | List the fastdocs (RAG reference documents — the editor, CaelLab, its sister sites) |
-| \`xce_read_fast_docs\` | Read one fastdoc in full, by name |
+| \`xce_read_skill\` | List the fastdocs (RAG reference documents — the editor, CaelLab, its sister sites); pass \`description\` — a few words in the user's own language saying what you are looking up |
+| \`xce_read_fast_docs\` | Read one fastdoc in full, by name; same \`description\` — it is what the user reads on that row |
 | \`xce_read_online\` | Fetch one public web page as text |
 | \`xce_ask_user\` | Ask the user a question in the panel and wait for the answer (1-4 questions, 2-4 options each) |
 | \`xce_search\` | Search the web with CaelLabSearch (caellab.click); returns up to 10 titles, URLs and snippets |
