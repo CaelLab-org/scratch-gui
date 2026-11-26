@@ -337,10 +337,10 @@ curl -s http://127.0.0.1:49621/v1/call -H "Authorization: Bearer xce_..." \
                     命令行工具 <code>xce-cli</code> 两种通道都认：不传 <code>--url</code> 走本机桥
                     （不需要密钥），传了就换成网络入口。
                 </p>
-                <pre><code>npx -y xce-cli@latest tools
-npx -y xce-cli@latest call xce_read_project '{}'
-npx -y xce-cli@latest mcp --url http://192.168.1.10:49621/v1 --key xce_...
-npx -y xce-cli@latest skill --out SKILL.md</code></pre>
+                <pre><code>npx -y @yunyun-3782/xce-cli@latest tools
+npx -y @yunyun-3782/xce-cli@latest call xce_read_project '{}'
+npx -y @yunyun-3782/xce-cli@latest mcp --url http://192.168.1.10:49621/v1 --key xce_...
+npx -y @yunyun-3782/xce-cli@latest skill --out SKILL.md</code></pre>
                 <p>
                     最后一条会写一份 <code>SKILL.md</code>，丢给那些「只会跑命令、不接 MCP」的 agent。
                     密钥别写进项目文件，也不用的时候把开关关掉。
