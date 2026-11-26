@@ -55,6 +55,7 @@ import {
 } from './custom-providers.js';
 import {buildSystemPrompt, WARN_AT} from './prompt.js';
 import {isDesktopMode} from './online.js';
+import {buildAccessPrompt, detectPromptLang, savedPromptLang, savePromptLang, PROMPT_LANGS} from './access-prompt.js';
 import {notify, requestNotifyPermission} from './notify.js';
 import {maybeCompact, measure} from './compact.js';
 import {buildTurns, formatWorkDuration, undoActionOf, itemsBeforeTurn, itemsUpToTurn} from './turns.js';
@@ -1809,6 +1810,8 @@ const AccessSection = ({onBack}) => {
     const [busy, setBusy] = useState(false);
     const [copied, setCopied] = useState('');
     const [error, setError] = useState('');
+    // 提示词用哪种语言：跟编辑器走，用户切过就记住（存 localStorage，跟模型选择一样）
+    const [lang, setLang] = useState(() => savedPromptLang() || detectPromptLang());
 
     useEffect(() => {
         if (!supported || !preload.aiAccessGet) return;
@@ -1842,11 +1845,16 @@ const AccessSection = ({onBack}) => {
     };
 
     const endpoint = (info && (info.urls && info.urls[0])) || (info && info.endpoint) || '';
+    // 提示词里默认写局域网那条：本机用它也能连（服务监听 0.0.0.0），换台机器就不用改
     const key = (info && info.key) || '';
     const claude = endpoint && key ?
         `claude mcp add xce -- npx -y @caellab/xce-cli@latest mcp --url ${endpoint} --key ${key}` : '';
-    const generic = endpoint && key ?
-        `npx -y @caellab/xce-cli@latest call <工具名> '<JSON参数>' --url ${endpoint} --key ${key}` : '';
+    const mcpLine = 'npx -y @caellab/xce-cli@latest mcp --url … --key …';
+    const prompt = buildAccessPrompt({url: endpoint, key, lang});
+    const pickLang = next => {
+        setLang(next);
+        savePromptLang(next);
+    };
 
     return (
         <div className={styles.settings}>
@@ -1928,36 +1936,52 @@ const AccessSection = ({onBack}) => {
                                 </div>
 
                                 <div className={styles.field}>
-                                    <span className={styles.fieldLabel}>贴给 Claude Code</span>
-                                    <div className={styles.copyRow}>
-                                        <code className={styles.copyValue}>{claude}</code>
+                                    <div className={styles.fieldHead}>
+                                        <span className={styles.fieldLabel}>粘给 AI 的一段话</span>
+                                        <button
+                                            className={styles.copyBtn}
+                                            onClick={() => copy('prompt', prompt)}
+                                            type="button"
+                                        >{copied === 'prompt' ? '已复制' : '复制'}</button>
+                                    </div>
+                                    <div className={styles.langRow}>
+                                        {PROMPT_LANGS.map(item => {
+                                            const chipClass = item.id === lang ?
+                                                `${styles.langChip} ${styles.langChipOn}` : styles.langChip;
+                                            return (
+                                                <button
+                                                    className={chipClass}
+                                                    key={item.id}
+                                                    onClick={() => pickLang(item.id)}
+                                                    type="button"
+                                                >{item.label}</button>
+                                            );
+                                        })}
+                                    </div>
+                                    <pre className={styles.promptBox}>{prompt}</pre>
+                                    <span className={styles.fieldNote}>
+                                        整段复制，粘到 Claude Code / ZCode / Cursor 的对话框里就行 ——
+                                        里面两种接法都写了，它能用 MCP 就用 MCP，不会就照着敲命令。
+                                        换台机器上的 AI 时，把地址换成它够得着的那条。
+                                    </span>
+                                </div>
+
+                                <div className={styles.field}>
+                                    <div className={styles.fieldHead}>
+                                        <span className={styles.fieldLabel}>MCP 配置</span>
                                         <button
                                             className={styles.copyBtn}
                                             onClick={() => copy('claude', claude)}
                                             type="button"
                                         >{copied === 'claude' ? '已复制' : '复制'}</button>
                                     </div>
-                                    <span className={styles.fieldNote}>
-                                        在终端里跑这一句，之后 Claude Code 就能读写你正在编辑的项目。
-                                    </span>
-                                </div>
-
-                                <div className={styles.field}>
-                                    <span className={styles.fieldLabel}>贴给别的 AI（ZCode / 任何一个能跑命令的）</span>
                                     <div className={styles.copyRow}>
-                                        <code className={styles.copyValue}>{generic}</code>
-                                        <button
-                                            className={styles.copyBtn}
-                                            onClick={() => copy('generic', generic)}
-                                            type="button"
-                                        >{copied === 'generic' ? '已复制' : '复制'}</button>
+                                        <code className={styles.copyValue}>{claude}</code>
                                     </div>
                                     <span className={styles.fieldNote}>
-                                        {'先让它跑 '}
-                                        <code className={styles.mdCode}>npx -y @caellab/xce-cli@latest tools</code>
-                                        {' 看有哪些工具。要一份完整说明，就在编辑器目录跑 '}
-                                        <code className={styles.mdCode}>npx -y @caellab/xce-cli@latest skill</code>
-                                        {'，生成的 SKILL.md 直接丢给它的技能目录。'}
+                                        {'Claude Code 在终端跑这一句，重开一次就有了。别的客户端把 '}
+                                        <code className={styles.mdCode}>{mcpLine}</code>
+                                        {' 填进它的 MCP 配置（stdio 类型）。'}
                                     </span>
                                 </div>
 

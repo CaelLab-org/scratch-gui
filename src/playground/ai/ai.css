@@ -634,6 +634,67 @@
     color: var(--text-1);
 }
 
+/* 「粘给 AI 的一段话」：标签和复制按钮同一行，语言切换单独一行，
+   正文用等宽、可滚动 —— 命令和说明混在一起，只读不编辑，所以不做输入框。 */
+.fieldHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.fieldHead .fieldLabel {
+    margin-bottom: 0;
+}
+
+.langRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.langChip {
+    height: 22px;
+    padding: 0 7px;
+    border: 1px solid var(--border-l1);
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 20px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.langChip:hover {
+    border-color: var(--border-l2);
+    color: var(--text-1);
+}
+
+.langChipOn,
+.langChipOn:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.promptBox {
+    margin: 0;
+    padding: 8px 9px;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text-2);
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 11.5px;
+    line-height: 18px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .accessWarn {
     margin: 12px 0 0;
     padding: 8px 10px;
