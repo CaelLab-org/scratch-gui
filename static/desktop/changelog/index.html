@@ -243,15 +243,42 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.10.1 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.10.2 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
-                    <h2>4.10.1</h2>
+                    <h2>4.10.2</h2>
                     <span class="date">2026-11-26</span>
                     <span class="latest">最新</span>
+                </header>
+
+                <p>变量面板即时刷新，后台也能截图；外部接入的截图改成短时效地址。</p>
+
+                <h3>变量与积木面板</h3>
+                <ul>
+                    <li>AI 新建变量或列表后，左侧「变量」分类里马上就能看到，不用再切一次角色或页签。</li>
+                    <li>手动新建、重命名变量 / 列表 / 广播之后，面板也会立刻刷新。</li>
+                </ul>
+
+                <h3>截图</h3>
+                <ul>
+                    <li>网页版切到后台标签页时，XCE Agent 的 <code>xce_read_stage</code> 也能看到舞台 —— 编辑器会主动补画一帧，不再因为浏览器暂停渲染而失败。</li>
+                    <li>截不到时会说明具体原因（标签页在后台、窗口没焦点、WebGL 上下文丢失、渲染器还没起来），并据此告诉用户怎么办，而不是反复重试或凭空描述。</li>
+                </ul>
+
+                <h3>外部接入（MCP / HTTP）</h3>
+                <ul>
+                    <li>截图结果不再是一大段 base64，而是一个短时效地址（10 分钟内有效），模型或客户端直接打开就能看图；MCP 通道用本机回环地址，HTTP 内网接入用局域网地址。</li>
+                    <li>外置 AI 的说明里也写清楚了：客户端没把图交给它时，去取这个地址。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
+                    <h2>4.10.1</h2>
+                    <span class="date">2026-11-26</span>
                 </header>
 
                 <p>更新检查从下载站搬到编辑器自己的域名；旧地址保留跳转，4.8.1 起的旧版本也能继续收到更新。</p>

@@ -75,6 +75,10 @@ node packages/xce-mcp/bin/xce-mcp.mjs
 
 调用串行执行；面板自己正在跑一轮时，外部来的**写操作**会被拒绝（避免两边同时改一个项目）。只读操作不受影响。
 
+截图（`xce_read_stage` / `xce_read_costume`）不经过 MCP 的 base64 图片块：桌面端把图落成一个短时效地址
+（MCP 通道是 `http://127.0.0.1:<端口>/xce/shots/…`；走 HTTP 外部接入时用你连过来的地址，内网就是局域网 IP），
+地址直接写在工具结果文本里，10 分钟内可以反复取。地址里的随机串就是凭据，取图不用带密钥。
+
 音频这类大文件走不了 MCP：`xce_add_sound` 用 `url` 或 base64 `data`。`POST /v1/assets`
 原始字节上传是 HTTP 通道专用的（见编辑器里的外部接入说明）。
 

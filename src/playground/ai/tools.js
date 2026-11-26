@@ -1072,24 +1072,57 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
             inputSchema: {type: 'object', properties: {}},
             handler: async (input, ctx = {}) => {
                 const dataUrl = await port.snapshotStage();
+                const status = port.stageStatus ? port.stageStatus() : {};
                 if (!dataUrl) {
-                    // 网页版标签页在后台时浏览器会挂起渲染（rAF 不跑，requestSnapshot 等不到帧），
-                    // 桌面壳关了后台节流（backgroundThrottling: false）没有这回事 —— 所以这句只给网页版。
-                    const tabHidden = !isDesktopMode() &&
-                        typeof document !== 'undefined' && document.hidden;
-                    if (tabHidden) {
-                        return fail('Screenshot failed: the renderer produced no frame before the timeout, ' +
-                            'and the tab is currently in the background — the browser suspends rendering while ' +
-                            'the user is away, so this is most likely the cause. You can put a question to the ' +
-                            'user with xce_ask_user: it sends a notification that brings them back, and then a ' +
-                            'retry should work. If this keeps happening, it is fine to mention once, plainly, ' +
-                            'that the desktop app keeps rendering in the background (engine.xmuer.online/desktop/).');
+                    if (!status.renderer || !status.snapshot) {
+                        return fail('Screenshot failed: the stage renderer is not there yet, so there is ' +
+                            'nothing to capture. The project is most likely still loading — wait a moment and ' +
+                            'retry once. If it keeps failing, say so plainly instead of describing the stage ' +
+                            'from imagination.');
                     }
-                    return fail('Screenshot failed: the renderer produced no frame before the timeout. The ' +
-                        'project may not have rendered a single frame yet — call xce_run_project first, then retry.');
+                    // 画面不是没画，是画不出来：把页面状态原样交给模型，让它说人话，
+                    // 而不是反复重试或者凭空描述舞台。
+                    const facts = [
+                        status.hidden === null ? null : `page hidden: ${status.hidden ? 'yes' : 'no'}`,
+                        status.visibility ? `visibility: ${status.visibility}` : null,
+                        status.focused === null ? null : `window focused: ${status.focused ? 'yes' : 'no'}`,
+                        `WebGL context lost: ${status.contextLost ? 'yes' : 'no'}`
+                    ].filter(Boolean).join('; ');
+                    if (status.contextLost) {
+                        return fail(`Screenshot failed: the stage's WebGL context is lost (${facts}), so the ` +
+                            'editor cannot draw a frame. Tell the user plainly that the stage graphics stopped ' +
+                            'working and that reloading the editor should bring them back; do not keep retrying ' +
+                            'and do not describe the stage from imagination. xce_read_state still works for ' +
+                            'numbers.');
+                    }
+                    const background = status.hidden === true || status.visibility === 'hidden';
+                    if (background) {
+                        // 面板里能靠提问卡片 + 通知把人叫回来；外置通道没有这条路，只能让它在回复里说
+                        const canAsk = typeof ctx.ask === 'function';
+                        const where = isDesktopMode() ?
+                            'The editor window looks like it is in the background or minimized. Bring it back ' +
+                                'to the front and retry once. ' :
+                            'On the web version the browser suspends the editor when its tab is not visible. ';
+                        return fail(`Screenshot failed even after a forced draw, and the page is in the ` +
+                            `background (${facts}). ${where}${canAsk ?
+                                'xce_ask_user sends a notification that brings the user back; ask once, then ' +
+                                    'retry. ' :
+                                'You cannot put a question to the user on this external channel — say plainly ' +
+                                    'in your reply that the tab was in the background and the stage could not be ' +
+                                    'captured. '}` +
+                            'If the user does not come back, do not keep retrying: use xce_read_state and say ' +
+                            'what could not be seen.');
+                    }
+                    return fail(`Screenshot failed: the renderer produced no frame even after a forced draw ` +
+                        `(${facts}). This is a rendering problem, not something the user did. Tell them once, ` +
+                        'plainly, and use xce_read_state for numbers instead of retrying in a loop.');
                 }
                 const size = port.stageSize();
-                const caption = `Stage screenshot (${size.width}x${size.height}, current frame).`;
+                // 后台标签页里 rAF 和定时器都被节流，项目走得比正常慢；截到的画面本身没问题，
+                // 但别让模型把「动画还没到那一帧」当成作品写错了。
+                const background = !isDesktopMode() && status.hidden === true;
+                const caption = `Stage screenshot (${size.width}x${size.height}, current frame).${background ?
+                    ' The tab is in the background right now, so the project may be advancing slowly.' : ''}`;
                 if (!ctx.supportsImage) {
                     // 非视觉模型：不塞图片，改成一句能转述给用户的话
                     return ok(stageVisionNote(caption));

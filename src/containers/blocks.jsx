@@ -623,6 +623,9 @@ class Blocks extends React.Component {
             this.props.vm.runtime.getAllVarNamesOfType(this.state.prompt.varType),
             variableOptions);
         this.handlePromptClose();
+        // 新建 / 重命名变量、列表或广播之后，变量分类不会自己重建（toolbox XML 没变），
+        // 手动刷一次 —— 否则刚建的变量在面板里看不到（AI 改过一次项目后尤其明显）。
+        this.requestToolboxUpdate();
     }
     handlePromptClose () {
         this.setState({prompt: null});

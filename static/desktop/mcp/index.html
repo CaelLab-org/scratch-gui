@@ -308,6 +308,12 @@ args = ["-y", "xce-mcp"]</code></pre>
                     边界：一次调用结束后才轮得到下一次；面板自己正在跑一轮时，外部来的写操作会被拒绝，
                     等它结束再试。读操作不受影响。
                 </p>
+                <p>
+                    截图（<code>xce_read_stage</code> / <code>xce_read_costume</code>）不走 base64：桌面端会把图落成
+                    一个短时效地址（MCP 通道是 <code>http://127.0.0.1:端口/xce/shots/…</code>；走 HTTP 外部接入时用
+                    你连过来的地址，内网就是局域网 IP），地址直接写在工具结果里，10 分钟内可以反复取。地址里的
+                    随机串本身就是凭据，取图不用带密钥。
+                </p>
             </section>
 
             <section>

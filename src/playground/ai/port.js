@@ -288,6 +288,34 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         if (vm.emitWorkspaceUpdate) vm.emitWorkspaceUpdate();
     };
 
+    // 变量 / 列表建好后，左边积木选择区不会自己重建：GUI 只在 toolbox XML 变化时才重新
+    // 生成飞出区，而 emitWorkspaceUpdate 发的是同一份 XML（变量分类是 custom="VARIABLE"，
+    // 变量名不在 XML 里）。结果就是变量明明在项目里，面板里却看不到 —— 手动刷一次，
+    // 顺便把滚动位置保回去（跟 blocks.jsx 的 updateToolbox 一个口径）。
+    const refreshPalette = () => {
+        try {
+            const workspace = getWorkspace && getWorkspace();
+            const toolbox = workspace && workspace.getToolbox ? workspace.getToolbox() : null;
+            if (!toolbox || typeof toolbox.refreshSelection !== 'function') return;
+            const categoryId = typeof toolbox.getSelectedCategoryId === 'function' ?
+                toolbox.getSelectedCategoryId() : null;
+            const offset = categoryId && typeof toolbox.getCategoryScrollOffset === 'function' ?
+                toolbox.getCategoryScrollOffset() : 0;
+            toolbox.refreshSelection();
+            if (!categoryId || typeof toolbox.getCategoryPositionById !== 'function') return;
+            const position = toolbox.getCategoryPositionById(categoryId);
+            const length = typeof toolbox.getCategoryLengthById === 'function' ?
+                toolbox.getCategoryLengthById(categoryId) : 0;
+            if (typeof position === 'number' && typeof toolbox.setFlyoutScrollPos === 'function') {
+                toolbox.setFlyoutScrollPos(offset < length ? position + offset : position);
+            }
+        } catch (e) {
+            // 面板刷新失败不影响变量本身
+            // eslint-disable-next-line no-console
+            console.warn('[ai] 刷新积木面板失败', e);
+        }
+    };
+
     // 这个角色是不是用户当前正在看的那个 —— 工作区只画当前角色的东西，
     // 给别的角色写注释，用户要切过去才看得见（拿它跟模型说清楚，别假装画面上已经出现了）
     const isEditing = target => !!(vm.editingTarget && target && vm.editingTarget.id === target.id);
@@ -1261,6 +1289,8 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 target.blocks.createBlock(vmBlocks[id]);
             }
             refreshWorkspace();
+            // 这段文本顺手建出来的变量/列表也要在面板里立刻能看到（见 refreshPalette）
+            if (createdVariables.length || createdLists.length) refreshPalette();
             // 让 Blockly 量完尺寸再排版，否则 cleanUp 算出来的高度是错的
             await new Promise(resolve => setTimeout(resolve, 0));
             tidy();
@@ -1315,6 +1345,8 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 if (!isList && value !== void 0 && value !== null && value !== '') variable.value = value;
             }
             refreshWorkspace();
+            // 变量面板不会跟着 workspaceUpdate 自己重建，必须手动刷一次（见 refreshPalette）
+            refreshPalette();
             return {ok: true, name: wanted, id, scope: host.isStage ? 'global' : 'local'};
         },
 
@@ -1610,6 +1642,11 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         // 舞台当前画面。走 renderer.requestSnapshot —— 它是 scratch-render 官方的截图出口：
         // 在**画完这一帧之后**同步调 canvas.toDataURL()，所以不受 preserveDrawingBuffer 影响
         // （直接读 canvas 在 WebGL 下经常只能拿到空白）。
+        //
+        // 但「下一帧」不一定自己会来：runtime._step 里是 `if (!document.hidden) renderer.draw()`，
+        // 网页版切到后台标签页之后就不再画了（桌面壳关了后台节流，没这回事）。所以这里
+        // **自己补一帧**：requestSnapshot 只是把 dirty 置上并排队回调，真正的回调在 draw()
+        // 里执行；WebGL 画布本身不看页面可见性，后台也能画、也能 toDataURL。
         snapshotStage: ({timeoutMs = 3000} = {}) => new Promise(resolve => {
             const renderer = runtime().renderer;
             if (!renderer || typeof renderer.requestSnapshot !== 'function') {
@@ -1617,18 +1654,46 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 return;
             }
             let settled = false;
-            const timer = setTimeout(() => {
-                if (settled) return;
-                settled = true;
-                resolve(null);
-            }, timeoutMs);
-            renderer.requestSnapshot(dataUrl => {
+            let timer = null;
+            const finish = dataUrl => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timer);
-                resolve(dataUrl || null);
-            });
+                resolve(dataUrl);
+            };
+            timer = setTimeout(() => finish(null), timeoutMs);
+            const shoot = () => {
+                if (settled) return;
+                try {
+                    renderer.requestSnapshot(dataUrl => {
+                        // 画布尺寸为 0 时 toDataURL 只给 "data:,"，当没拿到，等下一次 shoot
+                        if (dataUrl && dataUrl.length > 64) finish(dataUrl);
+                    });
+                    if (typeof renderer.draw === 'function') renderer.draw();
+                } catch (e) {
+                    // 画布还没准备好 / WebGL 上下文丢了：等超时或下一次 shoot
+                }
+            };
+            shoot();
+            // 刚挂载 / 刚从后台切回来时画布可能还没量好尺寸，再补一次；第一帧成功的话这里是空转
+            setTimeout(shoot, 250);
         }),
+
+        // 截图失败时给模型的事实：页面在不在前台、渲染器在不在、WebGL 上下文有没有丢。
+        // 正常截图不碰这些；只用来让失败原因说人话（见 tools.js 的 xce_read_stage）。
+        stageStatus: () => {
+            const renderer = runtime().renderer;
+            const doc = typeof document === 'undefined' ? null : document;
+            const gl = renderer && renderer._gl;
+            return {
+                renderer: !!renderer,
+                snapshot: !!(renderer && typeof renderer.requestSnapshot === 'function'),
+                contextLost: !!(gl && typeof gl.isContextLost === 'function' && gl.isContextLost()),
+                hidden: doc ? !!doc.hidden : null,
+                visibility: doc && typeof doc.visibilityState === 'string' ? doc.visibilityState : '',
+                focused: doc && typeof doc.hasFocus === 'function' ? doc.hasFocus() : null
+            };
+        },
 
         stageSize: () => {
             const rt = runtime();
