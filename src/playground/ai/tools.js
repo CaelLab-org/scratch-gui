@@ -19,7 +19,7 @@
  * 只有当前模型收图片时才会被填上（见 xce_read_stage）。
  */
 
-import {fetchImage, fetchOnline, isDesktopMode} from './online.js';
+import {fetchImage, fetchOnline, fetchSound, isDesktopMode} from './online.js';
 import {searchCaelLab, MAX_RESULTS, TITLE_CAP, DESC_CAP} from './search.js';
 import {MEMORY_LIMITS, MEMORY_TYPES, memoryIndexText, findMemory, saveMemory, deleteMemory} from './memory.js';
 import {AGENT_SPRITE_NAME, AGENT_NOTE_MAX_CHARS, MEMORY_INDEX_SPRITE, MEMORY_CONTENT_SPRITE} from './port.js';
@@ -42,12 +42,13 @@ const listSpritesDetailed = port => port.listSpritesDetailed()
         const costumes = t.costumes && t.costumes.length ?
             `, costumes: ${t.costumes.map(name =>
                 (name === t.currentCostume ? `${name} (current)` : name)).join(', ')}` : '';
+        const sounds = t.sounds && t.sounds.length ? `, sounds: ${t.sounds.join(', ')}` : '';
         const vars = t.variables.length ? `, variables: ${t.variables.join(', ')}` : '';
         const lists = t.lists.length ? `, lists: ${t.lists.join(', ')}` : '';
         // 自定义积木是「这个角色能调的名字」：列出来，模型才不会瞎写一个不存在的
         const procs = t.procedures && t.procedures.length ?
             `, custom blocks: ${t.procedures.join(', ')}` : '';
-        return `${head}${costumes}${vars}${lists}${procs}`;
+        return `${head}${costumes}${sounds}${vars}${lists}${procs}`;
     })
     .join('\n');
 
@@ -218,7 +219,7 @@ export const engineFromUserAgent = ua => {
  *           装载 skill 用到了 webpack 的 require.context，import 进来无头测试就跑不了。
  * @returns {Array<object>} 工具数组
  */
-export const createTools = ({port, skills = []}) => {
+export const createTools = ({port, skills = [], getInstructions}) => {
     // read_online 的「哪些站读得到」这句跟着环境走：桌面版由应用自己发请求，没有页面的跨域限制，
     // 不这么说模型会在本来能读的站上自己先放弃（用户要的正是这个差别）。
     const fetchReach = isDesktopMode() ?
@@ -280,8 +281,8 @@ export const createTools = ({port, skills = []}) => {
         {
             name: 'xce_list_sprites',
             description:
-                'List every sprite in the project — the "ls" of this editor: name, script count, variable and ' +
-                'list names, one line each. Names only, never code.\n' +
+                'List every sprite in the project — the "ls" of this editor: name, script count, costume, ' +
+                'sound, variable and list names, one line each. Names only, never code.\n' +
                 'Call this first whenever you need to know what exists; then read one sprite\'s code with ' +
                 'xce_read_project. The project contents are NOT given to you up front — always discover them.',
             readOnly: true,
@@ -1518,6 +1519,142 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
         },
 
         {
+            name: 'xce_add_sound',
+            description:
+                'Add ONE sound (声音) to an existing sprite. Three ways to supply it:\n' +
+                '- `url`: a direct link to an mp3 or wav file. The editor downloads it.\n' +
+                '- `data`: the audio bytes as base64 (a `data:audio/mpeg;base64,...` URL works too).\n' +
+                '- `assetId`: only on the external HTTP channel — POST the raw bytes to `/v1/assets` first ' +
+                'and pass the id it returns. MCP clients cannot use this.\n' +
+                'Scratch\'s own uploader accepts only mp3 and wav; convert anything else before calling. ' +
+                'The file is capped at 10MB. The sound is appended to the sprite\'s sound list and named ' +
+                '`name` (default: the file name for a URL, or 声音N) — a name already in use gets a number ' +
+                'appended, so read the returned name before writing a `play sound [name v]` block.\n' +
+                'Sounds belong to one sprite (the stage has its own list); check xce_list_sprites for the ' +
+                'existing names.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name (see xce_list_sprites).'},
+                    url: {type: 'string', description: 'Direct http(s) URL of an mp3 or wav file.'},
+                    data: {type: 'string', description: 'Base64 audio bytes, optionally as a data: URL.'},
+                    mimeType: {
+                        type: 'string',
+                        description: 'audio/mpeg or audio/wav. Inferred from data:/the name when omitted.'
+                    },
+                    name: {type: 'string', description: 'Name for the sound. Default: file name or 声音N.'},
+                    assetId: {
+                        type: 'string',
+                        description: 'Asset id from POST /v1/assets (external HTTP channel only).'
+                    }
+                },
+                required: ['sprite']
+            },
+            handler: async ({sprite, url, data, mimeType, name, assetId}) => {
+                if (!sprite) return fail('A sprite name is required. Names are in xce_list_sprites.');
+                if (!url && !data) {
+                    if (assetId) {
+                        return fail(`The assetId "${assetId}" was not resolved. Asset ids are filled in by ` +
+                            'the HTTP bridge only, and they expire after 30 minutes — upload the file to ' +
+                            '/v1/assets again and retry.');
+                    }
+                    return fail('Pass a direct mp3/wav `url`, base64 `data`, or an HTTP `assetId`. ' +
+                        'Nothing was added.');
+                }
+                let payload = data;
+                let mime = mimeType || '';
+                let soundName = String(name || '').trim();
+                if (url) {
+                    try {
+                        const got = await fetchSound(url);
+                        payload = got.data;
+                        if (!mime) mime = got.mime;
+                    } catch (e) {
+                        return fail((e && e.message) || String(e));
+                    }
+                    if (!soundName) {
+                        try {
+                            soundName = decodeURIComponent(String(url)
+                                .split('/')
+                                .pop()
+                                .split('?')[0]);
+                        } catch (e) {
+                            soundName = '';
+                        }
+                    }
+                }
+                const result = await port.addSound(sprite, {data: payload, mimeType: mime, name: soundName});
+                if (!result.ok) {
+                    if (result.reason === 'missing') {
+                        return fail(`No sprite named "${sprite}". Existing sprites: ${result.sprites}`);
+                    }
+                    if (result.reason === 'bad-format') {
+                        return fail('Scratch only takes mp3 and wav sounds. Convert the file first — ' +
+                            'nothing was added. (Pass mimeType explicitly if the data URL is missing one.)');
+                    }
+                    if (result.reason === 'too-large') {
+                        return fail(`This audio is ${Math.round(result.size / 1024 / 1024)}MB — over the ` +
+                            '10MB ceiling for a sound asset. Shorten or compress it.');
+                    }
+                    if (result.reason === 'bad-data' || result.reason === 'empty') {
+                        return fail('The base64 audio could not be decoded (or was empty) — nothing was added.');
+                    }
+                    if (result.reason === 'no-storage') {
+                        return fail('The editor is not ready to hold audio assets yet — nothing was added.');
+                    }
+                    return fail('The sound could not be added.');
+                }
+                return {
+                    content: `Added sound "${result.name}" to "${result.sprite}" (index ${result.index}, ` +
+                        `${result.dataFormat}${result.sampleCount ? `, ${result.sampleCount} samples` : ''}). ` +
+                        `Use exactly that name in a play-sound block. If the name differs from what you asked ` +
+                        'for, the sprite already had one by that name.',
+                    undo: {kind: 'sound', sprite: result.sprite, index: result.index}
+                };
+            }
+        },
+
+        {
+            name: 'xce_delete_sound',
+            description:
+                'Delete ONE sound from a sprite, by name or index (see xce_list_sprites for the names).\n' +
+                'This only removes it from the sprite\'s sound list: it does not rewrite scripts. A ' +
+                '`play sound [name v]` block that still names it keeps a stale choice, so if the user ' +
+                'wants the sound gone entirely, check the scripts that use it first (xce_read_project) ' +
+                'and say what you changed.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name (see xce_list_sprites).'},
+                    sound: {
+                        type: 'string',
+                        description: 'Sound name, or a 0-based index written as a number.'
+                    }
+                },
+                required: ['sprite', 'sound']
+            },
+            handler: ({sprite, sound}) => {
+                if (!sprite) return fail('A sprite name is required. Names are in xce_list_sprites.');
+                if (sound === void 0 || sound === null || sound === '') {
+                    return fail('Which sound? Pass its name or 0-based index.');
+                }
+                const result = port.deleteSound(sprite,
+                    /^\d+$/.test(String(sound).trim()) ? Number(sound) : sound);
+                if (!result.ok) {
+                    if (result.reason === 'missing') {
+                        return fail(`No sprite named "${sprite}". Existing sprites: ${result.sprites}`);
+                    }
+                    if (result.reason === 'no-sound') {
+                        return fail(`"${sprite}" has no sound named ${JSON.stringify(sound)}. Its sounds: ` +
+                            `${(result.sounds || []).join(', ') || '(none)'}`);
+                    }
+                    return fail('The sound could not be deleted.');
+                }
+                return ok(`Deleted sound "${result.name}" (index ${result.index}) from "${result.sprite}".`);
+            }
+        },
+
+        {
             name: 'xce_save_memory',
             // 记的是自己的备忘（localStorage），不动用户的项目，不必走确认
             needsApproval: false,
@@ -2167,6 +2304,23 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
             }
         }
     ];
+
+    // 外置通道专用：把编辑器这份系统提示词原样再读一遍。
+    // 内置面板没有它 —— 面板每一轮都把提示词重新拼在请求里，不存在「丢了」这回事。
+    if (typeof getInstructions === 'function') {
+        tools.push({
+            name: 'xce_read_instructions',
+            description:
+                'Read the editor\'s own instructions for you again — the same text this channel sends when it ' +
+                'connects: what this editor is, how the tools are meant to be used, the block text format, and ' +
+                'the rules that keep the user\'s project intact.\n' +
+                'Call it when the instructions are missing from your context (a new client session, a resumed ' +
+                'or summarized conversation), or after the user changes their custom prompt or saved memories.',
+            readOnly: true,
+            inputSchema: {type: 'object', properties: {}},
+            handler: () => ok(getInstructions())
+        });
+    }
 
     return tools;
 };

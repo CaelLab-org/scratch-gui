@@ -43,6 +43,13 @@ export const cachedSkills = () => {
     return info && Array.isArray(info.skills) ? info.skills : [];
 };
 
+// 上次编辑器连上时写下的系统提示词。MCP 的 instructions 只能在构造 Server 时定一次，
+// 所以启动先拿这份缓存；要最新版就直接调 xce_read_instructions 工具。
+export const cachedInstructions = () => {
+    const info = readDiscovery();
+    return info && typeof info.instructions === 'string' ? info.instructions : '';
+};
+
 export class EditorBridge {
     constructor () {
         this.socket = null;
@@ -52,6 +59,7 @@ export class EditorBridge {
         this.pending = new Map();
         this.tools = [];
         this.skills = [];
+        this.instructions = cachedInstructions();
     }
 
     connect () {
@@ -101,14 +109,22 @@ export class EditorBridge {
                     this.socket = socket;
                     this.tools = message.tools || [];
                     this.skills = message.skills || [];
+                    if (typeof message.instructions === 'string' && message.instructions) {
+                        this.instructions = message.instructions;
+                    }
                     resolve();
                 } else if (message.type === 'tools') {
                     this.tools = message.tools || [];
                     this.skills = message.skills || [];
+                    if (typeof message.instructions === 'string' && message.instructions) {
+                        this.instructions = message.instructions;
+                    }
                     // tools/list 和 prompts/list 可能同时在等这一条
                     const waiters = Array.from(this.listWaiters);
                     this.listWaiters.clear();
-                    waiters.forEach(waiter => waiter({tools: this.tools, skills: this.skills}));
+                    waiters.forEach(waiter => waiter({
+                        tools: this.tools, skills: this.skills, instructions: this.instructions
+                    }));
                 } else if (message.type === 'result' || message.type === 'error') {
                     const entry = this.pending.get(message.id);
                     if (!entry) {
@@ -135,7 +151,9 @@ export class EditorBridge {
                 // 等清单的请求别干耗到超时
                 const waiters = Array.from(this.listWaiters);
                 this.listWaiters.clear();
-                waiters.forEach(waiter => waiter({tools: cachedTools(), skills: cachedSkills()}));
+                waiters.forEach(waiter => waiter({
+                    tools: cachedTools(), skills: cachedSkills(), instructions: cachedInstructions()
+                }));
             });
         });
     }
@@ -145,7 +163,7 @@ export class EditorBridge {
         try {
             await this.connect();
         } catch (error) {
-            return {tools: cachedTools(), skills: cachedSkills()};
+            return {tools: cachedTools(), skills: cachedSkills(), instructions: cachedInstructions()};
         }
         return new Promise(resolve => {
             let timer = 0;
@@ -154,12 +172,14 @@ export class EditorBridge {
                 this.listWaiters.delete(waiter);
                 resolve(result);
             };
-            timer = setTimeout(() => waiter({tools: this.tools, skills: this.skills}), LIST_TIMEOUT_MS);
+            timer = setTimeout(() => waiter({
+                tools: this.tools, skills: this.skills, instructions: this.instructions
+            }), LIST_TIMEOUT_MS);
             this.listWaiters.add(waiter);
             try {
                 this.socket.send(JSON.stringify({type: 'list'}));
             } catch (error) {
-                waiter({tools: cachedTools(), skills: cachedSkills()});
+                waiter({tools: cachedTools(), skills: cachedSkills(), instructions: cachedInstructions()});
             }
         });
     }

@@ -28,6 +28,7 @@ const USAGE = `xce ${version} — XMUER Coding Engine command line
 Usage:
   xce mcp [--url URL --key KEY]          MCP server over stdio (for Claude Code, ZCode, ...)
   xce tools [--url URL --key KEY]        List the editor's tools and skills
+  xce instructions [--url URL --key KEY] Print the editor's instructions (its system prompt)
   xce call <tool> [json] [--url ... ]    Call one tool
   xce skill [--out FILE]                 Write the agent skill file (SKILL.md)
   xce doctor                             Check the connection
@@ -159,6 +160,15 @@ const main = async () => {
 
     if (command === 'tools') {
         await printTools(client, flags.json);
+        return;
+    }
+
+    if (command === 'instructions') {
+        const body = await client.readInstructions();
+        if (!body) {
+            fail('The editor did not return its instructions. Is the app running with a project open?', 2);
+        }
+        process.stdout.write(`${body}\n`);
         return;
     }
 

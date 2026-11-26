@@ -41,7 +41,9 @@ export default class DevTools {
     const oldCleanUpFunc = blockly.WorkspaceSvg.prototype.cleanUp;
     const self = this;
     blockly.WorkspaceSvg.prototype.cleanUp = function () {
-      if (self.addon.settings.get("enableCleanUpPlus")) {
+      // AI 工具（port.js 的 tidy）只是排版：标记为安静模式时走原生 cleanUp，
+      // 不触发 doCleanUp 里的删除确认（用户 2026-11-26 报过那个「只剩变量名」的弹窗）
+      if (self.addon.settings.get("enableCleanUpPlus") && !this.__xceQuietCleanUp) {
         self.doCleanUp();
       } else {
         oldCleanUpFunc.call(this);

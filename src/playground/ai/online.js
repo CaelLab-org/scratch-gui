@@ -405,3 +405,80 @@ export const fetchImage = async (url, {timeoutMs = 10000, signal} = {}) => {
     const mime = MIME_OF_KIND[kind];
     return {kind: 'bitmap', mime, dataUrl: `data:${mime};base64,${bytesToBase64(bytes)}`, contentType};
 };
+
+/**
+ * 下载一个音频文件（xce_add_sound 的 url 通道）。跟 fetchImage 走同一套通道
+ * （桌面版主进程 / 浏览器 fetch），但**不做图片类型识别**：只认 mp3 / wav，
+ * 由调用方看 mime 决定。返回 base64，直接喂给 port.addSound。
+ * @param {string} url http(s) 地址
+ * @param {object} opts {timeoutMs, signal}
+ * @returns {Promise<object>} {data, mime, contentType, size}
+ */
+export const fetchSound = async (url, {timeoutMs = 20000, signal} = {}) => {
+    const target = String(url || '').trim();
+    if (!/^https?:\/\/\S+/i.test(target)) {
+        throw new Error(`Not a fetchable URL: ${target || '(empty)'}. It must be a full URL starting with http(s).`);
+    }
+    let bytes;
+    let contentType = '';
+    const bridge = desktopBridge();
+    if (bridge && typeof bridge.fetchBinary === 'function') {
+        const controller = new AbortController();
+        if (signal) {
+            if (signal.aborted) controller.abort();
+            else signal.addEventListener('abort', () => controller.abort(), {once: true});
+        }
+        const result = await Promise.race([
+            bridge.fetchBinary(target, timeoutMs),
+            new Promise((resolve, reject) => {
+                controller.signal.addEventListener('abort', () => reject(new Error('aborted')), {once: true});
+            })
+        ]);
+        if (signal && signal.aborted) throw new Error('The download was interrupted by the user.');
+        if (result && result.networkError) {
+            throw new Error(`Could not download this audio file (${result.networkError}). The desktop app ` +
+                'fetches itself, so CORS is not involved — this looks like a network-level failure.');
+        }
+        if (result && result.notImage) {
+            throw new Error(`That URL serves a web page (${result.notImage}), not an audio file. Point at ` +
+                'the file itself — an mp3 or wav direct link.');
+        }
+        if (result && result.tooLarge) {
+            throw new Error(`This audio file is over the ${Math.round(IMAGE_MAX_BYTES / 1024 / 1024)}MB ` +
+                'ceiling for a sound asset. Find a smaller one or shorten it.');
+        }
+        if (!result || !result.ok) throw new Error(`HTTP ${result ? result.status : '?'}`);
+        contentType = result.contentType || '';
+        bytes = Uint8Array.from(atob(result.base64), char => char.charCodeAt(0));
+    } else {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        if (signal) {
+            if (signal.aborted) controller.abort();
+            else signal.addEventListener('abort', () => controller.abort(), {once: true});
+        }
+        try {
+            const response = await fetch(target, {signal: controller.signal});
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            contentType = response.headers.get('content-type') || '';
+            bytes = new Uint8Array(await response.arrayBuffer());
+            clearTimeout(timer);
+        } catch (fetchError) {
+            clearTimeout(timer);
+            if (signal && signal.aborted) throw new Error('The download was interrupted by the user.');
+            if (controller.signal.aborted) {
+                throw new Error(`Download timed out (no response within ${timeoutMs / 1000}s).`);
+            }
+            if (/^HTTP \d+$/.test(fetchError.message)) throw fetchError;
+            throw new Error(`Could not download this audio file (${fetchError.message}). The usual cause is ` +
+                'CORS: the site does not allow browser pages to read its files. Try a direct link that allows ' +
+                'it, or ask the user to save the file and upload it by hand.');
+        }
+    }
+    if (bytes.length > IMAGE_MAX_BYTES) {
+        throw new Error(`This audio file is ${Math.round(bytes.length / 1024 / 1024)}MB — over the ` +
+            `${Math.round(IMAGE_MAX_BYTES / 1024 / 1024)}MB ceiling for a sound asset. Find a smaller one.`);
+    }
+    const mime = contentType.split(';')[0].trim().toLowerCase();
+    return {data: bytesToBase64(bytes), mime, contentType, size: bytes.length};
+};

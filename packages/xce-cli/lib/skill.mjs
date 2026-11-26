@@ -19,38 +19,58 @@ The user has XMUER Coding Engine (XCE) desktop open with a project. You can read
 that project through a small local HTTP API. Every call changes what the user sees in the
 editor, so treat it like editing their open file.
 
-## 1. See what you can do
+## 1. Read the editor's instructions
+
+\`\`\`bash
+npx -y @caellab/xce-cli@latest instructions --url ${endpoint} --key ${secret}
+\`\`\`
+
+This is the editor's own system prompt — project rules, tool usage, block text format.
+Read it before touching the project; do not work from this file alone.
+
+## 2. See what you can do
 
 \`\`\`bash
 npx -y @caellab/xce-cli@latest tools --url ${endpoint} --key ${secret}
 \`\`\`
 
-That prints every tool with its JSON schema. Do this first — the list is not fixed and
-this document does not repeat it.
+That prints every tool with its JSON schema. The list is not fixed and this document
+does not repeat it.
 
-## 2. Call a tool
+## 3. Call a tool
 
 \`\`\`bash
-npx -y @caellab/xce-cli@latest call xce_read_project '{}' --url ${endpoint} --key ${secret}
-npx -y @caellab/xce-cli@latest call xce_add_blocks '{"sprite":"Sprite1","script":"..."}' --url ${endpoint} --key ${secret}
+npx -y @caellab/xce-cli@latest call xce_list_sprites '{}' --url ${endpoint} --key ${secret}
+npx -y @caellab/xce-cli@latest call xce_write_script '{"sprite":"角色1","text":"when green flag clicked\\nsay [hi!]"}' --url ${endpoint} --key ${secret}
+\`\`\`
+
+For audio or other files too large for a JSON argument, upload the raw bytes first and
+pass the returned id to the tool:
+
+\`\`\`bash
+curl -s -X POST "${endpoint}/assets?name=blast.mp3&mime=audio/mpeg" \\
+  -H "Authorization: Bearer ${secret}" --data-binary @blast.mp3
+# -> {"ok":true,"assetId":"a1",...}
+npx -y @caellab/xce-cli@latest call xce_add_sound '{"sprite":"角色1","assetId":"a1"}' --url ${endpoint} --key ${secret}
 \`\`\`
 
 Or plain HTTP, if you would rather not run npx:
 
 \`\`\`bash
+curl -s ${endpoint}/instructions -H "Authorization: Bearer ${secret}"
 curl -s ${endpoint}/tools -H "Authorization: Bearer ${secret}"
 curl -s ${endpoint}/call -H "Authorization: Bearer ${secret}" \\
   -H "Content-Type: application/json" \\
-  -d '{"name":"xce_read_project","args":{}}'
+  -d '{"name":"xce_list_sprites","args":{}}'
 \`\`\`
 
 A call returns \`{"ok":true,"content":"...","isError":false}\`. Text in \`content\` is written
 for a human to read — quote the parts that matter, do not dump the whole thing.
 
-## 3. Rules
+## 4. Rules
 
-- **Read before writing.** Start with a read tool so you know the sprite names and the
-  current scripts. Do not guess sprite names.
+- **Read before writing.** Read the editor instructions, then use a read tool so you know
+  the sprite names and the current scripts. Do not guess sprite names.
 - **One change per call.** Small edits are easy for the user to follow and easy to undo.
 - **The reference documents are skills.** If a tool list includes \`xce_read_fast_docs\`,
   use it to load the editor's own docs instead of guessing block names or API details.

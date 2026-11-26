@@ -298,8 +298,8 @@ args = ["-y", "xce-mcp"]</code></pre>
             <section>
                 <h2>接上之后能做什么</h2>
                 <ul>
-                    <li><strong>读项目</strong>：角色清单、舞台、脚本、造型；脚本读回来带积木 id，方便改。</li>
-                    <li><strong>写项目</strong>：新建 / 替换 / 删除脚本，加角色、改造型、改名，改完能通过编辑器自己的撤销回退。</li>
+                    <li><strong>读项目</strong>：角色清单、舞台、脚本、造型、声音；脚本读回来带积木 id，方便改。</li>
+                    <li><strong>写项目</strong>：新建 / 替换 / 删除脚本，加角色、改造型、加删声音、改名，改完能通过编辑器自己的撤销回退。</li>
                     <li><strong>跑起来</strong>：触发绿旗或广播，等一会儿截图看结果。</li>
                     <li><strong>项目记忆</strong>：读写这个项目级的长期笔记，跟面板里的 XCE Agent 共用一份。</li>
                     <li><strong>联网</strong>：读公开网页（桌面版走应用自己发请求，不受浏览器跨域限制）、搜 CaelLab Search。</li>
@@ -345,16 +345,29 @@ description: 一行话，写清什么时候该读它
                     入口有个「监听范围」开关，默认是对局域网开（<code>0.0.0.0</code>）；只给本机用就切成
                     「仅本机」，它只绑 <code>127.0.0.1</code>，别的机器再怎么试也连不上。换范围会立刻重开监听。
                 </p>
-                <p>入口只有三个路由，没有文件系统、没有 shell：</p>
+                <p>入口只有五个路由，没有文件系统、没有 shell：</p>
                 <pre><code>curl -s http://127.0.0.1:49621/v1/health
+curl -s http://127.0.0.1:49621/v1/instructions -H "Authorization: Bearer xce_..."
 curl -s http://127.0.0.1:49621/v1/tools -H "Authorization: Bearer xce_..."
 curl -s http://127.0.0.1:49621/v1/call -H "Authorization: Bearer xce_..." \
-  -H "Content-Type: application/json" -d '{"name":"xce_read_project","args":{}}'</code></pre>
+  -H "Content-Type: application/json" -d '{"name":"xce_read_project","args":{}}'
+
+# 音频这类大文件：先传原始字节，再拿 assetId 调 xce_add_sound
+curl -s -X POST "http://127.0.0.1:49621/v1/assets?name=blast.mp3&mime=audio/mpeg" \
+  -H "Authorization: Bearer xce_..." --data-binary @blast.mp3</code></pre>
+                <p>
+                    <code>/v1/instructions</code> 是编辑器自己的系统提示词（项目规矩、工具用法、
+                    积木文本格式、用户自定义提示词和记忆索引）。它跟 MCP 客户端启动时收到的
+                    <code>instructions</code> 是同一份；客户端没转给模型的话，调
+                    <code>xce_read_instructions</code> 也能读到。素材上传有 30 分钟有效期，
+                    只存在内存里，传完就用掉。
+                </p>
                 <p>
                     命令行工具 <code>xce-cli</code> 两种通道都认：不传 <code>--url</code> 走本机桥
                     （不需要密钥），传了就换成网络入口。
                 </p>
-                <pre><code>npx -y @caellab/xce-cli@latest tools
+                <pre><code>npx -y @caellab/xce-cli@latest instructions
+npx -y @caellab/xce-cli@latest tools
 npx -y @caellab/xce-cli@latest call xce_read_project '{}'
 npx -y @caellab/xce-cli@latest mcp --url http://192.168.1.10:49621/v1 --key xce_...
 npx -y @caellab/xce-cli@latest skill --out SKILL.md</code></pre>

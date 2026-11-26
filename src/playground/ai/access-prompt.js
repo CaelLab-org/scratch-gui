@@ -70,6 +70,8 @@ const BUILDERS = {
     ${key}
 
 三、命令行（推荐；首次运行会下载包，之后走缓存）
+  ${COMMAND} call xce_read_instructions '{}' --url ${url} --key ${key}
+      → 编辑器自己的说明（项目规矩、工具用法、积木文本格式）。先读这份，再动手。
   ${COMMAND} tools --url ${url} --key ${key}
       → 列出全部工具和它们的参数结构。先跑这个，清单跟着编辑器版本变。
   ${COMMAND} call <工具名> '<JSON 参数>' --url ${url} --key ${key}
@@ -81,9 +83,11 @@ const BUILDERS = {
   claude mcp add xce -- ${COMMAND} mcp --url ${url} --key ${key}
 
 五、约定
-  - 先 tools 再调用；工具名和参数不要凭记忆猜。
+  - 先跑 instructions 和 tools，再调用；工具名和参数不要凭记忆猜。
+  - MCP 客户端若没把说明交给模型，先调工具 xce_read_instructions。
   - 先读后写：先取角色名和现有脚本，再动手；角色名同样不要猜。
   - 一次只改一处，便于我核对和撤销。
+  - 音频等大文件：先 POST 原始字节到 /v1/assets，再把返回的 assetId 交给对应工具；小片段可以直接用 data 或 url。
   - E_BUSY 或超时 = 我正在面板里操作：稍后再看，不要连续重试。
   - E_NO_EDITOR = 我没有打开项目：提醒我打开，重试无效。
   - 密钥只用于这条接口：不要原样回显给我，也不要写进项目文件。`,
@@ -100,6 +104,8 @@ const BUILDERS = {
     ${key}
 
 三、命令列（建議；首次執行會下載套件，之後走快取）
+  ${COMMAND} call xce_read_instructions '{}' --url ${url} --key ${key}
+      → 編輯器自己的說明（專案規矩、工具用法、積木文字格式）。先讀這份再動手。
   ${COMMAND} tools --url ${url} --key ${key}
       → 列出全部工具與它們的參數結構。先跑這個，清單跟著編輯器版本變。
   ${COMMAND} call <工具名> '<JSON 參數>' --url ${url} --key ${key}
@@ -111,9 +117,11 @@ const BUILDERS = {
   claude mcp add xce -- ${COMMAND} mcp --url ${url} --key ${key}
 
 五、約定
-  - 先 tools 再呼叫；工具名和參數不要憑記憶猜。
+  - 先跑 instructions 和 tools，再呼叫；工具名和參數不要憑記憶猜。
+  - MCP 用戶端若沒把說明交給模型，先呼叫工具 xce_read_instructions。
   - 先讀後寫：先取角色名稱和現有腳本，再動手；角色名稱同樣不要猜。
   - 一次只改一處，方便我核對和復原。
+  - 音訊等大檔案：先 POST 原始位元組到 /v1/assets，再把回傳的 assetId 交給對應工具；小片段可以直接用 data 或 url。
   - E_BUSY 或逾時 = 我正在面板裡操作：稍後再看，不要連續重試。
   - E_NO_EDITOR = 我沒有開啟專案：提醒我開啟，重試無效。
   - 金鑰只用於這條介面：不要原樣回顯給我，也不要寫進專案檔案。`,
@@ -130,8 +138,10 @@ The XMUER Coding Engine desktop app is open on my screen with a project loaded (
     ${key}
 
 3. Command line (recommended; the first run downloads the package, later runs are cached)
+  ${COMMAND} call xce_read_instructions '{}' --url ${url} --key ${key}
+      → the editor's own instructions (project rules, tool usage, block text format). Read this first.
   ${COMMAND} tools --url ${url} --key ${key}
-      → lists every tool with its argument schema. Run this first; the list follows the editor build.
+      → lists every tool with its argument schema. Run this too; the list follows the editor build.
   ${COMMAND} call <tool> '{"arg":"value"}' --url ${url} --key ${key}
       → calls one tool, returns {"ok":true,"content":"..."}.
   ${COMMAND} doctor --url ${url} --key ${key}
@@ -141,9 +151,11 @@ The XMUER Coding Engine desktop app is open on my screen with a project loaded (
   claude mcp add xce -- ${COMMAND} mcp --url ${url} --key ${key}
 
 5. Ground rules
-  - Run tools first; never guess tool names or arguments from memory.
+  - Run instructions and tools first; never guess tool names or arguments from memory.
+  - If your MCP client did not pass the instructions to the model, call the xce_read_instructions tool.
   - Read before writing: fetch sprite names and current scripts first. Don't invent names.
   - One change per call — small edits are easy for me to check and undo.
+  - Audio and other large files: POST the raw bytes to /v1/assets first, then pass the returned assetId to the tool. Small clips can use data or url directly.
   - E_BUSY or a timeout means I'm working in the panel; look again later, don't retry in a loop.
   - E_NO_EDITOR means no project is open; ask me to open one, retrying won't help.
   - The key is only for this endpoint: never echo it back to me, never write it into project files.`,
@@ -160,8 +172,10 @@ The XMUER Coding Engine desktop app is open on my screen with a project loaded (
     ${key}
 
 3. コマンドライン（推奨。初回はパッケージをダウンロードし、以降はキャッシュ）
+  ${COMMAND} call xce_read_instructions '{}' --url ${url} --key ${key}
+      → エディタ自身の説明（プロジェクトの決まり、ツールの使い方、ブロックの記法）。まずこれを読んでください。
   ${COMMAND} tools --url ${url} --key ${key}
-      → すべてのツールと引数のスキーマを一覧します。まずこれを実行してください。一覧はエディタのバージョンで変わります。
+      → すべてのツールと引数のスキーマを一覧します。これも実行してください。一覧はエディタのバージョンで変わります。
   ${COMMAND} call <ツール名> '{"引数":"値"}' --url ${url} --key ${key}
       → ツールを 1 つ呼び出します。戻り値は {"ok":true,"content":"..."}。
   ${COMMAND} doctor --url ${url} --key ${key}
@@ -171,9 +185,11 @@ The XMUER Coding Engine desktop app is open on my screen with a project loaded (
   claude mcp add xce -- ${COMMAND} mcp --url ${url} --key ${key}
 
 5. 決まりごと
-  - まず tools。ツール名と引数を記憶で推測しないこと。
+  - まず instructions と tools。ツール名と引数を記憶で推測しないこと。
+  - MCP クライアントが説明をモデルに渡していない場合は、ツール xce_read_instructions を呼ぶこと。
   - 書く前に読む：スプライト名と現在のスクリプトを先に取得する。名前を想像で埋めない。
   - 一度に一箇所だけ変える。小さな変更のほうが確認も取り消しも楽です。
+  - 音声などの大きなファイルは、先に生バイトを /v1/assets へ POST し、返った assetId をツールに渡す。短いものは data や url でよい。
   - E_BUSY やタイムアウトは私がパネルを操作中という合図。少し待ってから見直し、連続再試行はしないこと。
   - E_NO_EDITOR はプロジェクトが開かれていない合図。開いてもらう。再試行しても無駄です。
   - キーはこのエンドポイント専用：そのまま表示しない。プロジェクトのファイルにも書かないこと。`

@@ -553,6 +553,100 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         return true;
     };
 
+    // —— 声音（xce_add_sound / xce_delete_sound）——
+    // Scratch 自己的上传只认 mp3 / wav（见 gui 的 file-uploader.js），这里保持同一口径：
+    // 别的格式让用户先转好，不在编辑器里偷偷转（转出来体积翻倍、音质还掉）。
+    const SOUND_MAX_BYTES = 10 * 1000 * 1000;
+    const SOUND_MIME = {
+        'audio/mpeg': 'mp3',
+        'audio/mp3': 'mp3',
+        'audio/wav': 'wav',
+        'audio/wave': 'wav',
+        'audio/x-wav': 'wav',
+        'audio/x-pn-wav': 'wav'
+    };
+
+    const base64Bytes = text => {
+        const raw = String(text || '');
+        const comma = raw.indexOf(',');
+        const body = raw.startsWith('data:') && comma >= 0 ? raw.slice(comma + 1) : raw;
+        return Uint8Array.from(atob(body.replace(/\s+/g, '')), char => char.charCodeAt(0));
+    };
+
+    const mimeOfDataUrl = text => {
+        const match = /^data:([^;,]+)[;,]/.exec(String(text || ''));
+        return match ? match[1].toLowerCase() : '';
+    };
+
+    const soundFormatOf = (mimeType, name) => {
+        const mime = String(mimeType || '').toLowerCase()
+            .split(';')[0]
+            .trim();
+        if (SOUND_MIME[mime]) return SOUND_MIME[mime];
+        const ext = String(name || '').toLowerCase()
+            .match(/\.([a-z0-9]+)$/);
+        if (ext && (ext[1] === 'mp3' || ext[1] === 'wav')) return ext[1];
+        return '';
+    };
+
+    // 声音名或下标 → 数组下标（跟造型的 pickCostume 同一个口径：数字当下标、字符串当名字）
+    const pickSound = (sounds, which) => {
+        if (which === void 0 || which === null || which === '') return -1;
+        if (typeof which === 'number') return Math.floor(which);
+        const wanted = String(which).trim()
+            .toLowerCase();
+        return sounds.findIndex(entry => String(entry.name).toLowerCase() === wanted);
+    };
+
+    // 字节 → storage 资产 → vm.addSound。md5 / md5ext 必须自己填：loadSound 靠它认格式，
+    // 序列化 sb3 也读这一对（漏了就变成“别处打开找不到声音”）。
+    const attachSoundBytes = async (target, {bytes, format, name}) => {
+        const storage = runtime().storage;
+        if (!storage || !storage.createAsset) return {ok: false, reason: 'no-storage'};
+        const dataFormat = format === 'mp3' ? storage.DataFormat.MP3 : storage.DataFormat.WAV;
+        const asset = storage.createAsset(storage.AssetType.Sound, dataFormat, bytes, null, true);
+        const md5ext = `${asset.assetId}.${format}`;
+        const wanted = String(name || '').trim() ||
+            `声音${(target.getSounds ? target.getSounds().length : 0) + 1}`;
+        const sound = {
+            name: wanted,
+            asset,
+            assetId: asset.assetId,
+            dataFormat: format,
+            format: '',
+            md5: md5ext,
+            md5ext,
+            // 解码后由 loadSoundFromAsset 按真实音频缓冲覆盖这两个值
+            rate: 0,
+            sampleCount: 0
+        };
+        // vm.addSound 会走音频引擎解码（rate / sampleCount 以解码结果为准），
+        // 并由 target.addSound 处理重名（同名的自动加后缀，不会覆盖已有的）
+        await vm.addSound(sound, target.id);
+        const sounds = target.getSounds ? target.getSounds() : [];
+        const index = sounds.length - 1;
+        const added = sounds[index] || sound;
+        return {
+            ok: true,
+            sprite: target.getName(),
+            index,
+            name: added.name,
+            dataFormat: added.dataFormat || format,
+            rate: added.rate,
+            sampleCount: added.sampleCount
+        };
+    };
+
+    const removeSoundAt = (spriteName, index) => {
+        const target = findTarget(spriteName);
+        if (!target) return false;
+        const sounds = target.getSounds ? target.getSounds() : [];
+        if (!(index >= 0 && index < sounds.length)) return false;
+        target.deleteSound(index);
+        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+        return true;
+    };
+
     // 保留角色名：XCEAGENT 和 XCEMEMORY 两条是 AI 的功能部件，不许被改名，也不许被占用
     const RESERVED_SPRITE_NAMES = () => [AGENT_SPRITE_NAME, MEMORY_INDEX_SPRITE, MEMORY_CONTENT_SPRITE];
 
@@ -892,11 +986,21 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         scriptCount: t.blocks && t.blocks.getScripts ? t.blocks.getScripts().length : 0
     }));
 
-    // 整理布局：Scratch 原生右键的「整理积木」就是它
+    // 整理布局：Scratch 原生右键的「整理积木」就是它。
+    // **要绕开 editor-devtools 插件的「整理积木+」**：它把 cleanUp 换成了 doCleanUp，
+    // 100ms 后会为「没用到的局部变量」弹原生 confirm —— AI 每写一次积木就弹一次，
+    // 中文文案还是空的，正文只剩变量名（用户 2026-11-26 报的「测试血量」弹窗就是这个）。
+    // 打一个只活到这次调用结束的标记，让插件走原生 cleanUp（见 DevTools.js 的包装）。
     const tidy = () => {
         try {
             const workspace = getWorkspace && getWorkspace();
-            if (workspace && workspace.cleanUp) workspace.cleanUp();
+            if (!workspace || !workspace.cleanUp) return;
+            workspace.__xceQuietCleanUp = true;
+            try {
+                workspace.cleanUp();
+            } finally {
+                workspace.__xceQuietCleanUp = false;
+            }
         } catch (e) {
             // 排版失败不影响功能
             // eslint-disable-next-line no-console
@@ -999,6 +1103,8 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 costumes: (t.getCostumes ? t.getCostumes() : []).map(costume => costume.name),
                 currentCostume: t.getCostumes && t.getCostumes()[t.currentCostume] ?
                     t.getCostumes()[t.currentCostume].name : null,
+                // 声音名要列：模型写 play sound [name v] 时只能从这里拿到合法名字
+                sounds: (t.getSounds ? t.getSounds() : []).map(sound => sound.name),
                 variables: Object.keys(variables),
                 lists: Object.keys(lists),
                 // 自定义积木的名字：模型得知道这个角色能调哪些「我的积木」，别凭空写一个
@@ -1324,6 +1430,7 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             }
             if (action.kind === 'sprite') return removeSpriteByName(action.sprite);
             if (action.kind === 'costume') return removeCostumeAt(action.sprite, action.index);
+            if (action.kind === 'sound') return removeSoundAt(action.sprite, action.index);
             if (action.kind === 'note') return deleteNote(action.sprite, action.commentId);
             if (action.kind === 'rename') return renameSprite(action.to, action.from);
             if (action.kind === 'costumeContent') {
@@ -1607,6 +1714,54 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 width: made.width,
                 height: made.height
             };
+        },
+
+        /**
+         * 给角色加一个声音（xce_add_sound）。data 是 base64（可带 data: 前缀）。
+         * @param {string} spriteName 角色名
+         * @param {object} input {data, mimeType?, name?}
+         * @returns {Promise<object>} {ok, sprite?, index?, name?, dataFormat?, rate?, sampleCount?}
+         *     / {ok:false, reason}
+         */
+        addSound: async (spriteName, {data, mimeType, name} = {}) => {
+            const target = findTarget(spriteName);
+            if (!target) return {ok: false, reason: 'missing', sprites: spriteNames()};
+            if (!data) return {ok: false, reason: 'no-data'};
+            let bytes;
+            try {
+                bytes = base64Bytes(data);
+            } catch (e) {
+                return {ok: false, reason: 'bad-data'};
+            }
+            if (!bytes.length) return {ok: false, reason: 'empty'};
+            if (bytes.length > SOUND_MAX_BYTES) {
+                return {ok: false, reason: 'too-large', size: bytes.length};
+            }
+            const format = soundFormatOf(mimeType || mimeOfDataUrl(data), name);
+            if (!format) return {ok: false, reason: 'bad-format'};
+            const result = await attachSoundBytes(target, {bytes, format, name});
+            if (result.ok && vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+            return result;
+        },
+
+        /**
+         * 删一个声音（xce_delete_sound）。
+         * @param {string} spriteName 角色名
+         * @param {string|number} which 声音名或下标
+         * @returns {object} {ok, sprite?, name?, index?} / {ok:false, reason, sounds?}
+         */
+        deleteSound: (spriteName, which) => {
+            const target = findTarget(spriteName);
+            if (!target) return {ok: false, reason: 'missing', sprites: spriteNames()};
+            const sounds = target.getSounds ? target.getSounds() : [];
+            const index = pickSound(sounds, which);
+            if (!(index >= 0 && index < sounds.length)) {
+                return {ok: false, reason: 'no-sound', sounds: sounds.map(sound => sound.name)};
+            }
+            const name = sounds[index].name;
+            target.deleteSound(index);
+            if (vm.emitTargetsUpdate) vm.emitTargetsUpdate();
+            return {ok: true, sprite: target.getName(), name, index};
         },
 
         // 删除造型的快照 / 恢复（xce_delete_costume 及其撤销）

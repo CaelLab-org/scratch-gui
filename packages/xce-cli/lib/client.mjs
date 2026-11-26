@@ -31,6 +31,7 @@ class WsClient {
         this.pending = new Map();
         this.tools = [];
         this.skills = [];
+        this.instructions = '';
     }
 
     connect () {
@@ -75,15 +76,23 @@ class WsClient {
                     this.socket = socket;
                     this.tools = message.tools || [];
                     this.skills = message.skills || [];
+                    if (typeof message.instructions === 'string' && message.instructions) {
+                        this.instructions = message.instructions;
+                    }
                     resolve();
                 } else if (message.type === 'error' && message.code === 'E_AUTH') {
                     fail(new Error(AUTH_HINT));
                 } else if (message.type === 'tools') {
                     this.tools = message.tools || [];
                     this.skills = message.skills || [];
+                    if (typeof message.instructions === 'string' && message.instructions) {
+                        this.instructions = message.instructions;
+                    }
                     const waiters = Array.from(this.listWaiters);
                     this.listWaiters.clear();
-                    waiters.forEach(waiter => waiter({tools: this.tools, skills: this.skills}));
+                    waiters.forEach(waiter => waiter({
+                        tools: this.tools, skills: this.skills, instructions: this.instructions
+                    }));
                 } else if (message.type === 'result' || message.type === 'error') {
                     const entry = this.pending.get(message.id);
                     if (!entry) {
@@ -110,7 +119,9 @@ class WsClient {
                 const waiters = Array.from(this.listWaiters);
                 this.listWaiters.clear();
                 const cached = cachedFromDiscovery();
-                waiters.forEach(waiter => waiter({tools: cached.tools, skills: cached.skills}));
+                waiters.forEach(waiter => waiter({
+                    tools: cached.tools, skills: cached.skills, instructions: cached.instructions
+                }));
             });
         });
     }
@@ -120,7 +131,7 @@ class WsClient {
             await this.connect();
         } catch (error) {
             const cached = cachedFromDiscovery();
-            return {tools: cached.tools, skills: cached.skills};
+            return {tools: cached.tools, skills: cached.skills, instructions: cached.instructions};
         }
         return new Promise(resolve => {
             let timer = 0;
@@ -129,12 +140,14 @@ class WsClient {
                 this.listWaiters.delete(waiter);
                 resolve(result);
             };
-            timer = setTimeout(() => waiter({tools: this.tools, skills: this.skills}), LIST_TIMEOUT_MS);
+            timer = setTimeout(() => waiter({
+                tools: this.tools, skills: this.skills, instructions: this.instructions
+            }), LIST_TIMEOUT_MS);
             this.listWaiters.add(waiter);
             try {
                 this.socket.send(JSON.stringify({type: 'list'}));
             } catch (error) {
-                waiter({tools: this.tools, skills: this.skills});
+                waiter({tools: this.tools, skills: this.skills, instructions: this.instructions});
             }
         });
     }
@@ -150,6 +163,18 @@ class WsClient {
             this.pending.set(id, {resolve, reject, timer});
             this.socket.send(JSON.stringify({type: 'call', id, name, args: args || {}}));
         });
+    }
+
+    // 最新版系统提示词：能连上就问编辑器要，连不上退回上次的缓存
+    async readInstructions () {
+        try {
+            const result = await this.call('xce_read_instructions', {});
+            if (!result.isError && result.content) return String(result.content);
+        } catch (error) {
+            // 编辑器没开 / 旧版本没有这个工具：走缓存
+        }
+        const listed = await this.list();
+        return listed.instructions || '';
     }
 
     async health () {
@@ -196,8 +221,27 @@ class HttpClient {
         const payload = await this.request('/tools', {method: 'GET'});
         return {
             tools: Array.isArray(payload.tools) ? payload.tools : [],
-            skills: Array.isArray(payload.skills) ? payload.skills : []
+            skills: Array.isArray(payload.skills) ? payload.skills : [],
+            instructions: typeof payload.instructions === 'string' ? payload.instructions : ''
         };
+    }
+
+    async readInstructions () {
+        try {
+            const payload = await this.request('/instructions', {method: 'GET'});
+            if (typeof payload.instructions === 'string' && payload.instructions) {
+                return payload.instructions;
+            }
+        } catch (error) {
+            // 旧版本没有这条路由：退回工具
+        }
+        try {
+            const result = await this.call('xce_read_instructions', {});
+            if (!result.isError && result.content) return String(result.content);
+        } catch (error) {
+            // 连不上就下面回空串
+        }
+        return '';
     }
 
     async call (name, args) {

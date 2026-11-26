@@ -55,6 +55,7 @@ export const cachedFromDiscovery = () => {
     return {
         tools: (bridge && Array.isArray(bridge.tools) ? bridge.tools : []),
         skills: (bridge && Array.isArray(bridge.skills) ? bridge.skills : []),
+        instructions: (bridge && typeof bridge.instructions === 'string' ? bridge.instructions : ''),
         access: access || null
     };
 };

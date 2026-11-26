@@ -290,9 +290,10 @@ const ICON_PATHS = {
 ICON_PATHS.slidersDots = [[5.5, 4.5], [10.5, 8], [6.5, 11.5]];
 ICON_PATHS.dotsDots = [[3.2, 8], [8, 8], [12.8, 8]];
 
-const Icon = ({name, size = 16}) => (
+const Icon = ({name, size = 16, className}) => (
     <svg
         aria-hidden="true"
+        className={className}
         fill="none"
         height={size}
         stroke="currentColor"
@@ -337,6 +338,7 @@ const Icon = ({name, size = 16}) => (
 );
 
 Icon.propTypes = {
+    className: PropTypes.string,
     name: PropTypes.string,
     size: PropTypes.number
 };
@@ -1938,6 +1940,8 @@ const AccessSection = ({onBack}) => {
     const [error, setError] = useState('');
     // 提示词用哪种语言：跟编辑器走，用户切过就记住（存 localStorage，跟模型选择一样）
     const [lang, setLang] = useState(() => savedPromptLang() || detectPromptLang());
+    // 那段说明书很长（四种语言里任何一种都上千字），默认只露一小截，想读全文再展开
+    const [promptOpen, setPromptOpen] = useState(false);
 
     useEffect(() => {
         if (!supported || !preload.aiAccessGet) return;
@@ -1998,25 +2002,36 @@ const AccessSection = ({onBack}) => {
 
                 {supported ? (
                     <React.Fragment>
-                        <div className={styles.accessRow}>
-                            <div className={styles.accessText}>
+                        <div className={`${styles.accessRow} ${info && info.enabled ? styles.accessRowOn : ''}`}>
+                            <span
+                                aria-hidden="true"
+                                className={`${styles.accessDot} ${info && info.enabled ? styles.accessDotOn : ''}`}
+                            />
+                            <div
+                                aria-live="polite"
+                                className={styles.accessText}
+                            >
                                 <span className={styles.accessTitle}>
-                                    {info && info.enabled ? '已开启' : '未开启'}
+                                    {info && info.enabled ? '外部接入已开启' : '外部接入已关闭'}
                                 </span>
                                 <span className={styles.accessNote}>
                                     {info && info.enabled ?
-                                        (info.local ?
-                                            `监听 127.0.0.1:${info.port}，只有本机能连` :
-                                            `监听 0.0.0.0:${info.port}，同一局域网都能连`) :
-                                        '关着的时候，外部 AI 连不进来'}
+                                        `${info.local ? '仅本机' : '局域网'} · ` +
+                                        `${info.local ? '127.0.0.1' : '0.0.0.0'}:${info.port}` :
+                                        '打开后，外部 AI 可以读写你正在编辑的项目'}
                                 </span>
                             </div>
                             <button
-                                className={`${styles.btn} ${info && info.enabled ? '' : styles.btnPrimary}`}
+                                aria-checked={!!(info && info.enabled)}
+                                aria-label={info && info.enabled ? '关闭外部接入' : '开启外部接入'}
+                                className={`${styles.switch} ${info && info.enabled ? styles.switchOn : ''}`}
                                 disabled={busy}
                                 onClick={() => apply({enabled: !(info && info.enabled)})}
+                                role="switch"
                                 type="button"
-                            >{info && info.enabled ? '关闭' : '开启'}</button>
+                            >
+                                <span className={styles.switchKnob} />
+                            </button>
                         </div>
 
                         {error ? <p className={styles.fieldError}>{error}</p> : null}
@@ -2051,7 +2066,8 @@ const AccessSection = ({onBack}) => {
                                     <div className={styles.copyRow}>
                                         <code className={styles.copyValue}>{info.endpoint}</code>
                                         <button
-                                            className={styles.copyBtn}
+                                            className={`${styles.copyBtn} ${copied === 'endpoint' ?
+                                                styles.copyBtnDone : ''}`}
                                             onClick={() => copy('endpoint', info.endpoint)}
                                             type="button"
                                         >{copied === 'endpoint' ? '已复制' : '复制'}</button>
@@ -2068,7 +2084,8 @@ const AccessSection = ({onBack}) => {
                                     <div className={styles.copyRow}>
                                         <code className={styles.copyValue}>{info.key}</code>
                                         <button
-                                            className={styles.copyBtn}
+                                            className={`${styles.copyBtn} ${copied === 'key' ?
+                                                styles.copyBtnDone : ''}`}
                                             onClick={() => copy('key', info.key)}
                                             type="button"
                                         >{copied === 'key' ? '已复制' : '复制'}</button>
@@ -2090,10 +2107,11 @@ const AccessSection = ({onBack}) => {
                                     <div className={styles.fieldHead}>
                                         <span className={styles.fieldLabel}>粘给 AI 的一段话</span>
                                         <button
-                                            className={styles.copyBtn}
+                                            className={`${styles.copyBtn} ${copied === 'prompt' ?
+                                                styles.copyBtnDone : ''}`}
                                             onClick={() => copy('prompt', prompt)}
                                             type="button"
-                                        >{copied === 'prompt' ? '已复制' : '复制'}</button>
+                                        >{copied === 'prompt' ? '已复制' : '复制全文'}</button>
                                     </div>
                                     <div className={styles.chipRow}>
                                         {PROMPT_LANGS.map(item => {
@@ -2109,7 +2127,27 @@ const AccessSection = ({onBack}) => {
                                             );
                                         })}
                                     </div>
-                                    <pre className={styles.promptBox}>{prompt}</pre>
+                                    <pre
+                                        className={`${styles.promptBox} ${promptOpen ?
+                                            styles.promptBoxOpen : ''}`}
+                                    >{prompt}</pre>
+                                    <button
+                                        aria-expanded={promptOpen}
+                                        className={styles.promptToggle}
+                                        onClick={() => setPromptOpen(open => !open)}
+                                        type="button"
+                                    >
+                                        {promptOpen ? '收起说明书' : '展开全文'}
+                                        <span
+                                            className={`${styles.promptChevron} ${promptOpen ?
+                                                styles.promptChevronOpen : ''}`}
+                                        >
+                                            <Icon
+                                                name="chevron"
+                                                size={12}
+                                            />
+                                        </span>
+                                    </button>
                                     <span className={styles.fieldNote}>
                                         这是一份说明书，不是任务：先整段粘给 AI，再补一句你要它做的事。
                                         里面的命令行和 MCP 两种接法，它能用哪种就用哪种。
@@ -2121,7 +2159,8 @@ const AccessSection = ({onBack}) => {
                                     <div className={styles.fieldHead}>
                                         <span className={styles.fieldLabel}>MCP 配置</span>
                                         <button
-                                            className={styles.copyBtn}
+                                            className={`${styles.copyBtn} ${copied === 'claude' ?
+                                                styles.copyBtnDone : ''}`}
                                             onClick={() => copy('claude', claude)}
                                             type="button"
                                         >{copied === 'claude' ? '已复制' : '复制'}</button>
@@ -2471,7 +2510,9 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll, initialSect
                                     <span className={styles.sectionLabel}>{item.label}</span>
                                     <span className={styles.sectionNote}>{item.note}</span>
                                 </span>
-                                <Icon name="chevron" />
+                                <span className={styles.sectionChevron}>
+                                    <Icon name="chevron" />
+                                </span>
                             </button>
                         ))}
                     </div>

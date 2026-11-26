@@ -22,6 +22,7 @@ restarts until you rotate it.
 
 ```bash
 xce mcp                       # MCP server over stdio
+xce instructions              # print the editor's own instructions (its system prompt)
 xce tools                     # list tools and skills
 xce call <tool> '{"a":1}'     # call one tool
 xce skill --out SKILL.md      # write an agent skill file
@@ -53,16 +54,31 @@ claude mcp add xce -- npx -y @caellab/xce-cli@latest mcp --url http://192.168.1.
 **prompts** (`prompts/list` / `prompts/get`), with the text fetched from the editor when the
 prompt is loaded.
 
+The editor's own instructions (its system prompt: project rules, tool usage, block text
+format) are sent as MCP `instructions` when the server starts, from the copy the desktop app
+last cached. They are also available as the `xce_instructions` prompt and the
+`xce_read_instructions` tool, so a client that dropped them can load them again.
+
 ## HTTP
 
 ```bash
 curl -s http://127.0.0.1:49621/v1/health
+curl -s http://127.0.0.1:49621/v1/instructions -H "Authorization: Bearer $XCE_KEY"
 curl -s http://127.0.0.1:49621/v1/tools -H "Authorization: Bearer $XCE_KEY"
 curl -s http://127.0.0.1:49621/v1/call -H "Authorization: Bearer $XCE_KEY" \
   -H "Content-Type: application/json" -d '{"name":"xce_read_project","args":{}}'
+
+# audio too large for a JSON argument: upload the raw bytes, then pass the id
+curl -s -X POST "http://127.0.0.1:49621/v1/assets?name=blast.mp3&mime=audio/mpeg" \
+  -H "Authorization: Bearer $XCE_KEY" --data-binary @blast.mp3
+# -> {"ok":true,"assetId":"a1",...}
+curl -s http://127.0.0.1:49621/v1/call -H "Authorization: Bearer $XCE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"xce_add_sound","args":{"sprite":"Sprite1","assetId":"a1"}}'
 ```
 
 `/v1/health` is unauthenticated and returns only liveness. Everything else needs the key.
+Asset ids are kept in memory and expire after 30 minutes; only the 8 most recent are kept.
 
 ## Notes
 
@@ -70,6 +86,7 @@ curl -s http://127.0.0.1:49621/v1/call -H "Authorization: Bearer $XCE_KEY" \
 - `E_NO_EDITOR` means the app is running but no project is open.
 - If the user is running a turn in the editor's AI panel, write calls fail fast instead of
   queueing behind it.
-- Only `GET /v1/health`, `GET /v1/tools`, `POST /v1/call` exist. No filesystem, no shell.
+- Only `GET /v1/health`, `GET /v1/instructions`, `GET /v1/tools`, `POST /v1/assets` and
+  `POST /v1/call` exist. No filesystem, no shell.
 
 Licensed under Apache-2.0.

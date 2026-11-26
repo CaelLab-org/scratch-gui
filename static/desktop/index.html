@@ -132,6 +132,14 @@
                 background: var(--primary-hover);
                 transform: translateY(-1px);
             }
+            .btn:active {
+                transform: translateY(1px);
+            }
+            a:focus-visible,
+            button:focus-visible {
+                outline: 2px solid var(--primary);
+                outline-offset: 2px;
+            }
             .hero .meta {
                 margin: 14px 0 0;
                 font-size: 13px;
@@ -161,6 +169,11 @@
                 border-radius: 12px;
                 padding: 20px 22px;
                 box-shadow: var(--shadow);
+                transition: transform 0.16s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.16s cubic-bezier(0.2, 0, 0, 1);
+            }
+            .card:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(16, 24, 40, 0.06), 0 12px 28px rgba(16, 24, 40, 0.10);
             }
             .card h3 {
                 margin: 0 0 6px;
@@ -223,6 +236,42 @@
             footer a:hover { color: var(--primary); }
             footer p { margin: 4px 0; }
 
+            /* 入场：页面级 280ms，卡片错开 40ms；只错前六张，后面一起出来 */
+            @keyframes riseIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(8px);
+                }
+            }
+
+            .hero > * {
+                animation: riseIn 280ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+            }
+            .hero > *:nth-child(2) { animation-delay: 40ms; }
+            .hero > *:nth-child(3) { animation-delay: 80ms; }
+            .hero > *:nth-child(4) { animation-delay: 120ms; }
+            .hero > *:nth-child(5) { animation-delay: 160ms; }
+
+            .card {
+                animation: riseIn 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+            }
+            .card:nth-child(2) { animation-delay: 40ms; }
+            .card:nth-child(3) { animation-delay: 80ms; }
+            .card:nth-child(4) { animation-delay: 120ms; }
+            .card:nth-child(5) { animation-delay: 160ms; }
+            .card:nth-child(6) { animation-delay: 200ms; }
+
+            @media (prefers-reduced-motion: reduce) {
+                .hero > *,
+                .card {
+                    animation: none;
+                }
+                .btn,
+                .card {
+                    transition: none;
+                }
+            }
+
             @media (max-width: 600px) {
                 .hero { padding: 40px 20px 36px; border-radius: 12px; }
                 .hero h1 { font-size: 26px; }
@@ -242,17 +291,17 @@
         </nav>
 
         <section class="hero">
-            <span class="badge">4.9.0 · Windows</span>
+            <span class="badge">4.10.0 · Windows</span>
             <h1>XMUER Coding Engine Desktop</h1>
             <p class="lead">
                 把编辑器装到本地：断网也能打开项目，窗口切到后台不会被降频，XCE Agent 还能直接读公开网页。
             </p>
-            <a class="btn" href="https://dl.caellab.com/file/xmuer/coding/engine/XCE-Setup-4.9.0.exe">
-                下载 XCE-Setup-4.9.0.exe
+            <a class="btn" href="https://dl.caellab.com/file/xmuer/coding/engine/XCE-Setup-4.10.0.exe">
+                下载 XCE-Setup-4.10.0.exe
             </a>
             <p class="meta">
                 Windows 10 / 11（64 位） · 免费 · 与网页版是同一套编辑器 ·
-                <a href="/desktop/changelog/">4.9.0 改了什么</a>
+                <a href="/desktop/changelog/">4.10.0 改了什么</a>
             </p>
         </section>
 
@@ -307,7 +356,7 @@
             <div class="steps">
                 <h2>三步装好</h2>
                 <ol>
-                    <li>点上面的按钮下载 <strong>XCE-Setup-4.9.0.exe</strong>。</li>
+                    <li>点上面的按钮下载 <strong>XCE-Setup-4.10.0.exe</strong>。</li>
                     <li>双击运行；Windows 提示"已保护你的电脑"时点「更多信息 → 仍要运行」（安装包没有买代码签名证书）。</li>
                     <li>按提示选安装位置，装完从桌面快捷方式打开就行。</li>
                 </ol>

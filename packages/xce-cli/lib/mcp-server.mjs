@@ -12,6 +12,18 @@ import {
     GetPromptRequestSchema,
     ListToolsRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
+import {cachedFromDiscovery} from './config.mjs';
+
+const INSTRUCTIONS_PROMPT = 'xce_instructions';
+const TRANSPORT_NOTE =
+    'Transport: these tools read and edit the project open in the XMUER Coding Engine desktop app. ' +
+    'Start the app and open a project first. If a call says the editor is not connected, ask the user ' +
+    'to open the app rather than retrying in a loop. The editor\'s reference documents (skills) are ' +
+    'exposed as prompts: list them when the user asks about the editor, CaelLab, or the sites around ' +
+    'it, and load the matching one instead of guessing. If the editor instructions above are missing ' +
+    'or stale, call the xce_read_instructions tool before working. Large files cannot be uploaded ' +
+    'through MCP: xce_add_sound takes a URL or base64 data here; the /v1/assets endpoint is for the ' +
+    'HTTP bridge only.';
 
 const text = value => ({
     type: 'text',
@@ -27,17 +39,14 @@ const imageBlock = image => {
 };
 
 export const startMcpServer = async ({client, version}) => {
+    // MCP 的 instructions 在构造时定死：先用上次编辑器落盘的完整提示词，
+    // 没有就只给通道说明；最新版随时可以用 xce_read_instructions 读。
+    const cached = cachedFromDiscovery().instructions.trim();
     const server = new Server(
         {name: 'xce', version},
         {
             capabilities: {tools: {}, prompts: {}},
-            instructions:
-                'Tools that read and edit the project open in the XMUER Coding Engine desktop app. ' +
-                'Start the app and open a project first. If a call says the editor is not connected, ' +
-                'ask the user to open the app rather than retrying in a loop. ' +
-                'The editor\'s reference documents (skills) are exposed as prompts: list them when the ' +
-                'user asks about the editor, this team, or the sites around it, and load the matching ' +
-                'one instead of guessing.'
+            instructions: cached ? `${cached}\n\n---\n\n${TRANSPORT_NOTE}` : TRANSPORT_NOTE
         }
     );
 
@@ -56,15 +65,38 @@ export const startMcpServer = async ({client, version}) => {
     server.setRequestHandler(ListPromptsRequestSchema, async () => {
         const {skills} = await client.list();
         return {
-            prompts: skills.map(skill => ({
+            prompts: [{
+                name: INSTRUCTIONS_PROMPT,
+                description: 'The editor\'s full instructions for this agent (project rules, tool usage, block format).'
+            }].concat(skills.map(skill => ({
                 name: skill.name,
                 description: skill.description
-            }))
+            })))
         };
     });
 
     server.setRequestHandler(GetPromptRequestSchema, async request => {
         const name = request.params.name;
+        if (name === INSTRUCTIONS_PROMPT) {
+            let body = '';
+            try {
+                body = await client.readInstructions();
+            } catch (error) {
+                body = '';
+            }
+            if (!body) body = cachedFromDiscovery().instructions;
+            if (!body) {
+                throw new Error('The editor is not connected, so its instructions cannot be read right now. ' +
+                    'Start XMUER Coding Engine and open a project, then try again.');
+            }
+            return {
+                description: 'The editor\'s full instructions for this agent.',
+                messages: [{
+                    role: 'user',
+                    content: {type: 'text', text: body}
+                }]
+            };
+        }
         const {skills} = await client.list();
         const skill = skills.find(entry => entry.name === name);
         if (!skill) {

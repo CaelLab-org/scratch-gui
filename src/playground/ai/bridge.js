@@ -10,6 +10,7 @@
 // 把同一套工具（tools.js）借给本机的 MCP 客户端。网页版没有这条 preload，直接不连。
 
 import {createTools} from './tools.js';
+import {buildExternalInstructions} from './instructions.js';
 
 const RETRY_MIN_MS = 1000;
 const RETRY_MAX_MS = 15000;
@@ -46,7 +47,17 @@ export const startEditorBridge = ({getPort, getSkills, isBusy}) => {
     let timer = 0;
     let retryIn = RETRY_MIN_MS;
 
-    const toolsNow = () => createTools({port: getPort(), skills: getSkills()});
+    const toolsNow = () => {
+        const port = getPort();
+        return createTools({
+            port,
+            skills: getSkills() || [],
+            // 外置 AI 拿不到面板每轮现拼的 system prompt，这里让它能按需再读一份
+            getInstructions: () => buildExternalInstructions({port: getPort(), tools: toolsNow()})
+        });
+    };
+
+    const instructionsNow = () => buildExternalInstructions({port: getPort(), tools: toolsNow()});
 
     const send = message => {
         if (socket && socket.readyState === WebSocket.OPEN) {
@@ -58,7 +69,8 @@ export const startEditorBridge = ({getPort, getSkills, isBusy}) => {
         send({
             type: 'tools',
             tools: descriptors(toolsNow()),
-            skills: skillDescriptors(getSkills() || [])
+            skills: skillDescriptors(getSkills() || []),
+            instructions: instructionsNow()
         });
     };
 
@@ -74,7 +86,9 @@ export const startEditorBridge = ({getPort, getSkills, isBusy}) => {
             };
         }
         try {
-            const result = await tool.handler(args || {});
+            // 外置通道一律把图交出去（xce_read_stage / xce_read_costume）；对方模型看不看得见
+            // 由对方的客户端决定，看不见时提示词里已经让它直说，而不是假装看见了
+            const result = await tool.handler(args || {}, {supportsImage: true});
             return {
                 content: result.content,
                 isError: !!result.isError,

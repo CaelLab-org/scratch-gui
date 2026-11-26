@@ -195,6 +195,29 @@
             footer a:hover { color: var(--primary); }
             footer p { margin: 4px 0; }
 
+            a:focus-visible,
+            button:focus-visible {
+                outline: 2px solid var(--primary);
+                outline-offset: 2px;
+            }
+
+            /* 进来那一下：跟下载页同一套 rise，只错前三条，别让长页面抖一串 */
+            @keyframes riseIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(8px);
+                }
+            }
+            .entry {
+                animation: riseIn 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+            }
+            .entry:nth-of-type(2) { animation-delay: 40ms; }
+            .entry:nth-of-type(3) { animation-delay: 80ms; }
+
+            @media (prefers-reduced-motion: reduce) {
+                .entry { animation: none; }
+            }
+
             @media (max-width: 600px) {
                 .hero { padding: 32px 20px 28px; border-radius: 12px; }
                 .hero h1 { font-size: 24px; }
@@ -220,15 +243,56 @@
                 XMUER Coding Engine Desktop 每个版本改了什么。桌面版和网页版是同一套编辑器，
                 下面这些编辑器功能两边都会有。
             </p>
-            <p class="meta">最新版 4.9.0 · <a href="/desktop/">去下载</a></p>
+            <p class="meta">最新版 4.10.0 · <a href="/desktop/">去下载</a></p>
         </section>
 
         <main>
             <article class="entry">
                 <header class="entryHead">
-                    <h2>4.9.0</h2>
+                    <h2>4.10.0</h2>
                     <span class="date">2026-11-26</span>
                     <span class="latest">最新</span>
+                </header>
+
+                <p>外置 AI 现在能读到编辑器自己的说明书，也能直接加声音；顺手修掉 AI 写完积木偶尔弹出的「变量名」确认框，并把设置页和面板的交互重新打磨了一遍。</p>
+
+                <h3>外置 AI</h3>
+                <ul>
+                    <li>外部 AI 现在会收到编辑器自己的系统提示词：项目规矩、工具用法、积木文本格式、你写的自定义提示词和记忆索引。MCP 客户端在初始化时自动拿到；HTTP 入口新增 <code>GET /v1/instructions</code>。</li>
+                    <li>新增工具 <code>xce_read_instructions</code> 和 MCP prompt <code>xce_instructions</code>：客户端没把说明转给模型时，随时能重新读一遍。</li>
+                    <li>外置 AI 现在能真的看到舞台和造型截图。以前外置通道被当成纯文本模型，图片会被丢掉。</li>
+                    <li>命令行工具新增 <code>xce instructions</code>（0.2.0）；<code>xce-mcp</code> 升到 1.3.0。设置 → 外部接入里的说明书也跟着更新了。</li>
+                </ul>
+
+                <h3>声音素材</h3>
+                <ul>
+                    <li>Agent 新增 <code>xce_add_sound</code> / <code>xce_delete_sound</code>：支持 mp3 / wav，可以给网址也可以直接给 base64；单个文件上限 10MB，重名会自动加后缀。</li>
+                    <li>角色清单现在会列出每个角色的声音名，Agent 写「播放声音」积木时不会再瞎猜。</li>
+                    <li>外部接入新增 <code>POST /v1/assets</code>：几 MB 的音频直接传原始字节，拿到 <code>assetId</code> 再交给 <code>xce_add_sound</code>。素材只在内存里留 30 分钟，最多 8 份。</li>
+                </ul>
+
+                <h3>修复</h3>
+                <ul>
+                    <li>AI 写完积木排版时，会被开发者工具里的「整理积木+」接管，100ms 后弹一个原生确认框问要不要删没用到的局部变量；中文文案当时是空的，正文只剩一个变量名（就是那个「测试血量」弹窗），点确定会真删变量。现在 AI 排版只做布局，不触发删除确认。</li>
+                    <li>用户自己点「整理积木+」时，确认框也会说清楚在问什么，不再只剩一串变量名。</li>
+                    <li>外置通道的 <code>xce_read_stage</code> / <code>xce_read_costume</code> 不会再永远返回「当前模型看不了图」——现在会按图片发出去。</li>
+                </ul>
+
+                <h3>界面与动效</h3>
+                <ul>
+                    <li>外部接入的开关换成真正的 switch：左边一个状态点，开着是绿的并轻轻呼吸；下面直接写监听范围和端口。说明书默认折叠，想看全文再展开，不再一屏几千字。</li>
+                    <li>复制按钮点完变绿并轻弹一下；地址、密钥、说明书都在按下的位置给反馈。</li>
+                    <li>设置分区列表、设置页、历史、工具行按同一套节奏入场：180–240ms、最多从 6px 落下，列表错开 30–45ms，不拖尾。</li>
+                    <li>所有按钮补了键盘焦点圈（2px），按压下沉 1px；系统开了「减少动态效果」时全部动画关闭。</li>
+                    <li>确认对话框入场改成 180ms 淡入 + 2px 下沉 + 很轻的背景模糊，跟虚舟其他项目的确认框一致。</li>
+                    <li>桌面版下载页和更新日志：首屏与卡片错开入场，卡片悬停抬 1px，键盘焦点可见。</li>
+                </ul>
+            </article>
+
+            <article class="entry">
+                <header class="entryHead">
+                    <h2>4.9.0</h2>
+                    <span class="date">2026-11-26</span>
                 </header>
 
                 <p>AI Agent 的工具箱大扩容，新增「每次确认」权限档位；并修掉变量积木「落地就是坏」的一批问题。</p>

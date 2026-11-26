@@ -10,7 +10,8 @@
  * 应用内对话框（dialog.js）的样式。
  *
  * 目标：像**系统级对话框**，不像网页弹窗 —— 中性描边 + 中性阴影、字号间距只用界面那套、
- * 入场只有 120ms 的淡入加一点点缩放（不回弹、不糊背景，那两样都让人干等）。
+ * 入场 180ms 淡入 + 2px 下沉 + 很轻的背景模糊（GPCL / Nomen / XCC 的确认框都是这个手感：
+ * 足够说明「下面被挡住了」，又不至于让人等一个动画）。
  * 颜色取 interface.css 里 :root 的品牌变量，只补一个「危险」红给退出 / 删除这类动作。
  *
  * 一条硬约束：显示用 opacity + pointer-events 开关，**不用 display** ——
@@ -34,11 +35,13 @@
     justify-content: center;
     box-sizing: border-box;
     padding: 24px;
-    background: rgba(16, 24, 40, 0.28);
+    background: rgba(16, 24, 40, 0.32);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
     opacity: 0;
     /* 没弹出来的时候绝不能吃点击：AI 面板、积木选择框都在它底下 */
     pointer-events: none;
-    transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
+    transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .open {
@@ -54,9 +57,9 @@
     border-radius: 10px;
     background: var(--xce-surface, #ffffff);
     box-shadow: var(--xce-shadow-lg);
-    /* 从 0.97 落下来：系统对话框那种「贴上来」的感觉，不做回弹 */
-    transform: scale(0.97);
-    transition: transform 120ms cubic-bezier(0.2, 0, 0, 1);
+    /* 从 0.96 落下来：系统对话框那种「贴上来」的感觉，不做回弹 */
+    transform: translateY(2px) scale(0.96);
+    transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .open .box {
@@ -107,13 +110,13 @@
 
 /* 键盘走查要有焦点圈；鼠标点的不显，免得一按就花 */
 .btn:focus-visible {
-    outline: 2px solid rgba(43, 111, 236, 0.5);
-    outline-offset: 1px;
+    outline: 2px solid rgba(43, 111, 236, 0.55);
+    outline-offset: 2px;
 }
 
 /* 一行就够的「按下去了」手感 */
 .btn:active {
-    transform: translateY(0.5px);
+    transform: translateY(1px);
 }
 
 .ghost {

@@ -62,6 +62,15 @@
     --shadow-float: 0 4px 14px rgba(16, 24, 40, 0.14);
     --shadow-panel: 0 0 0 1px var(--border-l1), 0 12px 36px rgba(16, 24, 40, 0.12);
 
+    /* 动效：只有三档时长、一条缓出曲线。学 GPCL / Nomen 的做法 —— 短、稳、不回弹，
+       只用来交代「东西从哪来」，不做表演。 */
+    --ease-out: cubic-bezier(0.2, 0, 0, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --dur-1: 120ms;
+    --dur-2: 180ms;
+    --dur-3: 240ms;
+    --success-ring: rgba(18, 161, 80, 0.24);
+
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
         'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 14px;
@@ -97,6 +106,7 @@
     --error: #f56c6c;
     --shadow-float: 0 4px 14px rgba(0, 0, 0, 0.5);
     --shadow-panel: 0 0 0 1px var(--border-l1), 0 12px 36px rgba(0, 0, 0, 0.45);
+    --success-ring: rgba(61, 196, 107, 0.28);
 }
 
 /* 这一头是浅色底 + 琥珀字，深色下白底会闪眼睛 */
@@ -404,6 +414,23 @@
     background: var(--bg-layer1);
 }
 
+.sectionRow:active {
+    background: var(--bg-layer2);
+}
+
+/* 行尾的箭头：平时安静，hover 时往右挪 2px —— 告诉用户「这一行能进去」 */
+.sectionChevron {
+    display: flex;
+    flex: 0 0 auto;
+    color: var(--text-3);
+    transition: transform var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+
+.sectionRow:hover .sectionChevron {
+    transform: translateX(2px);
+    color: var(--text-2);
+}
+
 .sectionBody {
     display: flex;
     flex-direction: column;
@@ -567,12 +594,91 @@
 .accessRow {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     margin-bottom: 10px;
-    padding: 10px;
+    padding: 11px 10px;
     border: 1px solid var(--border-l1);
     border-radius: 10px;
     background: var(--bg-layer1);
+    transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+
+.accessRowOn {
+    border-color: var(--border-l2);
+    background: var(--bg-base);
+}
+
+/* 状态点：关是安静的灰点，开是绿点 + 一圈慢慢散开的呼吸环。
+   只用它表示「在跑」，不靠整块变色抢注意力。 */
+.accessDot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border-l3);
+    transition: background var(--dur-2) var(--ease-out);
+}
+
+.accessDotOn {
+    background: var(--success);
+    animation: aiDotPulse 2.4s var(--ease-out) infinite;
+}
+
+@keyframes aiDotPulse {
+    0% { box-shadow: 0 0 0 0 var(--success-ring); }
+    70%, 100% { box-shadow: 0 0 0 6px rgba(0, 0, 0, 0); }
+}
+
+/* 开关：36x20 的胶囊，滑块 180ms 走 spring 曲线（跟 XCC 的 pill toggle 同一手感） */
+.switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--border-l2);
+    border-radius: 999px;
+    background: var(--bg-layer2);
+    cursor: pointer;
+    transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+
+.switch:hover:enabled {
+    border-color: var(--border-l3);
+}
+
+.switchOn {
+    border-color: var(--accent-solid);
+    background: var(--accent-solid);
+}
+
+.switch:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.switchKnob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.18);
+    transition: transform var(--dur-2) var(--ease-spring);
+}
+
+.switchOn .switchKnob {
+    transform: translateX(16px);
+}
+
+.switch:active:enabled .switchKnob {
+    transform: scale(0.92);
+}
+
+.switchOn:active:enabled .switchKnob {
+    transform: translateX(16px) scale(0.92);
 }
 
 .accessText {
@@ -635,6 +741,20 @@
     color: var(--text-1);
 }
 
+/* 复制成功：按钮变绿并轻轻缩一下 —— 反馈就在按下的位置，不用再飘一个 toast */
+.copyBtnDone,
+.copyBtnDone:hover {
+    border-color: rgba(18, 161, 80, 0.4);
+    color: var(--success);
+    animation: aiCopied var(--dur-3) var(--ease-out);
+}
+
+@keyframes aiCopied {
+    0% { transform: scale(1); }
+    45% { transform: scale(0.94); }
+    100% { transform: scale(1); }
+}
+
 /* 「粘给 AI 的一段话」：标签和复制按钮同一行，语言切换单独一行，
    正文用等宽、可滚动 —— 命令和说明混在一起，只读不编辑，所以不做输入框。 */
 .fieldHead {
@@ -685,7 +805,9 @@
 
 .promptBox {
     margin: 0;
+    max-height: 150px;
     padding: 8px 9px;
+    overflow: hidden;
     border: 1px solid var(--border-l1);
     border-radius: 8px;
     background: var(--bg-soft);
@@ -695,6 +817,47 @@
     line-height: 18px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    /* 收起来时底部直接切掉太生硬，用一层透明渐变暗示「下面还有」 */
+    -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+    mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+    transition: max-height var(--dur-3) var(--ease-out);
+}
+
+.promptBoxOpen {
+    max-height: 60vh;
+    overflow: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+}
+
+/* 「展开全文 / 收起」：一行灰字，不占一个按钮的位置 */
+.promptToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 2px;
+    padding: 4px 2px;
+    border: 0;
+    background: transparent;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 18px;
+    cursor: pointer;
+    transition: color var(--dur-1) var(--ease-out);
+}
+
+.promptToggle:hover {
+    color: var(--accent);
+}
+
+.promptChevron {
+    display: flex;
+    transition: transform var(--dur-2) var(--ease-out);
+}
+
+.promptChevronOpen {
+    transform: rotate(90deg);
 }
 
 .accessWarn {
@@ -2808,5 +2971,135 @@
 
 .approveActions > * {
     flex: 1;
+}
+
+/* ---------------------------------------------------------------- 动效
+ *
+ * 四家的规矩是同一套：**短、稳、只解释「从哪来」**。页面/分区 240ms 从 6px 落下来，
+ * 列表按 30–45ms 错开但最多错 6 行，工具行 180ms；曲线一律 ease-out，不回弹。
+ * fill-mode 只用 backwards —— 结束后不留下 transform 层，免得滚动/定位出怪。
+ */
+.settings,
+.history {
+    animation: aiViewIn var(--dur-3) var(--ease-out) backwards;
+}
+
+@keyframes aiViewIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+}
+
+.sectionRow,
+.emptyHints li {
+    animation: aiRowIn var(--dur-3) var(--ease-out) backwards;
+}
+
+.sectionRow:nth-child(2),
+.emptyHints li:nth-child(2) {
+    animation-delay: 30ms;
+}
+
+.sectionRow:nth-child(3),
+.emptyHints li:nth-child(3) {
+    animation-delay: 60ms;
+}
+
+.sectionRow:nth-child(4) {
+    animation-delay: 90ms;
+}
+
+.sectionRow:nth-child(5) {
+    animation-delay: 120ms;
+}
+
+.sectionRow:nth-child(6) {
+    animation-delay: 150ms;
+}
+
+.sectionRow:nth-child(n+7) {
+    animation-delay: 180ms;
+}
+
+@keyframes aiRowIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+}
+
+.turn,
+.tool {
+    animation: aiRowIn var(--dur-2) var(--ease-out) backwards;
+}
+
+/* 弹出层：从锚点那边长出来，160–180ms 就位（不糊背景、不拖尾） */
+.moreMenu {
+    transform-origin: top right;
+    animation: aiPopDown var(--dur-2) var(--ease-out) backwards;
+}
+
+.ctxPanel {
+    transform-origin: bottom right;
+    animation: aiPopUp var(--dur-2) var(--ease-out) backwards;
+}
+
+@keyframes aiPopDown {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+}
+
+@keyframes aiPopUp {
+    from {
+        opacity: 0;
+        transform: translateY(4px) scale(0.98);
+    }
+}
+
+/* ---------------------------------------------------------------- 焦点与按压
+ *
+ * 键盘走查给实心焦点圈（2px + 2px 偏移，四家都是这个口径）；鼠标点的不显。
+ * 按压只下沉 1px —— 比缩放稳，窄面板里不会连行高一起抖。
+ */
+.ai-root button:focus-visible,
+.ai-root [role='switch']:focus-visible {
+    outline: 2px solid var(--accent-solid);
+    outline-offset: 2px;
+}
+
+.btn:active:enabled,
+.chip:active:enabled,
+.copyBtn:active:enabled,
+.sectionRow:active,
+.emptyHint:active,
+.msgAction:active:enabled,
+.iconBtn:active:enabled,
+.menuItem:active,
+.historyNew:active:enabled,
+.historyItem:active,
+.modelRow:active:enabled,
+.modelGroup:active:enabled,
+.toolHead:active,
+.workHead:active,
+.thinkHead:active,
+.askOption:active,
+.askSubmit:active:enabled,
+.promptToggle:active,
+.reqToggle:active {
+    transform: translateY(1px);
+}
+
+/* 跟 Nomen 一样给一个全局刹车：系统开了「减少动态效果」就全部停掉 */
+@media (prefers-reduced-motion: reduce) {
+    .ai-root *,
+    .ai-root *::before,
+    .ai-root *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
