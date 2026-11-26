@@ -2792,3 +2792,21 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
+
+/* 干活前的确认卡片：跟提问卡同一套骨架，只是说明文字更小声、按钮并排 */
+.approveMeta {
+    margin-top: 3px;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 17px;
+}
+
+.approveActions {
+    display: flex;
+    gap: 6px;
+}
+
+.approveActions > * {
+    flex: 1;
+}
+

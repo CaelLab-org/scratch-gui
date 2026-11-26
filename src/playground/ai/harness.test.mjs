@@ -1199,5 +1199,148 @@ check('新名跟现有角色撞车（大小写不敏感）被拒',
 port.undoAction(renamed.undo);
 check('撤销改名后名字回来', !!port.readTarget('Sprite1') && !port.readTarget('小球'));
 
+// === 变量 / 列表：没有下拉箭头的写法也要落地（用户报过的坑）===
+// 先把前面几段测试留下的线程停掉：无头环境没有渲染器，跑着的 say 一类积木会去读舞台尺寸
+vm.stopAll();
+check('工具表里有建变量 / 建列表 / 自定义积木 / 加载扩展',
+    ['xce_create_variable', 'xce_create_list', 'xce_create_procedure', 'xce_add_extension']
+        .every(name => tools.some(tool => tool.name === name)));
+
+const madeVar = await executeTool(
+    {name: 'xce_create_variable', input: {name: '血量', value: '100'}}, tools, {});
+check('建变量成功（默认全局）', !madeVar.isError && /Created variable "血量"/.test(madeVar.content),
+    String(madeVar.content).slice(0, 70));
+check('变量真的在舞台上、带初始值',
+    port.readState().variables['血量'] === '100', String(port.readState().variables['血量']));
+
+const dupVar = await executeTool({name: 'xce_create_variable', input: {name: '血量'}}, tools, {});
+check('同名变量被拒', dupVar.isError === true && /already exists/.test(dupVar.content),
+    String(dupVar.content).slice(0, 70));
+
+const madeList = await executeTool(
+    {name: 'xce_create_list', input: {name: '背包', items: ['苹果']}}, tools, {});
+check('建列表成功（带初始项目）',
+    !madeList.isError && JSON.stringify(port.readState().lists['背包']) === '["苹果"]',
+    JSON.stringify(port.readState().lists['背包']));
+
+const varOnList = await executeTool({name: 'xce_create_variable', input: {name: '背包'}}, tools, {});
+check('变量和列表不许同名（建变量时也被拦）',
+    varOnList.isError === true && /already exists/.test(varOnList.content),
+    String(varOnList.content).slice(0, 70));
+
+// 关键回归：`[背包]` 没写那个 v —— 以前会把它塞进 inputs，积木落地后下拉是空的
+const bareVar = await executeTool({
+    name: 'xce_write_script',
+    input: {sprite: 'Sprite1', text: 'when green flag clicked\nset [没有箭头的变量] to (1)'}
+}, tools, {});
+check('无箭头的变量写法也会把变量建出来',
+    !bareVar.isError && /New variables: 没有箭头的变量/.test(bareVar.content),
+    String(bareVar.content).slice(0, 80));
+
+const listAsVar = await executeTool({
+    name: 'xce_write_script',
+    input: {sprite: 'Sprite1', text: 'when green flag clicked\nshow variable [背包]'}
+}, tools, {});
+check('把列表当变量用被整体拒绝（不会多出一个同名标量）',
+    listAsVar.isError === true && /is used here as a variable/.test(listAsVar.content),
+    String(listAsVar.content).slice(0, 90));
+
+// === 自定义积木（我的积木）===
+const proc = await executeTool({
+    name: 'xce_create_procedure',
+    input: {sprite: 'Sprite1', name: '跳跃', params: ['高度'], body: 'change [血量 v] by (高度)'}
+}, tools, {});
+check('建自定义积木并给出调用写法',
+    !proc.isError && /Created the custom block "跳跃"/.test(proc.content) && /跳跃 \(值\)/.test(proc.content),
+    String(proc.content).slice(0, 80));
+check('自定义积木的定义读得回来（带参数）',
+    port.readTarget('Sprite1').text.includes('define 跳跃 (高度)'),
+    port.listProcedures('Sprite1').map(item => item.name).join(','));
+
+const procCall = await executeTool({
+    name: 'xce_write_script',
+    input: {sprite: 'Sprite1', text: 'when green flag clicked\n跳跃 (10)'}
+}, tools, {});
+check('调用已有的自定义积木（这段文本里没有 define）', !procCall.isError,
+    String(procCall.content).slice(0, 80));
+
+const ghostCall = await executeTool({
+    name: 'xce_write_script',
+    input: {sprite: 'Sprite1', text: 'when green flag clicked\n飞行 (1)'}
+}, tools, {});
+check('调用没定义的自定义积木被拒', ghostCall.isError === true &&
+    /does \*\*not recognize\*\*/.test(ghostCall.content),
+    String(ghostCall.content).slice(0, 90));
+
+const dupProc = await executeTool({
+    name: 'xce_create_procedure',
+    input: {sprite: 'Sprite1', name: '跳跃'}
+}, tools, {});
+check('同名自定义积木被拒，并指出改用 edit_script',
+    dupProc.isError === true && /already has a custom block/.test(dupProc.content),
+    String(dupProc.content).slice(0, 90));
+
+// 停止积木：STOP_OPTION 不在参数表里，以前写出来是块下拉空着的死积木
+const stopped = await executeTool({
+    name: 'xce_write_script',
+    input: {sprite: 'Sprite1', text: 'when green flag clicked\nstop [this script v]'}
+}, tools, {});
+check('停止积木能写（不再是空下拉的死块）', !stopped.isError, String(stopped.content).slice(0, 60));
+
+// === 每次确认：拒绝就不执行，允许才执行 ===
+const approveModel = () => {
+    let round = 0;
+    return {
+        supportsImage: false,
+        complete: async () => {
+            round++;
+            if (round === 1) {
+                return {
+                    text: '',
+                    toolCalls: [{
+                        id: 'approve-1',
+                        name: 'xce_write_script',
+                        input: {sprite: 'Sprite1', text: 'when green flag clicked\nmove (77) steps'}
+                    }]
+                };
+            }
+            return {text: 'done', toolCalls: []};
+        }
+    };
+};
+const denySession = createSession();
+const denied = await runTurn({
+    session: denySession,
+    model: approveModel(),
+    tools,
+    system: 'test',
+    onApprove: async () => 'deny'
+});
+check('拒绝之后工具没执行、模型收到「被拒绝」', denied.text === 'done' &&
+    !port.readTarget('Sprite1').text.includes('move (77) steps') &&
+    denySession.messages.some(message => message.role === 'tool' && /declined/.test(message.content)),
+    denySession.messages.filter(message => message.role === 'tool').map(message => message.content.slice(0, 40)).join(' | '));
+
+const allowSession = createSession();
+const allowed = await runTurn({
+    session: allowSession,
+    model: approveModel(),
+    tools,
+    system: 'test',
+    onApprove: async () => 'allow'
+});
+check('允许之后工具真的执行了', allowed.text === 'done' &&
+    port.readTarget('Sprite1').text.includes('move (77) steps'));
+
+const fullAccessSession = createSession();
+const direct = await runTurn({
+    session: fullAccessSession,
+    model: approveModel(),
+    tools,
+    system: 'test'
+});
+check('没给确认通道（完全访问）时直接执行', direct.text === 'done' &&
+    port.readTarget('Sprite1').text.includes('move (77) steps'));
+
 console.log(`\n${failures.length ? `❌ ${failures.length} 项未通过：${failures.join('、')}` : '✅ 全部通过'}`);
 process.exit(failures.length ? 1 : 0);

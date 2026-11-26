@@ -38,6 +38,8 @@ export const formatWorkDuration = ms => {
 const isWorkItem = item =>
     item.kind === 'tool' ||
     item.kind === 'ask' ||
+    // 确认卡也是干活过程的一部分：它夹在工具行之间，不该把同一轮切成两段
+    item.kind === 'approve' ||
     item.kind === 'notice' ||
     (item.kind === 'agent' && !!item.hasTools);
 

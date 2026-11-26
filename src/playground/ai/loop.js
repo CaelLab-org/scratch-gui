@@ -132,6 +132,47 @@ export const createAskToken = onAsk => {
     };
 };
 
+/**
+ * 「等你点头」的令牌：非只读工具在「每次确认」模式下先过这一关。
+ * 跟提问令牌同构（面板那头 resolve），但**没有通道时一律放行** —— 那是「完全访问」模式，
+ * 也是无头测试的默认情形。
+ * @param {function} onApprove 面板给的通道：({call, tool}) => Promise<'allow'|'deny'>
+ * @returns {object} 令牌：ask(request) 与 cancel()
+ */
+export const createApproveToken = onApprove => {
+    let pending = null;
+    return {
+        ask: request => {
+            if (typeof onApprove !== 'function') return Promise.resolve('allow');
+            // 同时挂两个不可能（工具是串行跑的）；真出现了就拒绝，宁可多问一次也不放行
+            if (pending) return Promise.resolve('deny');
+            return new Promise((resolve, reject) => {
+                pending = {resolve, reject};
+                Promise.resolve()
+                    .then(() => onApprove(request))
+                    .then(verdict => {
+                        if (pending) {
+                            pending = null;
+                            resolve(verdict === 'allow' ? 'allow' : 'deny');
+                        }
+                    })
+                    .catch(error => {
+                        if (pending) {
+                            pending = null;
+                            reject(error);
+                        }
+                    });
+            });
+        },
+        cancel: () => {
+            if (!pending) return;
+            const {resolve} = pending;
+            pending = null;
+            resolve('abort');
+        }
+    };
+};
+
 // 执行一次工具调用。抛出的异常一律包成 isError 结果，不要让循环炸掉
 export const executeTool = async (call, tools, ctx) => {
     const tool = tools.find(t => t.name === call.name);
@@ -182,13 +223,17 @@ export const executeTool = async (call, tools, ctx) => {
  * @returns {Promise<object>} {text, steps, maxSteps, reason, aborted}
  */
 export const runTurn = async ({
-    session, model, tools, signal, onEvent = () => {}, maxSteps = STEP_LIMITS.default, system, onAsk
+    session, model, tools, signal, onEvent = () => {}, maxSteps = STEP_LIMITS.default, system, onAsk, onApprove
 }) => {
     const schemas = tools.map(toolToSchema);
     // 提问通道：整个一轮共用一份令牌，中止时把它收掉（否则工具会一直等着）
     const askToken = createAskToken(onAsk);
     const cancelAsk = () => askToken.cancel();
     if (signal) signal.addEventListener('abort', cancelAsk, {once: true});
+    // 确认通道：「每次确认」模式下非只读工具先问用户一句（onApprove 没给 = 完全访问，直接放行）
+    const approveToken = createApproveToken(onApprove);
+    const cancelApprove = () => approveToken.cancel();
+    if (signal) signal.addEventListener('abort', cancelApprove, {once: true});
     let steps = 0;
     let finalText = '';
     // 循环为什么结束：正常收尾=null；'steps'=到步数上限；'length'=输出被 max_tokens 掐断；
@@ -299,6 +344,34 @@ export const runTurn = async ({
             const startedAt = Date.now();
             // 只有声明了 skippable 的工具（等待类）才发令牌：界面据此决定要不要画「跳过」
             const tool = tools.find(t => t.name === call.name);
+            // 「每次确认」模式：非只读工具先等你点头。只读工具（读项目 / 读状态 / 截图）永远直接跑，
+            // 否则一口气查十次资料要点十次，谁都会烦。
+            if (tool && !tool.readOnly && tool.needsApproval !== false) {
+                const verdict = await approveToken.ask({call, tool});
+                if (verdict !== 'allow') {
+                    const stopped = verdict === 'abort';
+                    const content = stopped ?
+                        'The user stopped the turn before approving this action, so it did not run.' :
+                        'The user declined this action, so it did not run and nothing in the project changed. ' +
+                        'Do not send the same call again — say what you were about to do and why, and let ' +
+                        'them choose (or ask with xce_ask_user).';
+                    // 拒绝也要留一条工具行：用户得在记录里看见自己拒了什么
+                    onEvent({type: 'tool-start', call});
+                    const result = {content, isError: true, denied: true};
+                    const record = {call, result, duration: Date.now() - startedAt};
+                    session.toolCalls.push(record);
+                    onEvent({type: 'tool-end', ...record});
+                    session.messages.push({
+                        role: 'tool',
+                        toolCallId: call.id,
+                        name: call.name,
+                        content,
+                        isError: true
+                    });
+                    if (stopped) break;
+                    continue;
+                }
+            }
             const skip = tool && tool.skippable ? createSkipToken() : null;
             onEvent({type: 'tool-start', call, skip});
             const result = await executeTool(call, tools, {
@@ -325,9 +398,13 @@ export const runTurn = async ({
         reason = 'steps';
     }
 
-    // 收掉还没人回答的提问（正常结束时不该有，兜一手）
-    if (signal) signal.removeEventListener('abort', cancelAsk);
+    // 收掉还没人回答的提问 / 还没人确认的调用（正常结束时不该有，兜一手）
+    if (signal) {
+        signal.removeEventListener('abort', cancelAsk);
+        signal.removeEventListener('abort', cancelApprove);
+    }
     askToken.cancel();
+    approveToken.cancel();
 
     return {text: finalText, steps, maxSteps, reason, aborted: !!(signal && signal.aborted)};
 };

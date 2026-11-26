@@ -66,6 +66,7 @@ node packages/xce-mcp/bin/xce-mcp.mjs
 
 - 读项目：`xce_read_project` / `xce_read_state` / `xce_list_sprites` / `xce_read_costume` / `xce_read_stage`
 - 写项目：`xce_write_script` / `xce_edit_script` / `xce_delete_script` / `xce_add_sprite` / `xce_edit_costume`
+- 建东西：`xce_create_variable` / `xce_create_list` / `xce_create_procedure`（自定义积木）/ `xce_add_extension`（内置扩展）
 - 运行：`xce_run_project` / `xce_trigger_event`
 - 记忆与笔记：`xce_read_memory` / `xce_save_memory` / `xce_read_project_memory` / `xce_write_project_memory`
 - 联网：`xce_read_online` / `xce_search`

@@ -44,7 +44,10 @@ const listSpritesDetailed = port => port.listSpritesDetailed()
                 (name === t.currentCostume ? `${name} (current)` : name)).join(', ')}` : '';
         const vars = t.variables.length ? `, variables: ${t.variables.join(', ')}` : '';
         const lists = t.lists.length ? `, lists: ${t.lists.join(', ')}` : '';
-        return `${head}${costumes}${vars}${lists}`;
+        // 自定义积木是「这个角色能调的名字」：列出来，模型才不会瞎写一个不存在的
+        const procs = t.procedures && t.procedures.length ?
+            `, custom blocks: ${t.procedures.join(', ')}` : '';
+        return `${head}${costumes}${vars}${lists}${procs}`;
     })
     .join('\n');
 
@@ -240,6 +243,39 @@ export const createTools = ({port, skills = []}) => {
         'Use it to back up claims about the outside world (docs, help pages, a site the user mentions).'
     ].join('\n');
 
+    // 写入为什么没成。四种原因完全不同（不认识的写法 / 缺扩展 / 没有定义的自定义积木 /
+    // 变量与列表撞名），各给一句能照着改的话 —— 混成一句「失败了」，模型只能瞎猜着重试。
+    const writeFailure = result => {
+        if (!result) return null;
+        if (result.unrecognized) {
+            return 'Nothing was written: this text uses block syntax the tool does **not recognize**.\n' +
+                `Its warnings were:\n- ${result.warnings.map(w => String(w)).join('\n- ')}\n` +
+                'Rewrite it with the real names from the block palette (common mistakes: inventing a block ' +
+                'name, mixing in a translated name, or calling a custom block this sprite does not define). ' +
+                'Or call xce_read_project first and copy how the existing scripts are written.';
+        }
+        if (result.missingExtensions && result.missingExtensions.length) {
+            return `Nothing was written: these blocks need an extension the project has **not loaded** ` +
+                `(${result.missingExtensions.join(', ')}). Add it with xce_add_extension, then write the blocks ` +
+                'again — never pretend the blocks are in when they are not.';
+        }
+        if (result.missingDefinitions && result.missingDefinitions.length) {
+            const names = result.missingDefinitions.map(name => `"${name}"`).join(', ');
+            return `Nothing was written: no custom block named ${names} is defined on this sprite. ` +
+                'A call to a custom block that is not defined does nothing at all, so it is not worth writing. ' +
+                'Create it first with xce_create_procedure (it returns the exact text to call it with).';
+        }
+        if (result.typeConflicts && result.typeConflicts.length) {
+            const detail = result.typeConflicts.map(item =>
+                `"${item.name}" is used here as a ${item.expected}, but the project already has a ${item.actual} ` +
+                'with that name').join('; ');
+            return `Nothing was written: ${detail}. Use the right kind of block — lists go with ` +
+                '"add ... to [list v]", "item ... of [list v]", "show list [x v]"; variables with ' +
+                '"set [var v] to", "show variable [x v]" — or give this one a different name.';
+        }
+        return null;
+    };
+
     const tools = [
         {
             name: 'xce_list_sprites',
@@ -334,8 +370,11 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 'workspace as ordinary blocks the user can drag, and the layout is tidied afterwards.\n' +
                 'Appends only: existing scripts are never modified or removed.\n' +
                 'One complete script per call — split a program across calls and you get disconnected stacks.\n' +
-                'The text must start with a hat block. Example:\n' +
-                'when green flag clicked\nrepeat (10)\n  move (10) steps\nend',
+                'The text must start with a hat block (or with `define ...` for a custom block definition). ' +
+                'Example:\n' +
+                'when green flag clicked\nrepeat (10)\n  move (10) steps\nend\n' +
+                'Variables and lists written as [name v] are created if they do not exist yet; use ' +
+                'xce_create_variable / xce_create_list when you want to name them before writing the blocks.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -352,27 +391,8 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 const lines = [`Wrote ${count} script${count === 1 ? '' : 's'} into "${sprite}".`];
                 if (result.createdVariables.length) lines.push(`New variables: ${result.createdVariables.join(', ')}`);
                 if (result.createdLists.length) lines.push(`New lists: ${result.createdLists.join(', ')}`);
-                if (result.unrecognized) {
-                    // 转换器认不出的写法：跟缺扩展根本不是一回事，别把两种原因混在一起说
-                    return fail(
-                        `Nothing was written: this text uses block syntax the tool does **not recognize**. ` +
-                        `Its warnings were:\n- ` +
-                        `${result.warnings.map(w => String(w)).join('\n- ')}\n` +
-                        `Rewrite it with the real names from the block palette (common mistakes: inventing a ` +
-                        `block name, or mixing in a translated name). Or call xce_read_project first and copy ` +
-                        `how the existing scripts are written.`
-                    );
-                }
-                if (result.missingExtensions && result.missingExtensions.length) {
-                    return fail(
-                        `Nothing was written: these blocks need an extension the project has **not loaded** ` +
-                        `(${result.missingExtensions.join(', ')}). You must not load an extension yourself — ` +
-                        `that would modify the user's project. Tell the user to do this: click the leftmost ` +
-                        `button at the top of the panel (「收起面板」) to hide the AI panel, click 「添加扩展」 ` +
-                        `at the bottom-left, pick the extension, click 「AI 对话」 to bring the panel back, and ` +
-                        `then ask you to try again. Or use blocks that need no extension.`
-                    );
-                }
+                const problem = writeFailure(result);
+                if (problem) return fail(problem);
                 if (result.warnings.length) lines.push(`Warnings:\n- ${result.warnings.join('\n- ')}`);
                 if (!result.blockIds.length) return fail(lines.join('\n'));
                 return {
@@ -446,25 +466,9 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 }
                 // 先写新的再删旧的：新文本解析不过 / 缺扩展时在写入这步就失败返回，
                 // 旧脚本一动不动 —— 这正是这个工具比「先删后写」安全的地方
-                const result = await port.writeScript(sprite, text);
-                if (result.unrecognized) {
-                    return fail(
-                        `Nothing was changed: the new text uses block syntax the tool does **not recognize**. ` +
-                        `Its warnings were:\n- ` +
-                        `${result.warnings.map(w => String(w)).join('\n- ')}\n` +
-                        `Rewrite it with the real names from the block palette (common mistakes: inventing a ` +
-                        `block name, or mixing in a translated name). The old script is exactly as it was.`
-                    );
-                }
-                if (result.missingExtensions && result.missingExtensions.length) {
-                    return fail(
-                        `Nothing was changed: the new text needs an extension the project has **not loaded** ` +
-                        `(${result.missingExtensions.join(', ')}). You must not load an extension yourself — ` +
-                        `that would modify the user's project. Tell the user to do this: click the leftmost ` +
-                        `button under the block palette (添加扩展), add ${result.missingExtensions.join(', ')}, ` +
-                        `then ask you to try again. The old script is exactly as it was.`
-                    );
-                }
+                const result = await port.writeScript(sprite, text, {replacing: true});
+                const problem = writeFailure(result);
+                if (problem) return fail(`${problem}\nThe old script is exactly as it was.`);
                 if (!result.topBlockIds.length) {
                     return fail('Nothing was changed: the new text parsed to no blocks. The old script is ' +
                         'exactly as it was.');
@@ -483,6 +487,175 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                         added: result.blockCount,
                         removed: snapshot.count
                     }
+                };
+            }
+        },
+
+        {
+            name: 'xce_create_variable',
+            description:
+                'Create a variable (变量): it appears in the 变量 panel and every block written afterwards can use it.\n' +
+                'Omit `sprite` for a global variable (「适用于所有角色」— every sprite sees the same one); pass ' +
+                '`sprite` to make it private to that sprite (「仅适用于当前角色」).\n' +
+                'A block that mentions a new name also creates the variable implicitly, but creating it here ' +
+                'first is clearer and lets you give it a starting value. If the name is already used — by a ' +
+                'variable OR by a list — nothing is created and the result says which one it is.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {type: 'string', description: 'Variable name, in the user\'s language.'},
+                    sprite: {
+                        type: 'string',
+                        description: 'Sprite name to make it private to that sprite. Omit for a global variable.'
+                    },
+                    value: {type: 'string', description: 'Starting value (optional).'}
+                },
+                required: ['name']
+            },
+            handler: ({name, sprite, value}) => {
+                const made = port.createVariable({name, sprite, value});
+                if (!made.ok) {
+                    if (made.reason === 'no-name') return fail('A variable name is required.');
+                    if (made.reason === 'missing') {
+                        return fail(`No sprite named "${sprite}". Existing sprites: ${made.sprites}`);
+                    }
+                    if (made.reason === 'duplicate') {
+                        return fail(`"${name}" already exists (as a ${made.scope === 'global' ? 'global' : 'sprite'} ` +
+                            'variable or list). Use the existing one, or pick another name — two panel entries ' +
+                            'with the same name confuse everyone.');
+                    }
+                    return fail(`Could not create the variable (${made.reason}).`);
+                }
+                const scope = made.scope === 'global' ? 'for all sprites (global)' : `private to "${sprite}"`;
+                return ok(`Created variable "${made.name}", ${scope}. In block text write it as [${made.name} v].`);
+            }
+        },
+
+        {
+            name: 'xce_create_list',
+            description:
+                'Create a list (列表) — same rules as xce_create_variable: omit `sprite` for a project-wide list, ' +
+                'pass `sprite` to keep it private to that sprite.\n' +
+                'A list and a variable cannot share a name: if the name is taken, nothing is created.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {type: 'string', description: 'List name, in the user\'s language.'},
+                    sprite: {
+                        type: 'string',
+                        description: 'Sprite name to make it private to that sprite. Omit for a global list.'
+                    },
+                    items: {
+                        type: 'array',
+                        items: {type: 'string'},
+                        description: 'Starting items, in order (optional).'
+                    }
+                },
+                required: ['name']
+            },
+            handler: ({name, sprite, items}) => {
+                const made = port.createVariable({name, sprite, isList: true, items});
+                if (!made.ok) {
+                    if (made.reason === 'no-name') return fail('A list name is required.');
+                    if (made.reason === 'missing') {
+                        return fail(`No sprite named "${sprite}". Existing sprites: ${made.sprites}`);
+                    }
+                    if (made.reason === 'duplicate') {
+                        return fail(`"${name}" already exists (as a ${made.scope === 'global' ? 'global' : 'sprite'} ` +
+                            'variable or list). Use the existing one, or pick another name.');
+                    }
+                    return fail(`Could not create the list (${made.reason}).`);
+                }
+                const scope = made.scope === 'global' ? 'for all sprites (global)' : `private to "${sprite}"`;
+                return ok(`Created list "${made.name}", ${scope}. In block text write it as [${made.name} v].`);
+            }
+        },
+
+        {
+            name: 'xce_create_procedure',
+            description:
+                'Create a custom block (自定义积木) on a sprite — the user sees it in the 「我的积木」 category, ' +
+                'and any script of that sprite can call it like a normal block.\n' +
+                'This creates the DEFINITION (the `define ...` hat). Pass the statements that belong inside it ' +
+                'as `body` — plain block text with no hat block, one statement per line — or leave `body` out ' +
+                'and fill it in later with xce_edit_script.\n' +
+                '`params` are the inputs it takes, in order (names only; they take values). `booleanParams` are ' +
+                'inputs that take a condition (<...>) instead, and they come after the value inputs. ' +
+                '`warp` = 运行时不刷新屏幕 (runs without screen refresh).\n' +
+                'A custom block works only inside the sprite that defines it, and calling a name that is not ' +
+                'defined is refused — such a block does nothing at all. The result tells you the exact text to ' +
+                'call it with. If that sprite already has a block with this name, nothing is created.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    sprite: {type: 'string', description: 'Sprite name that will own the custom block.'},
+                    name: {type: 'string', description: 'Name of the custom block, in the user\'s language.'},
+                    params: {
+                        type: 'array',
+                        items: {type: 'string'},
+                        description: 'Input names in order, e.g. ["高度", "次数"]. Omit for no inputs.'
+                    },
+                    booleanParams: {
+                        type: 'array',
+                        items: {type: 'string'},
+                        description: 'Inputs that take a condition instead of a value (optional).'
+                    },
+                    warp: {
+                        type: 'boolean',
+                        description: 'Run without screen refresh (运行时不刷新屏幕). Default false.'
+                    },
+                    body: {
+                        type: 'string',
+                        description: 'Optional: the statements inside it (no hat block, one statement per line).'
+                    }
+                },
+                required: ['sprite', 'name']
+            },
+            handler: async ({sprite, name, params, booleanParams, warp, body}) => {
+                const list = port.listProcedures(sprite);
+                if (list === null) return fail(`No sprite named "${sprite}". Existing sprites: ${listSprites(port)}`);
+                const wanted = String(name === void 0 || name === null ? '' : name).trim();
+                if (!wanted) return fail('The custom block needs a name.');
+                const existing = list.find(item => item.name === wanted);
+                if (existing) {
+                    return fail(`"${sprite}" already has a custom block called "${wanted}" ` +
+                        `(${existing.params.length} input${existing.params.length === 1 ? '' : 's'}: ` +
+                        `${existing.params.join(', ') || 'none'}). To change it, call xce_read_project and use ` +
+                        `xce_edit_script on its \`:: script ${existing.blockId}\` script; to call it, just write ` +
+                        `its name in a script.`);
+                }
+                const values = (Array.isArray(params) ? params : []).map(item => String(item).trim())
+                    .filter(Boolean);
+                const bools = (Array.isArray(booleanParams) ? booleanParams : []).map(item => String(item).trim())
+                    .filter(Boolean);
+                const argNames = values.concat(bools);
+                if (argNames.some(arg => /\s/.test(arg))) {
+                    return fail('Input names cannot contain spaces — scratchblocks splits on whitespace, so ' +
+                        '「高度 值」 would become two inputs. Use 高度值 or 高度.');
+                }
+                if (/\s/.test(wanted)) {
+                    return fail('Custom block names cannot contain spaces — scratchblocks splits on whitespace. ' +
+                        'Use 画线 or DrawLine instead of "画 线".');
+                }
+                const types = values.map(() => '%s').concat(bools.map(() => '%b'));
+                const lines = [`define ${wanted}${argNames.map(arg => ` (${arg})`).join('')}`];
+                for (const line of String(body || '').split('\n')) {
+                    lines.push(line.trim() ? `  ${line}` : '');
+                }
+                const result = await port.writeScript(sprite, lines.join('\n'), {
+                    declare: {name: wanted, types, warp: !!warp}
+                });
+                const problem = writeFailure(result);
+                if (problem) return fail(problem);
+                const callText = [wanted].concat(values.map(() => '(值)'), bools.map(() => '<条件>')).join(' ');
+                return {
+                    content: `Created the custom block "${wanted}" on "${sprite}" with ` +
+                        `${argNames.length} input${argNames.length === 1 ? '' : 's'}` +
+                        `${argNames.length ? ` (${argNames.join(', ')})` : ''}` +
+                        `${warp ? ', running without screen refresh' : ''}.\n` +
+                        `Call it in block text as: ${callText}\n` +
+                        'Inside its own body, read an input by writing its name in parentheses, e.g. (高度).',
+                    undo: {kind: 'add', sprite, topBlockIds: result.topBlockIds, added: result.blockCount}
                 };
             }
         },
@@ -717,6 +890,50 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 const header = `# ${AGENT_SPRITE_NAME} note (${shown} of ` +
                     `${total} line${total === 1 ? '' : 's'}, ${note.totalChars} characters total)`;
                 return ok(`${header}\n${lines.join('\n')}`);
+            }
+        },
+
+        {
+            name: 'xce_add_extension',
+            description:
+                'Add one of the built-in extensions to the project: 画笔 pen, 音乐 music, 视频侦测 videoSensing, ' +
+                '文字朗读 text2speech, 翻译 translate and a few others.\n' +
+                'Do this before writing blocks that come from an extension — xce_write_script refuses those ' +
+                'blocks while the extension is not loaded, and a block from an extension the project does not ' +
+                'have is a dead grey block.\n' +
+                'This changes the project: a new category shows up in the palette for the user as well. Add ' +
+                'one because the task needs it, mention it in your reply, and do not clear out or reorganise ' +
+                'the extensions the user already loaded. If the id is wrong, the result lists the ids that exist.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    extension: {
+                        type: 'string',
+                        description: 'Extension id, e.g. "pen", "music", "videoSensing", "text2speech", "translate".'
+                    }
+                },
+                required: ['extension']
+            },
+            handler: ({extension}) => {
+                const made = port.addExtension(extension);
+                if (!made.ok) {
+                    const available = (made.available || []).join(', ');
+                    if (made.reason === 'unknown') {
+                        return fail(`"${extension}" is not an extension this editor can load. Available ids: ` +
+                            `${available || '(none)'}. Use one of those exactly — the display name (「画笔」) ` +
+                            'is not the id (pen).');
+                    }
+                    if (made.reason === 'no-id') {
+                        return fail(`Pass the extension id. Available ids: ${available || '(none)'}.`);
+                    }
+                    return fail(`Could not add the extension (${made.reason}).`);
+                }
+                if (made.already) {
+                    return ok(`The "${made.id}" extension is already loaded — nothing changed.`);
+                }
+                return ok(`Added the "${made.id}" extension. Its category is in the palette now, and its ` +
+                    'blocks can be written by their English names (pen: "pen down", "set pen color to ..."). ' +
+                    'Mention it to the user in your reply.');
             }
         },
 
@@ -1302,6 +1519,8 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
 
         {
             name: 'xce_save_memory',
+            // 记的是自己的备忘（localStorage），不动用户的项目，不必走确认
+            needsApproval: false,
             description:
                 `Save ONE lasting fact so a later conversation still knows it. Your memory index is in your ` +
                 `prompt every turn, so this is how you remember across days.\n` +
@@ -1398,6 +1617,8 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 'true, or when two memories say the same thing. If the fact CHANGED rather than stopped being ' +
                 'true, overwrite it with xce_save_memory under the same name instead of deleting and re-adding.',
             destructive: true,
+            // 删的是自己的备忘，不是用户的项目
+            needsApproval: false,
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -1751,6 +1972,8 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 'result states how long actually elapsed and whether it was cut short — read it before ' +
                 'acting as if the whole wait happened.',
             skippable: true,
+            // 等待不改项目，没必要拦一道（「每次确认」模式下只拦会改东西的）
+            needsApproval: false,
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -1808,6 +2031,8 @@ ${notes.map(note => `:: note ${note.id}\n${note.text}`).join('\n\n')}`;
                 'so: finish what you can, say plainly what is still unknown, and do not ask it again. The ' +
                 'question also closes by itself when no reply comes for a couple of minutes, so an ask is ' +
                 'not a way to pause for a long time.',
+            // 提问本身就是跟用户对话，不该再被「确认」拦一道
+            needsApproval: false,
             inputSchema: {
                 type: 'object',
                 properties: {

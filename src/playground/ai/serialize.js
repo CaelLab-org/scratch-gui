@@ -44,6 +44,17 @@ const blockName = block => {
     return words.length ? words.join(' ') : void 0;
 };
 
+// 一段标签（到第一个子积木为止）拼成的名字。自定义积木的名字和参数名都长这样，
+// 名字里带空格时会被解析成好几个标签，所以**全部拼起来**，别只取第一个。
+const labelsOf = children => {
+    const words = [];
+    for (const child of children || []) {
+        if (!child.isLabel) break;
+        words.push(child.value);
+    }
+    return words.join(' ').trim();
+};
+
 // 下拉框里写的显示文字 -> 该块真正要存的值。
 // **必须按块查**：同一段显示文字在不同块里可以是不同的值 —— 核心的「当按下按键」菜单
 // 显示 'right arrow' 值也是 'right arrow'，Makey Makey 的同类菜单显示同一段文字、值却是 'RIGHT'。
@@ -83,6 +94,9 @@ export const textToBlocks = (text, ctx = {}) => {
     const blocks = {};
     const topLevelIds = [];
     const warnings = [];
+    // 调用了、但这段文本和项目里都没有定义的自定义积木。**调用一个没定义的自定义积木在
+    // Scratch 里是块死积木**（点了什么都不发生），所以这个清单由调用方拿去做「整体拒绝」。
+    const missingDefinitions = [];
     let counter = 0;
     // 块 id 必须**跨调用唯一**。曾经是每次转换从 c0 重新开始编，于是第二次 write_script
     // 生成的 c0/c1... 跟第一次撞车，后写的块把先写的**整段覆盖**掉 ——
@@ -92,13 +106,118 @@ export const textToBlocks = (text, ctx = {}) => {
         .slice(2, 6);
     const newId = (prefix = 'c') => `${prefix}${idTag}${(counter++).toString(36)}`;
 
+    // 变量 / 列表 id：可读的 v1、l1 优先，但**必须避开项目里已经占用的 id** ——
+    // 光按「现有变量个数 + 1」编号，遇到用户自建的 id 恰好叫 v2 时就会撞车，
+    // 撞了就是 createVariable 静默不干事（或者更糟：把别人的变量顶掉）。
+    const usedVarIds = new Set([...Object.values(variables), ...Object.values(lists)]);
+    const freshVarId = prefix => {
+        let index = usedVarIds.size + 1;
+        let candidate = `${prefix}${index}`;
+        while (usedVarIds.has(candidate)) candidate = `${prefix}${++index}`;
+        usedVarIds.add(candidate);
+        return candidate;
+    };
     const varId = name => {
-        if (!(name in variables)) variables[name] = `v${Object.keys(variables).length + 1}`;
+        if (!(name in variables)) variables[name] = freshVarId('v');
         return variables[name];
     };
     const listId = name => {
-        if (!(name in lists)) lists[name] = `l${Object.keys(lists).length + 1}`;
+        if (!(name in lists)) lists[name] = freshVarId('l');
         return lists[name];
+    };
+
+    // —— 自定义积木（我的积木）——
+    // 名字 -> 定义 {proccode, argumentIds, argumentNames, argumentDefaults, types, warp}。
+    // 先收项目里现有的（ctx.procedures，由 port 扫 procedures_prototype 得到），
+    // 再把这段文本里 define 的补进来：同一段文本里「先调用后定义」也很常见。
+    // 参数 id 必须沿用已有定义的那一套，否则调用块和定义块的参数表对不上，积木直接失效。
+    const procedures = {};
+    for (const [name, entry] of Object.entries(ctx.procedures || {})) {
+        if (entry && entry.proccode) procedures[name] = entry;
+    }
+    // 项目里本来就有的定义 / 这段文本里已经报过一次的名字：同一个提醒只说一次
+    const projectProcedures = new Set(Object.keys(procedures));
+    const announcedProcedures = new Set();
+
+    const registerProcedure = (name, argNames) => {
+        const existing = procedures[name];
+        if (existing && existing.argumentNames.length === argNames.length &&
+            existing.argumentNames.every((arg, index) => arg === argNames[index])) {
+            // 项目里本来就有这个定义，这段文本又写了一遍：多半是模型在「重写定义」。
+            // 重写该走 xce_edit_script（那会删掉旧的），直接写会留下两份同名定义。
+            if (!ctx.replacing && !announcedProcedures.has(name) && projectProcedures.has(name)) {
+                announcedProcedures.add(name);
+                warnings.push(
+                    `Custom block "${name}" is already defined on this sprite — this text defines it again, ` +
+                    'so the sprite would carry two definitions of the same block. To change an existing ' +
+                    'definition, use xce_edit_script on its `:: script` id instead.'
+                );
+            }
+            return existing;
+        }
+        if (existing) {
+            warnings.push(
+                `Custom block "${name}" is already defined with inputs ` +
+                `(${existing.argumentNames.join(', ') || 'none'}), but this text defines it with ` +
+                `(${argNames.join(', ') || 'none'}). Redefining it with new inputs ` +
+                'breaks any existing calls to the old one.'
+            );
+        }
+        const declared = ctx.declare && ctx.declare.name === name &&
+            Array.isArray(ctx.declare.types) && ctx.declare.types.length === argNames.length ?
+            ctx.declare : null;
+        const types = declared ? declared.types.slice() : argNames.map(() => '%s');
+        const entry = {
+            name,
+            proccode: [name].concat(types).join(' '),
+            argumentIds: argNames.map(() => newId('a')),
+            argumentNames: argNames,
+            argumentDefaults: argNames.map(() => ''),
+            types,
+            warp: !!(declared && declared.warp)
+        };
+        procedures[name] = entry;
+        return entry;
+    };
+
+    const procedureArgType = name => {
+        for (const entry of Object.values(procedures)) {
+            const index = entry.argumentNames.indexOf(name);
+            if (index !== -1) return entry.types[index] || '%s';
+        }
+        return '%s';
+    };
+
+    const isKnownArg = name => Object.values(procedures)
+        .some(entry => entry.argumentNames.includes(name));
+
+    // 读自定义积木的参数（`(高度::custom)`）：布尔参数要落成 argument_reporter_boolean，
+    // 否则那块积木在布尔槽里插不进去。
+    const emitArgReporter = (name, {parent, topLevel}) => {
+        const id = newId();
+        blocks[id] = {
+            opcode: procedureArgType(name) === '%b' ?
+                'argument_reporter_boolean' : 'argument_reporter_string_number',
+            next: null,
+            parent,
+            inputs: {},
+            fields: {VALUE: [name, null]},
+            shadow: false,
+            topLevel
+        };
+        return id;
+    };
+
+    // `define 名字 (参数1) (参数2)` 解析出来是：DEFINITION -> 标签「define」+ 一个原型块，
+    // 原型块里依次是「名字标签 + 每个参数一个小积木（里面只有一个标签）」。
+    const procDefOf = sbBlock => {
+        const proto = (sbBlock.children || []).find(child => child.isBlock);
+        const name = labelsOf(proto ? proto.children : []);
+        const argNames = ((proto ? proto.children : []) || [])
+            .filter(child => child.isBlock)
+            .map(arg => labelsOf(arg.children))
+            .filter(Boolean);
+        return {name, argNames};
     };
 
     const emitVarReporter = (name, parentId) => {
@@ -121,8 +240,9 @@ export const textToBlocks = (text, ctx = {}) => {
         if (selector === 'readVariable') return 'data_variable';
         if (selector === 'contentsOfList:') return 'data_listcontents';
         // 自定义积木（define / call / 参数读取）需要 mutation，暂不支持
+        // 自定义积木（define / 调用 / 参数读取）要 mutation，在 convertBlock 里单独处理，走不到这里
         if (selector === 'procDef' || selector === 'call' || selector === 'getParam') return null;
-        return idToOpcode[block.info.id] || null;
+        return (block.info && idToOpcode[block.info.id]) || null;
     };
 
     // 影子积木**按槽位名**取：表里是 {槽位名: 影子类型}。
@@ -154,9 +274,34 @@ export const textToBlocks = (text, ctx = {}) => {
     let convertBlock;
 
     const fillSlot = (block, blockId, slotName, phType, child, opcode) => {
-        const isVarSlot = phType === '%m.var';
-        const isListSlot = phType === '%m.list';
-        const isMenuSlot = /^%m\./.test(phType) && !isVarSlot && !isListSlot;
+        // 变量 / 列表槽位：**以参数表为准**，不只信 scratchblocks 给的槽位类型。
+        // 模型常把下拉写成 `[得分]`（少了那个 v），这时解析出来是个普通文本 Input；
+        // 若按「非下拉 = 值槽」处理，就会写成 inputs.VARIABLE —— 积木落地后下拉是空的，
+        // 变量也从没被创建（用户实际踩到过：积木区多了一堆没定义的变量块）。
+        // 广播（BROADCAST_OPTION）也是 field_variable，但它是 broadcast_msg，不算普通变量。
+        const fieldType = (spec[opcode] && spec[opcode].fields) ? spec[opcode].fields[slotName] : null;
+        const listSlot = phType === '%m.list' || (fieldType === 'field_variable' && slotName === 'LIST');
+        const varSlot = !listSlot && slotName !== 'BROADCAST_OPTION' &&
+            (phType === '%m.var' || fieldType === 'field_variable' || fieldType === 'field_variable_getter');
+        const isMenuSlot = /^%m\./.test(phType) && !varSlot && !listSlot;
+
+        if (varSlot || listSlot) {
+            // 槽里写的可能是下拉 `[名字 v]`、裸方括号 `[名字]`、圆括号 `(名字)`，也可能是
+            // 一个变量报告块 `(名字)`（非下拉形状）。三种都归一到「字段 + 已登记的变量」。
+            const name = child ?
+                (child.isInput ? String(child.value === void 0 || child.value === null ? '' : child.value) :
+                    (child.isLabel ? String(child.value || '') : (blockName(child) || ''))) :
+                '';
+            if (!name.trim()) {
+                warnings.push(
+                    `${opcode}: the ${slotName} slot is empty — a variable or list name is required there.`
+                );
+                block.inputs[slotName] = [1, [10, '']];
+                return;
+            }
+            block.fields[slotName] = listSlot ? [name, listId(name)] : [name, varId(name)];
+            return;
+        }
 
         if (child && child.isInput) {
             if (child.shape === 'dropdown') {
@@ -179,14 +324,6 @@ export const textToBlocks = (text, ctx = {}) => {
                         topLevel: false
                     };
                     block.inputs[slotName] = [1, menuId];
-                    return;
-                }
-                if (isVarSlot) {
-                    block.fields[slotName] = [display, varId(display)];
-                    return;
-                }
-                if (isListSlot) {
-                    block.fields[slotName] = [display, listId(display)];
                     return;
                 }
                 if (!isMenuSlot) {
@@ -223,11 +360,150 @@ export const textToBlocks = (text, ctx = {}) => {
         block.inputs[slotName] = phType === '%b' ? [2, null] : [1, [10, '']];
     };
 
+    // 一个调用块。参数 id 必须与定义那边**一模一样** —— mutation.argumentids 就是两边的合同；
+    // 没有定义时按「全是 %s」编一套，反正这次写入会被整体拒绝（见 missingDefinitions）。
+    const emitProcedureCall = (name, args, {parent, topLevel}) => {
+        const entry = procedures[name];
+        if (!entry) missingDefinitions.push(name);
+        const types = entry ? entry.types : args.map(() => '%s');
+        const argIds = entry ? entry.argumentIds :
+            args.map((child, index) => `arg${idTag}${index}`);
+        const callId = newId();
+        blocks[callId] = {
+            opcode: 'procedures_call',
+            next: null,
+            parent,
+            inputs: {},
+            fields: {},
+            shadow: false,
+            topLevel,
+            mutation: {
+                tagName: 'mutation',
+                children: [],
+                proccode: entry ? entry.proccode : [name].concat(types).join(' '),
+                argumentids: JSON.stringify(argIds),
+                warp: entry && entry.warp ? 'true' : 'false'
+            }
+        };
+        args.forEach((child, index) => {
+            const argId = argIds[index];
+            if (!argId) return;
+            fillSlot(blocks[callId], callId, argId, types[index] === '%b' ? '%b' : '%s', child,
+                'procedures_call');
+        });
+        return callId;
+    };
+
     convertBlock = (sbBlock, {topLevel = false, parent = null} = {}) => {
+        const selector = sbBlock.info && sbBlock.info.selector;
+
+        // 停止（stop all / stop this script）：参数表里没有它（STOP_OPTION 与 hasnext 是 mutation
+        // 带出来的），照通用流程走会得到一块下拉空着的积木 —— 点了什么都不发生。
+        if (sbBlock.info && sbBlock.info.id === 'CONTROL_STOP') {
+            const slot = (sbBlock.children || []).find(child => child.isInput);
+            const display = String(slot && slot.value !== void 0 && slot.value !== null ? slot.value : '').trim();
+            const stopOption = menuValueFor('control_stop', null, display || 'all');
+            const id = newId();
+            blocks[id] = {
+                opcode: 'control_stop',
+                next: null,
+                parent,
+                inputs: {},
+                fields: {STOP_OPTION: [stopOption, null]},
+                shadow: false,
+                topLevel,
+                mutation: {
+                    tagName: 'mutation',
+                    children: [],
+                    hasnext: stopOption === 'other scripts in sprite' ? 'true' : 'false'
+                }
+            };
+            return id;
+        }
+
+        // —— 自定义积木（我的积木）：define / 调用 / 读参数 ——
+        // 三种都没有参数表，全靠 mutation 记名字与参数表，所以单独处理。
+        if (selector === 'procDef') {
+            const {name, argNames} = procDefOf(sbBlock);
+            const entry = registerProcedure(name, argNames);
+            const defId = newId();
+            const protoId = newId();
+            blocks[defId] = {
+                opcode: 'procedures_definition',
+                next: null,
+                parent,
+                inputs: {custom_block: [1, protoId]},
+                fields: {},
+                shadow: false,
+                topLevel
+            };
+            blocks[protoId] = {
+                opcode: 'procedures_prototype',
+                next: null,
+                parent: defId,
+                inputs: {},
+                fields: {},
+                shadow: true,
+                topLevel: false,
+                mutation: {
+                    tagName: 'mutation',
+                    children: [],
+                    proccode: entry.proccode,
+                    argumentids: JSON.stringify(entry.argumentIds),
+                    argumentnames: JSON.stringify(entry.argumentNames),
+                    argumentdefaults: JSON.stringify(entry.argumentDefaults),
+                    warp: entry.warp ? 'true' : 'false'
+                }
+            };
+            entry.argumentIds.forEach((argId, index) => {
+                const reporterId = newId('p');
+                blocks[reporterId] = {
+                    opcode: entry.types[index] === '%b' ?
+                        'argument_reporter_boolean' : 'argument_reporter_string_number',
+                    next: null,
+                    parent: protoId,
+                    inputs: {},
+                    fields: {VALUE: [entry.argumentNames[index], null]},
+                    shadow: true,
+                    topLevel: false
+                };
+                blocks[protoId].inputs[argId] = [1, reporterId];
+            });
+            return defId;
+        }
+
+        if (selector === 'call') {
+            const children = sbBlock.children || [];
+            let start = 0;
+            while (start < children.length && children[start].isLabel) start++;
+            return emitProcedureCall(labelsOf(children), children.slice(start), {parent, topLevel});
+        }
+
+        // 项目里已有、但这段文本没有 define 的自定义积木：scratchblocks 解析器**不认识它**，
+        // 只会给一个 category=obsolete、没有 id/selector 的「野积木」。名字对得上已有的定义时
+        // 就按调用块处理 —— 否则调用一个项目里明明存在的积木，会被判成「不认识的写法」。
+        // 参数读数 `(高度::custom)` 同理：名字对得上某个参数就当参数块用。
+        if (!sbBlock.info || (!sbBlock.info.id && !sbBlock.info.selector)) {
+            const children = sbBlock.children || [];
+            let start = 0;
+            while (start < children.length && children[start].isLabel) start++;
+            const name = labelsOf(children);
+            if (name && procedures[name]) {
+                return emitProcedureCall(name, children.slice(start), {parent, topLevel});
+            }
+            if (name && isKnownArg(name)) {
+                return emitArgReporter(name, {parent, topLevel});
+            }
+        }
+
+        if (selector === 'getParam') {
+            return emitArgReporter(labelsOf(sbBlock.children), {parent, topLevel});
+        }
+
         let opcode = opcodeOf(sbBlock);
 
         // scratchblocks 对 if 和 if-else 用同一个 id，靠子栈数量区分
-        if (sbBlock.info.id === 'CONTROL_IF' && subScriptsOf(sbBlock).length > 1) {
+        if (sbBlock.info && sbBlock.info.id === 'CONTROL_IF' && subScriptsOf(sbBlock).length > 1) {
             opcode = 'control_if_else';
         }
 
@@ -250,16 +526,17 @@ export const textToBlocks = (text, ctx = {}) => {
         }
 
         if (!opcode) {
-            warnings.push(`Unsupported block: ${sbBlock.info.id || sbBlock.info.selector || 'unknown'} (skipped)`);
+            const label = labelsOf(sbBlock.children) || (sbBlock.info && sbBlock.info.hash) || 'unknown';
+            warnings.push(`Unsupported block: "${label}" (skipped)`);
             const id = newId('u');
             blocks[id] = {opcode: 'unknown_block', next: null, parent, inputs: {}, fields: {}, shadow: false, topLevel};
             return id;
         }
 
-        const sbDef = meta.sbBlocks[sbBlock.info.id];
+        const sbDef = meta.sbBlocks[sbBlock.info && sbBlock.info.id];
         const s = spec[opcode];
         if (!s || !sbDef) {
-            warnings.push(`No parameter table: ${sbBlock.info.id} (${opcode}) (skipped)`);
+            warnings.push(`No parameter table: ${sbBlock.info && sbBlock.info.id} (${opcode}) (skipped)`);
             const id = newId('u');
             blocks[id] = {opcode, next: null, parent, inputs: {}, fields: {}, shadow: false, topLevel};
             return id;
@@ -314,24 +591,39 @@ export const textToBlocks = (text, ctx = {}) => {
     };
 
     const doc = parseScratchblocks(cleaned, {languages: ['en']});
+    // 先把这段文本里的定义登记一遍：同一段文本里「先调用、后定义」很常见，
+    // 不先登记的话调用那边会查不到参数表，整段就被判成缺定义了
+    for (const script of doc.scripts) {
+        for (const sbBlock of script.blocks) {
+            if (sbBlock.info && sbBlock.info.selector === 'procDef') {
+                const {name, argNames} = procDefOf(sbBlock);
+                registerProcedure(name, argNames);
+            }
+        }
+    }
     let column = 0;
     for (const script of doc.scripts) {
         if (!script.blocks.length) continue;
         let prevId = null;
-        let firstId = null;
+        let row = 0;
         for (const sbBlock of script.blocks) {
-            const id = convertBlock(sbBlock, {topLevel: prevId === null});
-            if (prevId) {
+            // 自定义积木的定义**永远是新堆的顶**：它不可能挂在别的积木下面。
+            // 模型写「定义 → 另一段定义 / 另一段脚本」而不加空行时，解析器会把它们串成一条，
+            // 不在这儿断开就会变成「定义套在定义的身体里」。
+            const isDef = sbBlock.info && sbBlock.info.selector === 'procDef';
+            const startsStack = prevId === null || isDef;
+            const id = convertBlock(sbBlock, {topLevel: startsStack});
+            if (startsStack) {
+                blocks[id].x = column * 400;
+                blocks[id].y = row * 600;
+                row++;
+                topLevelIds.push(id);
+            } else {
                 blocks[prevId].next = id;
                 blocks[id].parent = prevId;
-            } else {
-                blocks[id].x = column * 400;
-                blocks[id].y = 0;
-                firstId = id;
             }
             prevId = id;
         }
-        topLevelIds.push(firstId);
         column++;
     }
 
@@ -370,7 +662,34 @@ export const textToBlocks = (text, ctx = {}) => {
         }
     }
 
-    return {blocks, topLevelIds, variables, lists, warnings};
+    return {blocks, topLevelIds, variables, lists, warnings, missingDefinitions};
+};
+
+/**
+ * 一批 sb3 形态的积木里「引用了变量/列表」的地方。
+ * 写入落库之前拿它做最后一道检查：**每个引用都必须能在 VM 里找到对应变量**，
+ * 找不到就补建 —— 积木引着一个不存在的变量时，下拉是空的、跑起来也什么都不做。
+ * 广播（BROADCAST_OPTION）是另一种东西（broadcast_msg），不在这个清单里。
+ * @param {object} blocks sb3 形态的积木表
+ * @returns {Array<object>} 每一处引用的 {blockId, opcode, slot, name, id, isList}
+ */
+export const collectVariableRefs = blocks => {
+    const refs = [];
+    for (const [blockId, block] of Object.entries(blocks || {})) {
+        if (!block) continue;
+        const fields = (spec[block.opcode] && spec[block.opcode].fields) || null;
+        if (!fields) continue;
+        for (const [slot, field] of Object.entries(block.fields || {})) {
+            const type = fields[slot];
+            if (type !== 'field_variable' && type !== 'field_variable_getter') continue;
+            if (slot === 'BROADCAST_OPTION') continue;
+            const value = Array.isArray(field) ? field[0] : (field && field.value);
+            const id = Array.isArray(field) ? field[1] : (field && field.id);
+            if (typeof value !== 'string' || !value) continue;
+            refs.push({blockId, opcode: block.opcode, slot, name: value, id: id || null, isList: slot === 'LIST'});
+        }
+    }
+    return refs;
 };
 
 // ---------------------------------------------------------------------------

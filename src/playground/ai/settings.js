@@ -32,6 +32,8 @@ const COOKIE_NAME = 'xce_ai_model';
 const MODELS_KEY = 'xce_ai_models';
 const KEYS_KEY = 'xce_ai_keys';
 const USER_PROMPT_KEY = 'xce_ai_prompt';
+// 「工具调用要不要先问你」：只在选了「每次确认」时才写这一格（见 loadPermissionMode）
+const PERMISSION_KEY = 'xce_ai_permission';
 // 老版本只有一条「自定义」（id 固定是 custom），搬进自定义列表时用这个 id
 const LEGACY_CUSTOM_ID = 'custom-legacy';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 180; // 半年
@@ -189,6 +191,35 @@ export const mergeProviderKeys = keys => {
 // ---------------------------------------------------------------------------
 // 设置本身
 // ---------------------------------------------------------------------------
+
+/**
+ * 工具调用的确认档位：'full' 完全访问（默认）/ 'ask' 每次确认。
+ * 放 localStorage 而不是设置本体：它跟模型配置无关，换模型、清密钥都不该把它重置；
+ * 也不影响任何接口请求，没有保密的必要。
+ * @returns {string} 'full' 或 'ask'
+ */
+export const loadPermissionMode = () => {
+    try {
+        return localStorage.getItem(PERMISSION_KEY) === 'ask' ? 'ask' : 'full';
+    } catch (e) {
+        return 'full';
+    }
+};
+
+/**
+ * @param {string} mode 'ask' 才存；其余一律回到默认的完全访问
+ * @returns {string} 生效的档位
+ */
+export const savePermissionMode = mode => {
+    const next = mode === 'ask' ? 'ask' : 'full';
+    try {
+        if (next === 'ask') localStorage.setItem(PERMISSION_KEY, 'ask');
+        else localStorage.removeItem(PERMISSION_KEY);
+    } catch (e) {
+        // 存不下就按完全访问走（默认）
+    }
+    return next;
+};
 
 /**
  * 用户在设置里写的自定义提示词。拼在系统提示词后面（见 prompt.js）。

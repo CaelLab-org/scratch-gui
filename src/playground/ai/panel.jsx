@@ -48,7 +48,7 @@ import {
 } from './providers.js';
 import {
     loadSettings, saveSettings, clearSettings, describeSettings, hasApiKey,
-    loadModelCache, saveModelCache, loadProviderKey
+    loadModelCache, saveModelCache, loadProviderKey, loadPermissionMode, savePermissionMode
 } from './settings.js';
 import {
     WIRES, loadCustomProviders, saveCustomProviders, newCustomProviderId
@@ -85,6 +85,11 @@ const TOOL_LABELS = {
     xce_read_project: '读取积木',
     xce_write_script: '写入积木',
     xce_delete_script: '删除脚本',
+    xce_edit_script: '修改脚本',
+    xce_create_variable: '新建变量',
+    xce_create_list: '新建列表',
+    xce_create_procedure: '新建自定义积木',
+    xce_add_extension: '加载扩展',
     xce_note: '写注释',
     xce_write_agent: '写项目级说明',
     xce_read_agent: '读项目级说明',
@@ -115,6 +120,30 @@ const TOOL_LABELS = {
 // 这两个工具的标题不写死：调用时由 AI 自己写一句 description（它知道自己要找什么），
 // 比「查阅资料 / 读取文档」这种固定标签有用；没写就回退固定标签。
 const SELF_LABELED = ['xce_read_skill', 'xce_read_fast_docs'];
+
+// 「每次确认」模式下的那张卡片要写清楚**这一步会动什么**（只说工具名等于没说）。
+const TOOL_HINTS = {
+    xce_write_script: '会往这个角色里加一段新的积木',
+    xce_edit_script: '会替换掉这段脚本原来的积木',
+    xce_delete_script: '会删掉这段脚本（面板上还能撤销）',
+    xce_create_variable: '会在变量面板里新建一个变量',
+    xce_create_list: '会在变量面板里新建一个列表',
+    xce_create_procedure: '会在「我的积木」里新建一块自定义积木',
+    xce_add_extension: '会往积木栏里加载一个新分类',
+    xce_note: '会在这段积木上写一条注释',
+    xce_delete_note: '会删掉一条注释',
+    xce_write_agent: '会改写项目级说明（XCEAGENT 那条注释）',
+    xce_write_project_memory: '会把这个项目的记忆存进项目文件',
+    xce_delete_project_memory: '会删掉一条项目记忆',
+    xce_rename_sprite: '会改角色的名字',
+    xce_add_sprite: '会新建一个角色',
+    xce_edit_costume: '会改造型：新增一张，或重画已有的那张',
+    xce_delete_costume: '会删掉一张造型',
+    xce_add_costume_from_url: '会从网页下载一张图，加成新造型',
+    xce_run_project: '会让项目跑起来（点了绿旗）',
+    xce_trigger_event: '会真的触发一次事件，脚本会跑'
+};
+const hintOf = name => TOOL_HINTS[name] || '会改动你的项目';
 
 const EMPTY_HINTS = [
     '做个数到 10 的计数器，用变量记',
@@ -568,6 +597,56 @@ AskCard.propTypes = {
 };
 
 // ---------------------------------------------------------------------------
+// 干活前的确认（「每次确认」模式）
+// ---------------------------------------------------------------------------
+
+// 跟提问卡片同一个形状（左竖线 + 标题 + 正文 + 按钮），但只有两个出口：允许 / 拒绝。
+// 只读工具永远不会走到这儿 —— 读项目、读状态、截图都是一眼看过去的事，不该拦。
+const ApproveCard = ({item, onVerdict}) => {
+    const decided = item.verdict || item.cancelled;
+    const answer = item.verdict === 'allow' ? '已允许' : (item.verdict === 'deny' ? '已拒绝' : '（没有确认）');
+    return (
+        <div className={styles.ask}>
+            <div className={styles.askQ}>
+                <span className={styles.askHeader}>需要你确认</span>
+                <div className={styles.askText}>
+                    {`${item.label}${item.arg ? ` · ${item.arg}` : ''}`}
+                </div>
+                <div className={styles.approveMeta}>{item.hint}</div>
+            </div>
+            {decided ? (
+                <div className={styles.askAnswer}>{answer}</div>
+            ) : (
+                <div className={styles.approveActions}>
+                    <button
+                        className={`${styles.btn} ${styles.btnPrimary}`}
+                        onClick={() => onVerdict(item.id, 'allow')}
+                        type="button"
+                    >允许</button>
+                    <button
+                        className={styles.btn}
+                        onClick={() => onVerdict(item.id, 'deny')}
+                        type="button"
+                    >拒绝</button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+ApproveCard.propTypes = {
+    item: PropTypes.shape({
+        id: PropTypes.string,
+        label: PropTypes.string,
+        arg: PropTypes.string,
+        hint: PropTypes.string,
+        verdict: PropTypes.string,
+        cancelled: PropTypes.bool
+    }).isRequired,
+    onVerdict: PropTypes.func.isRequired
+};
+
+// ---------------------------------------------------------------------------
 // 工具卡
 // ---------------------------------------------------------------------------
 
@@ -995,6 +1074,7 @@ const SETTINGS_SECTIONS = [
     {id: 'memory', label: '记忆', note: 'AI 记着的关于你的事（它能自己增删改）'},
     {id: 'skills', label: '技能', note: 'AI 需要时会去读的参考文档'},
     {id: 'prompt', label: '提示词与限额', note: '回答风格的偏好、上下文与步数上限'},
+    {id: 'permission', label: '权限', note: '改项目前要不要先问你（默认完全访问）'},
     {id: 'backup', label: '备份与迁移', note: '导出 / 导入配置（换电脑用）'},
     {id: 'access', label: '外部接入', note: '把编辑器借给 Claude Code / ZCode 这类外部 AI'},
     {id: 'update', label: '关于与更新', note: '版本号、检查更新（桌面版）'}
@@ -1806,6 +1886,49 @@ const copyText = text => {
     return Promise.resolve(fallbackCopy(text));
 };
 
+// 设置 · 权限
+//
+// 「改项目之前要不要先问我」：**默认完全访问**（跟 ZCode 一样，先让人把活干完）；
+// 想一步步盯着的人自己切到「每次确认」，之后非只读的工具每调一次都弹一张卡片。
+// 改完立即生效 —— 下一轮发车时读一次（见 sendText 里的 onApprove）。
+const PermissionSection = ({onBack}) => {
+    const [mode, setMode] = useState(loadPermissionMode);
+    const pick = next => setMode(savePermissionMode(next));
+    return (
+        <div className={styles.settings}>
+            <SectionHead
+                onBack={onBack}
+                title="权限"
+            />
+            <div className={styles.settingsBody}>
+                <div className={styles.efforts}>
+                    <button
+                        className={`${styles.effort} ${mode === 'full' ? styles.effortOn : ''}`}
+                        onClick={() => pick('full')}
+                        type="button"
+                    >完全访问</button>
+                    <button
+                        className={`${styles.effort} ${mode === 'ask' ? styles.effortOn : ''}`}
+                        onClick={() => pick('ask')}
+                        type="button"
+                    >每次确认</button>
+                </div>
+                <p className={styles.fieldNote}>
+                    {mode === 'ask' ?
+                        '接下来每一步改动（写积木、建变量、加扩展、跑项目、改造型）都会先出一张卡片等你点「允许」；' +
+                        '只读的（读代码、看状态、截图）不问，否则一口气查十次资料要你点十次。' :
+                        '我改你的项目不用先问你 —— 写进去的积木、删掉的脚本都能在面板上撤销。' +
+                        '想一步一步盯着，就切到「每次确认」。'}
+                </p>
+            </div>
+        </div>
+    );
+};
+
+PermissionSection.propTypes = {
+    onBack: PropTypes.func.isRequired
+};
+
 const AccessSection = ({onBack}) => {
     const preload = typeof window === 'undefined' ? null : window.EditorPreload;
     const supported = !!(preload && preload.aiAccessSet);
@@ -2353,7 +2476,7 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll, initialSect
                         ))}
                     </div>
                     <p className={styles.fieldNote}>
-                        记忆、技能、导入导出改完**立即生效**；「模型与密钥」「提示词与限额」改完要点保存。
+                        记忆、技能、权限、导入导出改完**立即生效**；「模型与密钥」「提示词与限额」改完要点保存。
                     </p>
                 </div>
             </div>
@@ -2363,6 +2486,7 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll, initialSect
     if (section === 'skills') return <SkillsSection onBack={() => setSection(null)} />;
     if (section === 'backup') return <BackupSection onBack={() => setSection(null)} />;
     if (section === 'access') return <AccessSection onBack={() => setSection(null)} />;
+    if (section === 'permission') return <PermissionSection onBack={() => setSection(null)} />;
     if (section === 'update') return <UpdateSection onBack={() => setSection(null)} />;
 
     // 「模型与密钥」和「提示词与限额」共用同一份 draft 与那个保存按钮，所以留在这一层渲染
@@ -2898,6 +3022,9 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     const askRef = useRef(null);
     // 同一个提问的 id（state 版，驱动下面的 60 秒无操作超时 effect）
     const [askPendingId, setAskPendingId] = useState(null);
+    // 正在等用户确认的那次工具调用：{id, resolve}（「每次确认」模式才用得上）
+    const approveRef = useRef(null);
+    // 没有超时：确认这件事等多久都行，用户按停止才算放弃
     const transcriptRef = useRef(null);
     const reasoningStartedAt = useRef(0);
     // 转录区是否「黏」在底部。往上翻过就置 false，用户自己发消息或点回底部时置回 true。
@@ -3200,6 +3327,55 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
         }
     }, []);
 
+    // 确认通道（设置 → 权限 里选了「每次确认」才会走到这儿）：一步一张卡，等用户点允许/拒绝。
+    // 只读工具不会出现 —— 那个开关在 loop.js 里（readOnly 的一律直接跑）。
+    const handleApprove = useCallback(({call}) => new Promise(resolve => {
+        const id = `approve-${call.id}`;
+        approveRef.current = {id, resolve};
+        const label = TOOL_LABELS[call.name] || call.name;
+        const arg = argOf(call.input);
+        setItemsState(prev => prev.concat([{
+            kind: 'approve',
+            id,
+            name: call.name,
+            label,
+            arg,
+            hint: hintOf(call.name),
+            at: Date.now()
+        }]));
+        setStatus('等你确认');
+        setStatusError(false);
+        notify({
+            title: 'XMUER Coding Engine · XCE Agent 等你确认',
+            body: `${label}${arg ? ` · ${arg}` : ''}`,
+            tag: 'xce-approve'
+        });
+    }), []);
+
+    const handleVerdict = useCallback((id, verdict) => {
+        const pending = approveRef.current;
+        approveRef.current = null;
+        setItemsState(prev => prev.map(item => (
+            item.kind === 'approve' && item.id === id ? {...item, verdict} : item
+        )));
+        // 已经中止的那一轮没人等着了，决定只留在记录里
+        if (pending && pending.id === id) {
+            setStatus('继续中…');
+            pending.resolve(verdict);
+        }
+    }, []);
+
+    // 这一轮收口：还挂着的确认谁也不会来点了，冻成「没有确认」
+    const cancelPendingApproval = useCallback(() => {
+        const pending = approveRef.current;
+        approveRef.current = null;
+        if (!pending) return;
+        setItemsState(prev => prev.map(item => (
+            item.kind === 'approve' && !item.verdict ? {...item, cancelled: true} : item
+        )));
+        pending.resolve('deny');
+    }, []);
+
     // 提问的超时：先给 ASK_GRACE_MS 的宽限（通知把人叫回来需要时间），一有动静就提前收窄，
     // 之后按「60 秒无操作」计。超时把卡片冻成「超时未回答」，resolve(null) 让 xce_ask_user
     // 拿到「没人答」自己收尾（跟用户按停止走同一条路）。
@@ -3353,6 +3529,8 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                 onEvent,
                 // 提问通道：模型要问就用 xce_ask_user 把问题送到面板，等用户点完再继续这一轮
                 onAsk: handleAsk,
+                // 确认通道：只有在「每次确认」模式下才给 —— 不给就是完全访问，工具直接跑
+                onApprove: loadPermissionMode() === 'ask' ? handleApprove : void 0,
                 maxSteps: maxStepsOf(settings)
             });
             // 「跑着跑着突然停了」的几种原因，都得让用户看得懂、知道下一步怎么办
@@ -3402,8 +3580,10 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
             // 这一轮已经收口：还挂着的提问谁也不会来答了（卡片由 tool-end 冻成「没回答」）
             askRef.current = null;
             setAskPendingId(null);
+            // 还挂着没点的确认同理，冻成「没有确认」，别留一个再也点不动的按钮
+            cancelPendingApproval();
         }
-    }, [busy, onEvent, finalizeStreaming, handleAsk, settings]);
+    }, [busy, onEvent, finalizeStreaming, handleAsk, handleApprove, cancelPendingApproval, settings]);
 
     const handleSend = useCallback(() => {
         const text = draft.trim();
@@ -3585,6 +3765,15 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                     item={item}
                     key={key}
                     onAnswer={handleAnswer}
+                />
+            );
+        }
+        if (item.kind === 'approve') {
+            return (
+                <ApproveCard
+                    item={item}
+                    key={key}
+                    onVerdict={handleVerdict}
                 />
             );
         }

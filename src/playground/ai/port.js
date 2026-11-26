@@ -17,7 +17,7 @@
  * 读取自己转（因为自带的 serializeBlocks 对字面量的输出不是规范 sb3 形态，下游渲染器读不了）。
  */
 import sb3 from 'scratch-vm/src/serialization/sb3.js';
-import {targetBlocksToText, textToBlocks} from './serialize.js';
+import {collectVariableRefs, targetBlocksToText, textToBlocks} from './serialize.js';
 
 // sb3 里的「原始影子」编码：数字/颜色/文本等内联成 [码, 值]，而不是一个积木
 const PRIMITIVES = {
@@ -135,6 +135,9 @@ export const internalToSb3 = internalBlocks => {
             out2.x = block.x;
             out2.y = block.y;
         }
+        // 自定义积木（define / 调用 / 参数）全靠 mutation 记名字与参数表，
+        // 丢了它渲染器连一段脚本都读不出来（整块报 proccode undefined）
+        if (block.mutation) out2.mutation = JSON.parse(JSON.stringify(block.mutation));
         out[id] = out2;
     }
     return out;
@@ -216,6 +219,48 @@ export const createScratchPort = ({vm, getWorkspace}) => {
         return {variables: {...variables}, lists: {...lists}};
     };
 
+    // 一个角色身上已经定义好的自定义积木（我的积木）：名字 -> 定义。
+    // 参数表只记在 procedures_prototype 的 mutation 里（proccode / argumentids / argumentnames），
+    // 没有它就没法生成一次对得上的调用块。
+    const proceduresOf = target => {
+        const out = {};
+        const blocks = (target.blocks && target.blocks._blocks) || {};
+        for (const block of Object.values(blocks)) {
+            if (!block || block.opcode !== 'procedures_prototype' || !block.mutation) continue;
+            const {proccode, argumentids: argIdsRaw, argumentnames: argNamesRaw, argumentdefaults: defaultsRaw,
+                warp} = block.mutation;
+            if (!proccode) continue;
+            const name = proccode.split(' %')[0];
+            let argumentIds = [];
+            let argumentNames = [];
+            let argumentDefaults = [];
+            try {
+                argumentIds = JSON.parse(argIdsRaw || '[]');
+                argumentNames = JSON.parse(argNamesRaw || '[]');
+                argumentDefaults = JSON.parse(defaultsRaw || '[]');
+            } catch (e) {
+                // mutation 是坏的：按没有参数处理，调用那边会因为参数表对不上而报错
+            }
+            const types = proccode.slice(name.length)
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean)
+                .map(type => (type === '%b' ? '%b' : '%s'));
+            while (types.length < argumentNames.length) types.push('%s');
+            out[name] = {
+                name,
+                blockId: block.parent, // 定义那块积木的 id（= 它所在脚本的 `:: script` 标注）
+                proccode,
+                argumentIds,
+                argumentNames,
+                argumentDefaults,
+                types,
+                warp: String(warp) === 'true'
+            };
+        }
+        return out;
+    };
+
     // 项目里已经加载的扩展 id。只读，不改任何东西。
     const loadedExtensionIds = () => {
         try {
@@ -228,6 +273,15 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             // 读不到就当没有
         }
         return [];
+    };
+
+    // 可加载的内置扩展 id（画笔 / 音乐 / 视频侦测这些）。只读，不改任何东西。
+    const availableExtensionIds = () => {
+        const manager = vm.extensionManager;
+        if (!manager || !manager.builtinExtensions) return [];
+        return Object.keys(manager.builtinExtensions)
+            .filter(id => id !== 'coreExample')
+            .sort();
     };
 
     const refreshWorkspace = () => {
@@ -946,7 +1000,9 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 currentCostume: t.getCostumes && t.getCostumes()[t.currentCostume] ?
                     t.getCostumes()[t.currentCostume].name : null,
                 variables: Object.keys(variables),
-                lists: Object.keys(lists)
+                lists: Object.keys(lists),
+                // 自定义积木的名字：模型得知道这个角色能调哪些「我的积木」，别凭空写一个
+                procedures: Object.keys(proceduresOf(t))
             };
         }),
 
@@ -967,7 +1023,7 @@ export const createScratchPort = ({vm, getWorkspace}) => {
             return {name, text, variables, lists, blockIds: Object.keys(sb3Blocks)};
         },
 
-        writeScript: async (spriteName, text) => {
+        writeScript: async (spriteName, text, {declare, replacing} = {}) => {
             const target = findTarget(spriteName);
             if (!target) throw new Error(`No sprite named "${spriteName}"`);
             const {variables, lists} = splitVars(target);
@@ -975,26 +1031,19 @@ export const createScratchPort = ({vm, getWorkspace}) => {
 
             const converted = textToBlocks(text, {
                 variables: {...stageIds.variables, ...variables},
-                lists: {...stageIds.lists, ...lists}
+                lists: {...stageIds.lists, ...lists},
+                procedures: proceduresOf(target),
+                // 「这段文本要新建的自定义积木长这样」：参数类型（布尔 / 值）和「不刷新屏幕」
+                // 在文本里写不出来（define 的括号解析不出类型），由调用方直接声明
+                declare,
+                // 这次是「替换已有脚本」（xce_edit_script）：旧的那段马上会被删掉，
+                // 所以「同名定义已经存在」的提醒对它没有意义
+                replacing: !!replacing
             });
 
-            // 项目里还没有的变量/列表：建到舞台上（= 对所有角色可见），跟编辑器默认行为一致
-            const createdVariables = [];
-            const createdLists = [];
-            for (const [name, id] of Object.entries(converted.variables)) {
-                if (stageIds.variables[name] || target.lookupVariableById(id)) continue;
-                stage().createVariable(id, name, '');
-                createdVariables.push(name);
-            }
-            for (const [name, id] of Object.entries(converted.lists)) {
-                if (stageIds.lists[name] || target.lookupVariableById(id)) continue;
-                stage().createVariable(id, name, 'list');
-                createdLists.push(name);
-            }
-
             // 扩展积木：**不擅自加载扩展**（那是改用户的项目）。
-            // 用到了没加载的扩展就直接拒绝写入，把该加载哪个扩展告诉调用方，
-            // 由 AI 转告用户去左下角添加。
+            // 用到了没加载的扩展就直接拒绝写入，把该加载哪个扩展告诉调用方
+            // （要装就让 AI 走 xce_add_extension，那是用户点头之后的事）。
             const needed = new Set();
             const unknown = [];
             for (const block of Object.values(converted.blocks)) {
@@ -1008,7 +1057,8 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 if (SHADOW_PREFIXES.has(prefix) || CORE_PREFIXES.has(prefix)) continue;
                 needed.add(prefix);
             }
-            // 有认不出的积木就整体拒绝：写进去只会变成灰块，还会把用户的脚本弄乱
+            // 有认不出的积木就整体拒绝：写进去只会变成灰块，还会把用户的脚本弄乱。
+            // **先把这些拒绝对话走完再动项目** —— 拒绝了却顺手建了变量，等于改了一半。
             if (unknown.length) {
                 return {
                     blockIds: [],
@@ -1032,6 +1082,72 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                     warnings: converted.warnings
                 };
             }
+            // 调用了没有定义的自定义积木：那种调用块在 Scratch 里点了毫无反应，
+            // 写进去就是块死积木，直接整体拒绝（定义用 xce_create_procedure 建）。
+            if (converted.missingDefinitions.length) {
+                return {
+                    blockIds: [],
+                    topBlockIds: [],
+                    createdVariables: [],
+                    createdLists: [],
+                    missingDefinitions: [...new Set(converted.missingDefinitions)],
+                    warnings: converted.warnings
+                };
+            }
+
+            // 变量 / 列表：**以积木里真正写进去的引用为准**，逐个确认 VM 里真的有。
+            // 只信转换器给的名单会漏掉「积木带着引用、名单却是空的」这种情况，
+            // 落库之后就是一块下拉空着的积木（用户踩过：变量面板里根本没有它）。
+            // 新建的一律落在舞台上（= 适用于所有角色），跟编辑器自己的默认行为一致。
+            const refs = collectVariableRefs(converted.blocks);
+            // 同一个名字不能既是变量又是列表：`show variable [背包]` 配一个叫「背包」的列表，
+            // 会凭空多出一个同名标量变量，面板里两个「背包」谁也分不清。宁可整体拒绝。
+            const kinds = new Map();
+            for (const host of [stage(), target]) {
+                for (const variable of Object.values(host.variables || {})) {
+                    if (!variable || variable.type === 'broadcast_msg' || kinds.has(variable.name)) continue;
+                    kinds.set(variable.name, variable.type === 'list' ? 'list' : 'variable');
+                }
+            }
+            const typeConflicts = [];
+            for (const ref of refs) {
+                const expected = ref.isList ? 'list' : 'variable';
+                const actual = kinds.get(ref.name);
+                if (actual && actual !== expected && !typeConflicts.some(item => item.name === ref.name)) {
+                    typeConflicts.push({name: ref.name, expected, actual});
+                    continue;
+                }
+                // 同一次写入里先当列表用、又当标量用，同样算冲突（否则会建出一对同名变量）
+                if (!actual) kinds.set(ref.name, expected);
+            }
+            if (typeConflicts.length) {
+                return {
+                    blockIds: [],
+                    topBlockIds: [],
+                    createdVariables: [],
+                    createdLists: [],
+                    typeConflicts,
+                    warnings: converted.warnings
+                };
+            }
+
+            const createdVariables = [];
+            const createdLists = [];
+            const madeVars = new Set();
+            for (const ref of refs) {
+                if (!ref.id) {
+                    // 引用没带 id：补一个并写回积木，不然落地后这个字段是空的
+                    ref.id = `${ref.isList ? 'l' : 'v'}${Date.now().toString(36)}${Math.random().toString(36)
+                        .slice(2, 6)}`;
+                    const field = converted.blocks[ref.blockId].fields[ref.slot];
+                    if (Array.isArray(field)) field[1] = ref.id;
+                }
+                if (target.lookupVariableById(ref.id)) continue;
+                if (madeVars.has(ref.id)) continue;
+                stage().createVariable(ref.id, ref.name, ref.isList ? 'list' : '');
+                madeVars.add(ref.id);
+                (ref.isList ? createdLists : createdVariables).push(ref.name);
+            }
 
             // sb3 形态 -> VM 内部形态（权威转换器），再逐个塞进 blocks 容器
             const vmBlocks = sb3.deserializeBlocks(JSON.parse(JSON.stringify(converted.blocks)));
@@ -1051,6 +1167,76 @@ export const createScratchPort = ({vm, getWorkspace}) => {
                 createdLists,
                 warnings: converted.warnings
             };
+        },
+
+        // 一个角色身上已定义的自定义积木（名字 + 参数表），xce_create_procedure 用它避免重复定义、
+        // 也用来把「已经有的那个」原样告诉模型
+        listProcedures: spriteName => {
+            const target = findTarget(spriteName);
+            if (!target) return null;
+            return Object.values(proceduresOf(target)).map(entry => ({
+                name: entry.name,
+                params: entry.argumentNames,
+                booleans: entry.argumentNames.filter((arg, index) => entry.types[index] === '%b'),
+                warp: entry.warp,
+                blockId: entry.blockId
+            }));
+        },
+
+        /**
+         * 新建一个变量或列表。不给 sprite 就建在舞台上 = 适用于所有角色（Scratch 的默认口径）；
+         * 给了 sprite 就建成那个角色的私有变量。
+         * @param {object} input {name, sprite?, isList?, value?, items?}
+         * @returns {object} {ok, reason?, name?, scope?, id?}
+         */
+        createVariable: ({name, sprite, isList, value, items} = {}) => {
+            const wanted = String(name === void 0 || name === null ? '' : name).trim();
+            if (!wanted) return {ok: false, reason: 'no-name'};
+            const host = sprite ? findTarget(sprite) : stage();
+            if (!host) return {ok: false, reason: 'missing', sprites: spriteNames()};
+            const type = isList ? 'list' : '';
+            // 变量和列表不能同名（面板里两个「背包」谁也分不清），两种都查一遍
+            if (host.lookupVariableByNameAndType(wanted, '', true) ||
+                host.lookupVariableByNameAndType(wanted, 'list', true)) {
+                return {ok: false, reason: 'duplicate', scope: host.isStage ? 'global' : 'local'};
+            }
+            const id = `${isList ? 'l' : 'v'}${Date.now().toString(36)}${Math.random().toString(36)
+                .slice(2, 6)}`;
+            host.createVariable(id, wanted, type);
+            const variable = host.variables[id];
+            if (variable) {
+                if (isList && Array.isArray(items)) variable.value = items.map(item => String(item));
+                if (!isList && value !== void 0 && value !== null && value !== '') variable.value = value;
+            }
+            refreshWorkspace();
+            return {ok: true, name: wanted, id, scope: host.isStage ? 'global' : 'local'};
+        },
+
+        // 可加载的内置扩展 id（pen / music / videoSensing ……）。只读。
+        availableExtensions: availableExtensionIds,
+
+        /**
+         * 加载一个内置扩展（画笔、音乐、视频侦测……）。会改项目，所以调用方要先过用户那一关。
+         * @param {string} extensionId 扩展 id
+         * @returns {object} {ok, reason?, id?, name?, already?, available?}
+         */
+        addExtension: extensionId => {
+            const manager = vm.extensionManager;
+            if (!manager) return {ok: false, reason: 'no-manager'};
+            const id = String(extensionId || '').trim();
+            const available = availableExtensionIds();
+            if (!id) return {ok: false, reason: 'no-id', available};
+            if (typeof manager.isExtensionLoaded === 'function' && manager.isExtensionLoaded(id)) {
+                return {ok: true, already: true, id};
+            }
+            if (typeof manager.isBuiltinExtension !== 'function' || !manager.isBuiltinExtension(id)) {
+                return {ok: false, reason: 'unknown', id, available};
+            }
+            manager.loadExtensionIdSync(id);
+            // 工具箱靠 EXTENSION_ADDED 自己刷（GUI 那边监听），再补一次工作区刷新兜底
+            refreshWorkspace();
+            const category = (runtime()._blockInfo || []).find(info => info && info.id === id);
+            return {ok: true, id, name: (category && category.name) || id};
         },
 
         // 删除前先抓快照：调用方拿它做「撤销这次删除」（见 tools.js 的 delete_script）
