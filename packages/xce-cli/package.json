@@ -1,0 +1,40 @@
+{
+  "name": "xce-cli",
+  "version": "0.1.0",
+  "description": "Command line access to the XMUER Coding Engine editor for AI agents — MCP server, HTTP client, skill file",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "agent",
+    "scratch",
+    "turbo-warp",
+    "editor",
+    "cli"
+  ],
+  "license": "Apache-2.0",
+  "author": "CaelLab <contact@caellab.com>",
+  "type": "module",
+  "bin": {
+    "xce": "bin/xce.mjs",
+    "xce-mcp": "bin/xce.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "ws": "^8.18.0"
+  },
+  "homepage": "https://engine.xmuer.online/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CaelLab-org/scratch-gui.git",
+    "directory": "packages/xce-cli"
+  }
+}

@@ -199,6 +199,16 @@ const argOf = input => {
     return null;
 };
 
+// 头部的对话标题 = 这一轮对话的第一句提问。压成一行、超长截断 —— 310px 里它只负责
+// 「这是哪条对话」，完整内容展开就在下面。
+const titleOf = turns => {
+    for (const turn of turns) {
+        const text = turn.user && turn.user.text ? turn.user.text.replace(/\s+/g, ' ').trim() : '';
+        if (text) return text.length > 48 ? `${text.slice(0, 48)}…` : text;
+    }
+    return '新对话';
+};
+
 // 当前供应商能选的模型：预设在前（人工挑过、带说明），拉回来的在后（可能几十上百条），按 id 去重。
 // 调用方传进来的清单为空就现读缓存（输入区的快捷面板没有自己的一份 state）。
 const modelsOf = (providerId, baseUrl, cached) => {
@@ -228,6 +238,9 @@ const ICON_PATHS = {
     expand: ['M6.5 2.5h-4v4', 'M9.5 2.5h4v4', 'M13.5 9.5v4h-4', 'M2.5 9.5v4h4'],
     shrink: ['M2.5 6.5h4v-4', 'M13.5 6.5h-4v-4', 'M13.5 9.5h-4v4', 'M2.5 9.5h4v4'],
     chevron: ['M6 3.5L10.5 8 6 12.5'],
+    chevronDown: ['M3.5 6L8 10.5 12.5 6'],
+    // 「⋯」（更多）：三个点单独画，同 sliders 的处理
+    dots: [],
     // 发送（上箭头）/ 停止（实心方块）：照 ZCode 输入区那两个图标，主按钮和运行中的按钮各一个。
     // 方块走 fill —— 细边的方框在这个尺寸上会被看成复选框
     send: ['M8 13V3.5', 'M4.2 7.3L8 3.5l3.8 3.8'],
@@ -243,6 +256,7 @@ const ICON_PATHS = {
 };
 // sliders 的三个小圆点单独画（圆不能走 path 的折线逻辑）
 ICON_PATHS.slidersDots = [[5.5, 4.5], [10.5, 8], [6.5, 11.5]];
+ICON_PATHS.dotsDots = [[3.2, 8], [8, 8], [12.8, 8]];
 
 const Icon = ({name, size = 16}) => (
     <svg
@@ -274,6 +288,16 @@ const Icon = ({name, size = 16}) => (
                 fill="currentColor"
                 key={i}
                 r="1.3"
+                stroke="none"
+            />
+        )) : null}
+        {name === 'dots' ? ICON_PATHS.dotsDots.map(([cx, cy], i) => (
+            <circle
+                cx={cx}
+                cy={cy}
+                fill="currentColor"
+                key={i}
+                r="1.15"
                 stroke="none"
             />
         )) : null}
@@ -968,7 +992,8 @@ const SETTINGS_SECTIONS = [
     {id: 'memory', label: '记忆', note: 'AI 记着的关于你的事（它能自己增删改）'},
     {id: 'skills', label: '技能', note: 'AI 需要时会去读的参考文档'},
     {id: 'prompt', label: '提示词与限额', note: '回答风格的偏好、上下文与步数上限'},
-    {id: 'backup', label: '备份与迁移', note: '导出 / 导入配置（换电脑用）'}
+    {id: 'backup', label: '备份与迁移', note: '导出 / 导入配置（换电脑用）'},
+    {id: 'access', label: '外部接入', note: '把编辑器借给 Claude Code / ZCode 这类外部 AI'}
 ];
 
 // 分区内页的头部：左「返回」右标题，跟面板头部同一套（只有图标，不写多余的字）
@@ -1748,6 +1773,212 @@ BackupSection.propTypes = {
 };
 
 // ---------------------------------------------------------------------------
+// 外部接入（XCE CLI）
+//
+// 桌面版在主进程里开了一个 HTTP 入口，把同一套工具借给本机 / 同一局域网里的 AI 客户端
+// （Claude Code、ZCode 这类）。这里是它的开关：**默认关着**，打开才生成密钥并开始监听，
+// 关掉立刻停。页面上给出的那几段是要贴到别的 AI 对话窗口里的，所以都能一键复制。
+// ---------------------------------------------------------------------------
+
+const fallbackCopy = text => {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try {
+        document.execCommand('copy');
+    } catch (error) {
+        // 复制不了就让用户自己选中
+    }
+    document.body.removeChild(area);
+};
+
+const copyText = text => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+    }
+    return Promise.resolve(fallbackCopy(text));
+};
+
+const AccessSection = ({onBack}) => {
+    const preload = typeof window === 'undefined' ? null : window.EditorPreload;
+    const supported = !!(preload && preload.aiAccessSet);
+    const [info, setInfo] = useState(() => (preload && preload.aiAccess) || null);
+    const [busy, setBusy] = useState(false);
+    const [copied, setCopied] = useState('');
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!supported || !preload.aiAccessGet) return;
+        let alive = true;
+        preload.aiAccessGet().then(next => {
+            if (alive && next) setInfo(next);
+        })
+            .catch(() => {});
+        return () => {
+            alive = false;
+        };
+    }, [supported, preload]);
+
+    const apply = patch => {
+        if (!supported) return;
+        setBusy(true);
+        setError('');
+        preload.aiAccessSet(patch).then(next => {
+            setInfo(next);
+            if (next && next.error) setError(next.error);
+        })
+            .catch(err => setError(err.message || String(err)))
+            .then(() => setBusy(false));
+    };
+
+    const copy = (label, text) => {
+        copyText(text).then(() => {
+            setCopied(label);
+            setTimeout(() => setCopied(''), 1400);
+        });
+    };
+
+    const endpoint = (info && (info.urls && info.urls[0])) || (info && info.endpoint) || '';
+    const key = (info && info.key) || '';
+    const claude = endpoint && key ?
+        `claude mcp add xce -- npx -y xce-cli@latest mcp --url ${endpoint} --key ${key}` : '';
+    const generic = endpoint && key ?
+        `npx -y xce-cli@latest call <工具名> '<JSON参数>' --url ${endpoint} --key ${key}` : '';
+
+    return (
+        <div className={styles.settings}>
+            <SectionHead
+                onBack={onBack}
+                title="外部接入"
+            />
+            <div className={styles.settingsBody}>
+                {supported ? null : (
+                    <p className={styles.fieldNote}>
+                        只有桌面版能开这个入口 —— 网页版是一个页面，没法在你电脑上监听端口。
+                        装桌面版（engine.xmuer.online/desktop）之后再来这里。
+                    </p>
+                )}
+
+                {supported ? (
+                    <React.Fragment>
+                        <div className={styles.accessRow}>
+                            <div className={styles.accessText}>
+                                <span className={styles.accessTitle}>
+                                    {info && info.enabled ? '已开启' : '未开启'}
+                                </span>
+                                <span className={styles.accessNote}>
+                                    {info && info.enabled ?
+                                        `监听 0.0.0.0:${info.port}，别的机器也能连` :
+                                        '关着的时候，外部 AI 连不进来'}
+                                </span>
+                            </div>
+                            <button
+                                className={`${styles.btn} ${info && info.enabled ? '' : styles.btnPrimary}`}
+                                disabled={busy}
+                                onClick={() => apply({enabled: !(info && info.enabled)})}
+                                type="button"
+                            >{info && info.enabled ? '关闭' : '开启'}</button>
+                        </div>
+
+                        {error ? <p className={styles.fieldError}>{error}</p> : null}
+
+                        {info && info.enabled ? (
+                            <React.Fragment>
+                                <div className={styles.field}>
+                                    <span className={styles.fieldLabel}>地址</span>
+                                    <div className={styles.copyRow}>
+                                        <code className={styles.copyValue}>{info.endpoint}</code>
+                                        <button
+                                            className={styles.copyBtn}
+                                            onClick={() => copy('endpoint', info.endpoint)}
+                                            type="button"
+                                        >{copied === 'endpoint' ? '已复制' : '复制'}</button>
+                                    </div>
+                                    {info.urls && info.urls.length ? (
+                                        <span className={styles.fieldNote}>
+                                            {`局域网：${info.urls.join('  ')}`}
+                                        </span>
+                                    ) : null}
+                                </div>
+
+                                <div className={styles.field}>
+                                    <span className={styles.fieldLabel}>API 密钥</span>
+                                    <div className={styles.copyRow}>
+                                        <code className={styles.copyValue}>{info.key}</code>
+                                        <button
+                                            className={styles.copyBtn}
+                                            onClick={() => copy('key', info.key)}
+                                            type="button"
+                                        >{copied === 'key' ? '已复制' : '复制'}</button>
+                                    </div>
+                                    <div className={styles.rowButtons}>
+                                        <button
+                                            className={styles.btn}
+                                            disabled={busy}
+                                            onClick={() => apply({rotate: true})}
+                                            type="button"
+                                        >换一个密钥</button>
+                                    </div>
+                                    <span className={styles.fieldNote}>
+                                        换了之后旧密钥立刻失效，已经贴出去的配置要重新贴。
+                                    </span>
+                                </div>
+
+                                <div className={styles.field}>
+                                    <span className={styles.fieldLabel}>贴给 Claude Code</span>
+                                    <div className={styles.copyRow}>
+                                        <code className={styles.copyValue}>{claude}</code>
+                                        <button
+                                            className={styles.copyBtn}
+                                            onClick={() => copy('claude', claude)}
+                                            type="button"
+                                        >{copied === 'claude' ? '已复制' : '复制'}</button>
+                                    </div>
+                                    <span className={styles.fieldNote}>
+                                        在终端里跑这一句，之后 Claude Code 就能读写你正在编辑的项目。
+                                    </span>
+                                </div>
+
+                                <div className={styles.field}>
+                                    <span className={styles.fieldLabel}>贴给别的 AI（ZCode / 任何一个能跑命令的）</span>
+                                    <div className={styles.copyRow}>
+                                        <code className={styles.copyValue}>{generic}</code>
+                                        <button
+                                            className={styles.copyBtn}
+                                            onClick={() => copy('generic', generic)}
+                                            type="button"
+                                        >{copied === 'generic' ? '已复制' : '复制'}</button>
+                                    </div>
+                                    <span className={styles.fieldNote}>
+                                        {'先让它跑 '}
+                                        <code className={styles.mdCode}>npx -y xce-cli@latest tools</code>
+                                        {' 看有哪些工具。要一份完整说明，就在编辑器目录跑 '}
+                                        <code className={styles.mdCode}>npx -y xce-cli@latest skill</code>
+                                        {'，生成的 SKILL.md 直接丢给它的技能目录。'}
+                                    </span>
+                                </div>
+
+                                <p className={styles.accessWarn}>
+                                    开着的时候，这一整台机器（包括同一局域网里的其他人）拿着这串密钥
+                                    就能操作你打开的项目。不用的时候关掉。
+                                </p>
+                            </React.Fragment>
+                        ) : null}
+                    </React.Fragment>
+                ) : null}
+            </div>
+        </div>
+    );
+};
+
+AccessSection.propTypes = {
+    onBack: PropTypes.func.isRequired
+};
+
+// ---------------------------------------------------------------------------
 // 设置
 // ---------------------------------------------------------------------------
 
@@ -1929,6 +2160,7 @@ const SettingsView = ({draft, setDraft, onClose, onSave, onClearAll, initialSect
     if (section === 'memory') return <MemorySection onBack={() => setSection(null)} />;
     if (section === 'skills') return <SkillsSection onBack={() => setSection(null)} />;
     if (section === 'backup') return <BackupSection onBack={() => setSection(null)} />;
+    if (section === 'access') return <AccessSection onBack={() => setSection(null)} />;
 
     // 「模型与密钥」和「提示词与限额」共用同一份 draft 与那个保存按钮，所以留在这一层渲染
     const isModel = section === 'model';
@@ -2432,6 +2664,8 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     const [statusError, setStatusError] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    // 头部右侧的「⋯」：设置 / 全屏 / 收起都收进去，头部只留标题和两个常用按钮
+    const [showMore, setShowMore] = useState(false);
     // 输入区那行模型名点开的快捷面板（换模型 / 调思考档位，不用进设置页）
     const [showModelMenu, setShowModelMenu] = useState(false);
     const [showCtx, setShowCtx] = useState(false);
@@ -3334,16 +3568,19 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
     if (!onCodeTab && mode !== 'full') return null;
 
     if (mode === 'code') {
+        // 把钮自己挂上 ai-root（和 aiDark）：它不在面板容器里，否则 --bg-base / --border-l1
+        // 这些变量全是空的 —— 深色主题下会变成一块没有底色的透明胶囊。
         return (
             <button
-                className={styles.handle}
+                className={`${styles.aiRoot} ${theme && theme.isDark && theme.isDark() ?
+                    styles.aiDark : ''} ${styles.handle}`}
                 onClick={() => setMode('ai')}
                 style={{left: Math.max(0, dock.left + dock.width - 96), top: dock.top + 8}}
                 type="button"
             >
                 <HexMark
                     className={styles.markIcon}
-                    size={13}
+                    size={12}
                 /> XCE Agent
             </button>
         );
@@ -3396,19 +3633,26 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                 }}
             >
                 <div className={styles.header}>
-                    {/* 左侧只放品牌六边形：它同时是忙闲指示（忙时跟着强调色呼吸），
-                        不写标题 —— 面板叫什么不用挂在脸上。 */}
+                    {/* 左边：品牌六边形（同时是忙闲指示，忙时跟着强调色呼吸）+ 这一轮对话的标题。
+                        标题就是第一句提问，点一下翻历史 —— 比单独挂一个"历史"图标更顺手。
+                        右边只留「新对话」「⋯」，设置/全屏/收起都在「⋯」里，头部不再是一排
+                        五个一样重的按钮。 */}
                     <span
                         aria-hidden="true"
                         className={`${styles.brand} ${busy ? styles.brandBusy : ''}`}
-                    ><HexMark size={16} /></span>
+                    ><HexMark size={17} /></span>
                     <button
-                        aria-label="收起面板，显示积木选择框"
-                        className={styles.iconBtn}
-                        onClick={() => setMode('code')}
-                        title="收起面板，显示积木选择框"
+                        className={styles.titleBtn}
+                        onClick={() => (showHistory ? setShowHistory(false) : openHistory())}
+                        title="历史对话"
                         type="button"
-                    ><Icon name="panel" /></button>
+                    >
+                        <span className={styles.titleText}>{titleOf(turns)}</span>
+                        <span className={styles.titleCaret}><Icon
+                            name="chevronDown"
+                            size={12}
+                        /></span>
+                    </button>
                     <button
                         aria-label="新对话"
                         className={styles.iconBtn}
@@ -3417,26 +3661,53 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                         type="button"
                     ><Icon name="plus" /></button>
                     <button
-                        aria-label="历史对话"
-                        className={`${styles.iconBtn} ${showHistory ? styles.iconBtnOn : ''}`}
-                        onClick={() => (showHistory ? setShowHistory(false) : openHistory())}
-                        title="历史对话"
+                        aria-expanded={showMore}
+                        aria-label="更多"
+                        className={`${styles.iconBtn} ${showMore ? styles.iconBtnOn : ''}`}
+                        onClick={() => setShowMore(v => !v)}
+                        title="更多"
                         type="button"
-                    ><Icon name="history" /></button>
-                    <button
-                        aria-label="设置"
-                        className={`${styles.iconBtn} ${showSettings ? styles.iconBtnOn : ''}`}
-                        onClick={() => (showSettings ? setShowSettings(false) : openSettings())}
-                        title="设置"
-                        type="button"
-                    ><Icon name="sliders" /></button>
-                    <button
-                        aria-label={full ? '退出全屏' : '全屏'}
-                        className={styles.iconBtn}
-                        onClick={() => setMode(full ? 'ai' : 'full')}
-                        title={full ? '退出全屏' : '全屏'}
-                        type="button"
-                    ><Icon name={full ? 'shrink' : 'expand'} /></button>
+                    ><Icon name="dots" /></button>
+                    {showMore ? (
+                        <React.Fragment>
+                            <div
+                                className={styles.menuBackdrop}
+                                onClick={() => setShowMore(false)}
+                            />
+                            <div
+                                className={styles.moreMenu}
+                                role="menu"
+                            >
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={() => {
+                                        setShowMore(false);
+                                        openSettings();
+                                    }}
+                                    role="menuitem"
+                                    type="button"
+                                ><Icon name="sliders" />设置</button>
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={() => {
+                                        setShowMore(false);
+                                        setMode(full ? 'ai' : 'full');
+                                    }}
+                                    role="menuitem"
+                                    type="button"
+                                ><Icon name={full ? 'shrink' : 'expand'} />{full ? '退出全屏' : '全屏'}</button>
+                                <button
+                                    className={styles.menuItem}
+                                    onClick={() => {
+                                        setShowMore(false);
+                                        setMode('code');
+                                    }}
+                                    role="menuitem"
+                                    type="button"
+                                ><Icon name="panel" />收起面板</button>
+                            </div>
+                        </React.Fragment>
+                    ) : null}
                 </div>
 
                 {showSettings ? (
@@ -3474,7 +3745,7 @@ const AIPanel = ({vm, activeTabIndex = 0, theme = null}) => {
                                     <div className={styles.empty}>
                                         <HexMark
                                             className={styles.emptyMark}
-                                            size={44}
+                                            size={34}
                                         />
                                         <p
                                             className={`${styles.emptyTitle} ${mode === 'full' ?

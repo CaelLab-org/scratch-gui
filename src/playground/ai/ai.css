@@ -43,6 +43,9 @@
     --bg-layer2: #eceef2;
     --bg-user: #e9f1fc;
     --bg-soft: #f7f8fa;
+    /* 面板的"外壳"（头部 / 输入区）比正文浅一档，正文那块才是纯白 —— 三层分出来，
+       面板才像一块嵌进去的侧栏，而不是一张铺在画布上的白纸。 */
+    --bg-chrome: #f5f6f8;
     --border-l1: #e4e7ec;
     --border-l2: #d5d9e0;
     --border-l3: #b9c0cc;
@@ -78,6 +81,7 @@
     --bg-layer2: #2e2e2e;
     --bg-user: #16202c;
     --bg-soft: #191919;
+    --bg-chrome: #181818;
     --border-l1: #2e2e2e;
     --border-l2: #3d3d3d;
     --border-l3: #565656;
@@ -97,6 +101,7 @@
 
 /* 这一头是浅色底 + 琥珀字，深色下白底会闪眼睛 */
 .aiDark .emptyWarn {
+    border-color: rgba(240, 164, 74, 0.22);
     background: rgba(240, 164, 74, 0.14);
 }
 
@@ -104,31 +109,33 @@
     font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
-/* ---------------------------------------------------------------- 让位时的小把钮 */
-
+/* 让位时的小把钮：贴在积木选择框右上角，做成一颗安静的小胶囊 ——
+   它底下就是积木，不能抢戏；边框和底色跟着面板的变量走（所以它自己也挂 ai-root，
+   深色主题下才不会变成一块白膏药）。 */
 .handle {
     position: fixed;
     z-index: $z-index-ai-panel;
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 12px 0 10px;
-    border: 1px solid var(--border-l2);
-    border-radius: 999px;
+    gap: 5px;
+    height: 26px;
+    padding: 0 9px 0 7px;
+    border: 1px solid var(--border-l1);
+    border-radius: 8px;
     background: var(--bg-base);
-    color: var(--text-1);
+    color: var(--text-2);
     font-family: inherit;
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 500;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.1);
-    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+    transition: border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .handle:hover {
-    border-color: var(--accent-solid);
-    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.14);
+    border-color: var(--border-l3);
+    color: var(--text-1);
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.1);
 }
 
 .markIcon {
@@ -153,7 +160,6 @@
     background: var(--bg-base);
     border-right: 1px solid var(--border-l1);
     border-top-right-radius: 12px;
-    box-shadow: 12px 0 32px -12px rgba(16, 24, 40, 0.12);
 }
 
 .panelFull {
@@ -169,18 +175,20 @@
 
 /* ---------------------------------------------------------------- 头部 */
 
-/* 头部只有品牌标记和图标按钮，**一个字都不写**（学 ZCode / Codex：面板自己叫什么
-   没必要挂在脸上，310px 里写标题就得跟五个按钮抢地方）。左边那个六边形=品牌 +
-   忙闲：忙的时候跟着强调色呼吸，闲的时候是安静的灰。 */
+/* 头部只有品牌标记、当前对话标题和两三个图标按钮（学 ZCode / Codex：面板自己叫什么
+   没必要挂在脸上，那点宽度留给"现在在聊什么"）。左边那个六边形=品牌 + 忙闲：
+   忙的时候跟着强调色呼吸，闲的时候是安静的强调色。
+   次要动作（设置 / 全屏 / 收起）收进右边那个「⋯」，头部不再挂五个一样重的按钮。 */
 .header {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     flex: 0 0 auto;
     height: 44px;
     padding: 0 8px 0 12px;
     border-bottom: 1px solid var(--border-l1);
-    background: var(--bg-base);
+    background: var(--bg-chrome);
     white-space: nowrap;
 }
 
@@ -188,9 +196,8 @@
     display: flex;
     align-items: center;
     flex: 0 0 auto;
-    margin-right: auto;
     color: var(--accent-solid);
-    opacity: 0.5;
+    opacity: 0.9;
     transition: color 0.15s ease, opacity 0.15s ease;
 }
 
@@ -202,6 +209,53 @@
 @keyframes aiPulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
+}
+
+/* 标题就是这一轮对话的第一句提问（新对话时写"新对话"），点一下直接翻历史 —— 
+   比单独挂一个"历史"图标更好点：标题本身就长在历史里。 */
+.titleBtn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    margin: 0 2px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.titleBtn:hover {
+    background: var(--bg-layer1);
+}
+
+.titleText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.titleCaret {
+    display: flex;
+    flex: 0 0 auto;
+    color: var(--text-3);
+    opacity: 0;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.titleBtn:hover .titleCaret {
+    opacity: 1;
 }
 
 .iconBtn {
@@ -221,12 +275,12 @@
 }
 
 .iconBtn:hover:enabled {
-    background: var(--bg-layer1);
+    background: var(--bg-layer2);
     color: var(--text-1);
 }
 
 .iconBtn:active:enabled {
-    background: var(--bg-layer2);
+    background: var(--border-l1);
 }
 
 .iconBtn:disabled {
@@ -239,6 +293,45 @@
 .iconBtnOn:hover:enabled {
     background: var(--accent-soft);
     color: var(--accent);
+}
+
+/* 头部右侧的「⋯」菜单：设置 / 全屏 / 收起面板 */
+.moreMenu {
+    position: absolute;
+    top: 40px;
+    right: 8px;
+    z-index: 4;
+    width: 150px;
+    padding: 4px;
+    border-radius: 10px;
+    background: var(--bg-base);
+    box-shadow: 0 0 0 0.5px var(--border-l1), 0 12px 32px rgba(16, 24, 40, 0.16);
+}
+
+.menuItem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-1);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 20px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.menuItem:hover {
+    background: var(--bg-layer1);
+}
+
+.menuItem svg {
+    color: var(--text-2);
 }
 
 /* ---------------------------------------------------------------- 设置页 */
@@ -258,6 +351,7 @@
     flex: 0 0 auto;
     padding: 10px 12px;
     border-bottom: 1px solid var(--border-l1);
+    background: var(--bg-chrome);
 }
 
 .settingsTitle {
@@ -461,6 +555,101 @@
     line-height: 18px;
 }
 
+.fieldError {
+    margin: 0 0 8px;
+    color: var(--error);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+/* 外部接入：一行开关 + 可复制的地址 / 密钥 */
+.accessRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid var(--border-l1);
+    border-radius: 10px;
+    background: var(--bg-layer1);
+}
+
+.accessText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.accessTitle {
+    color: var(--text-1);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+}
+
+.accessNote {
+    color: var(--text-3);
+    font-size: 11.5px;
+    line-height: 17px;
+}
+
+.copyRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.copyValue {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--border-l1);
+    border-radius: 6px;
+    background: var(--bg-soft);
+    color: var(--text-2);
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 11px;
+    line-height: 16px;
+    word-break: break-all;
+}
+
+.copyBtn {
+    flex: 0 0 auto;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--border-l2);
+    border-radius: 6px;
+    background: var(--bg-base);
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease;
+}
+
+.copyBtn:hover {
+    border-color: var(--border-l3);
+    color: var(--text-1);
+}
+
+.accessWarn {
+    margin: 12px 0 0;
+    padding: 8px 10px;
+    border: 1px solid rgba(181, 71, 8, 0.16);
+    border-radius: 8px;
+    background: #fffaf3;
+    color: var(--warning);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.aiDark .accessWarn {
+    border-color: rgba(240, 164, 74, 0.22);
+    background: rgba(240, 164, 74, 0.14);
+}
+
 .fieldInput,
 .fieldSelect {
     display: block;
@@ -573,6 +762,7 @@
     flex: 0 0 auto;
     padding: 10px 12px;
     border-bottom: 1px solid var(--border-l1);
+    background: var(--bg-chrome);
 }
 
 .historyTitle {
@@ -872,7 +1062,7 @@
 .transcript {
     flex: 1;
     min-height: 0;
-    padding: 16px 14px 10px;
+    padding: 14px 14px 8px;
     overflow-y: auto;
     overflow-wrap: break-word;
     background: var(--bg-base);
@@ -950,15 +1140,15 @@
 
 .emptyMark {
     color: var(--accent-solid);
-    opacity: 0.45;
+    opacity: 0.28;
 }
 
 .emptyTitle {
-    margin: 14px 0 6px;
+    margin: 12px 0 4px;
     color: var(--text-1);
-    font-size: 18px;
-    font-weight: 500;
-    line-height: 1.45;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.5;
     text-wrap: balance;
 }
 
@@ -978,7 +1168,7 @@
 }
 
 .emptyHints {
-    margin: 16px 0 0;
+    margin: 14px 0 0;
     padding: 0;
     width: 100%;
     list-style: none;
@@ -993,9 +1183,9 @@
 .emptyHint {
     display: block;
     width: 100%;
-    padding: 6px 8px;
+    padding: 7px 10px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 8px;
     background: transparent;
     color: var(--text-2);
     font-family: inherit;
@@ -1008,7 +1198,7 @@
 
 .emptyHint::before {
     content: '·';
-    margin-right: 7px;
+    margin-right: 8px;
     color: var(--text-3);
 }
 
@@ -1017,13 +1207,18 @@
     color: var(--accent);
 }
 
+/* 缺密钥的提示做成一块很淡的琥珀色提示条：以前是一行橘字，孤零零挂在示例下面，
+   看着像报错。 */
 .emptyWarn {
-    margin-top: 16px !important;
-    padding-top: 14px;
-    border-top: 1px solid var(--border-l1);
+    margin-top: 14px !important;
+    padding: 8px 10px;
+    border: 1px solid rgba(181, 71, 8, 0.16);
+    border-radius: 8px;
+    background: #fffaf3;
     color: var(--warning);
     font-size: 12px;
     line-height: 18px;
+    text-align: left;
 }
 
 /* 用户消息：靠右的气泡，底色是编辑器自己的选中蓝（--bg-user）。圆角照 dsh 的
@@ -1033,9 +1228,9 @@
 .user {
     box-sizing: border-box;
     width: fit-content;
-    max-width: 82%;
+    max-width: 84%;
     margin: 0 0 12px auto;
-    padding: 10px 13px;
+    padding: 9px 12px;
     border: 0;
     border-radius: 12px;
     background: var(--bg-user);
@@ -1779,9 +1974,9 @@
 
 .composer {
     flex: 0 0 auto;
-    padding: 10px 14px 8px;
+    padding: 8px 12px 10px;
     border-top: 1px solid var(--border-l1);
-    background: var(--bg-base);
+    background: var(--bg-chrome);
 }
 
 /* 全屏形态：内容排成一条阅读栏（正文一行拉满 1900px 没法读）。
@@ -1800,9 +1995,9 @@
 
 .inputBox {
     border: 1px solid var(--border-l1);
-    border-radius: 16px;
+    border-radius: 12px;
     background: var(--bg-base);
-    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
     transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -1814,8 +2009,8 @@
 .input {
     display: block;
     width: 100%;
-    height: 60px;
-    padding: 11px 12px 0;
+    height: 56px;
+    padding: 10px 12px 0;
     border: none;
     outline: none;
     resize: none;
@@ -1849,8 +2044,8 @@
 .bar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 2px 8px 8px;
+    gap: 6px;
+    padding: 2px 6px 6px;
     white-space: nowrap;
 }
 
@@ -2287,8 +2482,8 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border: 0;
     border-radius: 8px;

@@ -322,6 +322,32 @@ description: 一行话，写清什么时候该读它
             </section>
 
             <section>
+                <h2>另一台机器 / 网页里的 AI：走网络</h2>
+                <p>
+                    本机桥只监听 <code>127.0.0.1</code>，别的机器连不上。要让同一局域网里的机器、
+                    或者只能发 HTTP 请求的 AI 用上，在编辑器的 AI 面板里打开「设置 → 外部接入」：
+                    它会生成一串 API 密钥，并在 <code>49621</code> 端口开一个 HTTP 入口。关掉开关立刻停。
+                </p>
+                <p>入口只有三个路由，没有文件系统、没有 shell：</p>
+                <pre><code>curl -s http://127.0.0.1:49621/v1/health
+curl -s http://127.0.0.1:49621/v1/tools -H "Authorization: Bearer xce_..."
+curl -s http://127.0.0.1:49621/v1/call -H "Authorization: Bearer xce_..." \
+  -H "Content-Type: application/json" -d '{"name":"xce_read_project","args":{}}'</code></pre>
+                <p>
+                    命令行工具 <code>xce-cli</code> 两种通道都认：不传 <code>--url</code> 走本机桥
+                    （不需要密钥），传了就换成网络入口。
+                </p>
+                <pre><code>npx -y xce-cli@latest tools
+npx -y xce-cli@latest call xce_read_project '{}'
+npx -y xce-cli@latest mcp --url http://192.168.1.10:49621/v1 --key xce_...
+npx -y xce-cli@latest skill --out SKILL.md</code></pre>
+                <p>
+                    最后一条会写一份 <code>SKILL.md</code>，丢给那些「只会跑命令、不接 MCP」的 agent。
+                    密钥别写进项目文件，也不用的时候把开关关掉。
+                </p>
+            </section>
+
+            <section>
                 <h2>它怎么找到编辑器</h2>
                 <p>
                     桌面版启动时在主进程开一个只监听 <code>127.0.0.1</code> 的桥，端口随机；
